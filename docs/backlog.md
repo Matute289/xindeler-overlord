@@ -16,6 +16,25 @@ Update the row's status in the same PR that does the work.
 
 ---
 
+## Decisions resolved
+
+The six decisions listed in `docs/specs/2026-08-09-client-architecture-design.md` §9, answered by
+Matías 2026-08-09 via the fill-in-worksheet convention:
+
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Framework: Expo or the Capacitor off-ramp | Already settled before the worksheet — Expo, per Matías's original ask. Not reopened. |
+| 2 | Repo visibility | **Stays public.** No secrets ever live here (enforced by `ops-safety-reviewer`); the real access boundary is the gateway's WireGuard tunnel + TOTP step-up, not client-source secrecy. Public also keeps branch protection and CI minutes free on a personal GitHub account — private would cost money for the same protections Matías wants to keep. |
+| 3 | Bundle id / app name / icon | **Bundle id `com.xindeler.overlord`, display name "Overlord"** (supersedes the spec's placeholder `dev.xindeler.opsconsole` / "Xindeler Ops"). Icon: `~/MyXindeler/imagenes-assets/Overlord/overlord_app-icon.png`, copied into `assets/`. |
+| 4 | Gateway repo shape | Confirmed: **`xindeler-ops-gateway` is a separate, private repo**, not a monorepo package. Matches everything already assumed in this repo's docs. |
+| 5 | Who else gets the app | Just Matías for now; **~2 more testers possible later**, not urgent. TestFlight *internal* track (100 testers) stays the right shape; per-operator audit attribution can stay Phase 6 (OC-28 already covers durable audit rows; per-operator attribution is cheap to add if/when a second operator actually joins — revisit then rather than now). |
+
+NH-75's own open questions Q1–Q8 (exposure posture, etc.) are **not** resolved by this — they are a
+separate, larger design question for a `xindeler-ops-gateway` design session, and directly determine
+OC-12/OC-22.
+
+---
+
 ## Phase 0 — Toolchain, accounts, scaffold
 
 Goal: `npx expo run:ios`, `run:android` and `expo start --web` all render the same "hello" screen,
@@ -25,13 +44,13 @@ surprises live, not the UI.
 
 | ID | Item | Notes | Status |
 |---|---|---|---|
-| OC-1 | Install **Xcode 26** + iOS 26 simulator runtimes | 🔄 Matías installing via the App Store 2026-08-09 (requires his own Apple ID session — not automatable). Also needs `sudo xcodebuild -license accept` once done. ⚠️ **Xcode 26 / iOS 26 SDK has been mandatory for every App Store Connect upload since 2026-04-28** — this is not optional even if EAS builds in the cloud. | 🔄 |
+| OC-1 | Install **Xcode 26** + iOS 26 simulator runtimes | ✅ Done 2026-08-09. Xcode 26.6 installed, selected (`xcode-select -s /Applications/Xcode.app`) and licensed. iOS 26.5 simulator runtime installed via `xcodebuild -downloadPlatform iOS`; simulators available (iPhone 17/17 Pro/17 Pro Max/17e/Air, iPad Pro 13"/11" M5, iPad mini A17 Pro, iPad Air 13"/11" M4, iPad A16). ⚠️ **Xcode 26 / iOS 26 SDK has been mandatory for every App Store Connect upload since 2026-04-28** — this is not optional even if EAS builds in the cloud. | ✅ |
 | OC-2 | Install Android Studio + SDK **API 36** + an emulator image | ✅ Done 2026-08-09 via `brew install --cask android-commandlinetools` (no Android Studio GUI needed — cmdline-tools only, `sdkmanager`/`avdmanager` on PATH). Installed: `platform-tools` 37.0.1, `platforms;android-36`, `build-tools;36.0.0`, `emulator`, `system-images;android-36;google_apis;arm64-v8a`. AVD `xindeler-ops-test` (Pixel 7) created. **JDK 17 (Temurin) installed alongside the system JDK 26** — pin `JAVA_HOME=$(/usr/libexec/java_home -v 17)` per-project, do not change the system default. SDK root: `/opt/homebrew/share/android-commandlinetools`. Play requires target API 36 for all uploads from **2026-08-31** — already covered. | ✅ |
-| OC-3 | Scaffold the Expo app | **SDK 57** (RN 0.86, React 19.2), TypeScript strict, Expo Router, NativeWind, `app.config.ts`, three-target smoke run. See the client-architecture spec §3–§4. | ⬜ |
+| OC-3 | Scaffold the Expo app | **SDK 57** (RN 0.86, React 19.2), TypeScript strict, Expo Router, NativeWind, `app.config.ts` (bundle id `com.xindeler.overlord`, name "Overlord"), three-target smoke run. See the client-architecture spec §3–§4. | 🔄 |
 | OC-4 | Repo hygiene | ESLint + Prettier + `tsc --noEmit`, `.editorconfig`, `.nvmrc` (Node 26 is installed; pin to the LTS Expo supports). | ⬜ |
 | OC-5 | GitHub Actions CI | typecheck + lint + test on PR. Public repo = free minutes. **No store credentials in CI** at this stage. | ⬜ |
-| OC-6 | Apple: bundle id + App Store Connect record + TestFlight internal group | `dev.xindeler.opsconsole` (or similar; must match `app.config.ts`). Internal group, no App Review. See the distribution plan §2. | ⬜ |
-| OC-7 | Google: Play Console app entry + internal testing track + tester list | Internal track, email allowlist. See the distribution plan §3. | ⬜ |
+| OC-6 | Apple: bundle id + App Store Connect record + TestFlight internal group | Bundle id `com.xindeler.overlord`, app name "Overlord" (decided 2026-08-09, see "Decisions resolved" above) — must match `app.config.ts`. Internal group, no App Review. See the distribution plan §2. | ⬜ |
+| OC-7 | Google: Play Console app entry + internal testing track + tester list | App name "Overlord". Internal track, email allowlist. See the distribution plan §3. | ⬜ |
 | OC-8 | EAS project + build profiles | `development` / `preview` / `production`; **let EAS manage signing credentials** — that is the main reason it was chosen. Free tier: 30 builds/month (15 iOS + 15 Android), 45-min timeout; Starter USD 19/mo for 2 h. Decide free-vs-paid after the first few builds. | ⬜ |
 | OC-9 | **First round-trip build to both stores** | A "hello world" build installed on Matías's own iPhone via TestFlight and on an Android device via the internal track. This is the phase-0 exit criterion. | ⬜ |
 

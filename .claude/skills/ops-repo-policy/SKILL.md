@@ -34,16 +34,21 @@ row's status in the same PR that does the work.
 
 ## Branching & PRs
 
-- Default branch: `main`. There is no `development` branch here (unlike `xindeler-new-horizon`) —
-  this project is small enough that one long-lived branch is right.
+- Default branch is **`development`** (changed 2026-08-09, PR #1) — every PR targets `development`,
+  branch off a freshly-synced `development`. Periodically (Matías's own cadence, not every merge)
+  `development` gets its own PR into `main` — same discipline as the sibling `xindeler-new-horizon`
+  repo.
+- Both `main` and `development` are protected: PR + 1 approval required, force-push and deletion
+  blocked, `enforce_admins` OFF (Matías can bypass as repo admin if he chooses; agents never do).
 - Branch names: `oc<N>/<short-slug>`, e.g. `oc7/status-screen`.
-- One PR per backlog item, base `main`.
+- One PR per backlog item, base `development`.
 - Conventional commit subjects: `feat(oc7): ...`, `fix(oc12): ...`, `docs: ...`, `chore: ...`.
 
 **Hard rules for AI agents — no exceptions:**
 
 - NEVER merge or approve a PR. Open it, report the URL, stop. Only Matías merges.
-- NEVER push directly to `main` (the bootstrap commit was the one allowed exception).
+- NEVER push directly to `main` or `development` (the 2026-08-09 bootstrap commit predates branch
+  protection and was the one allowed exception — it cannot happen again now that both are protected).
 - NEVER change branch-protection settings, repo visibility, or GitHub Actions secrets.
 - NEVER commit anything under `ios/`, `android/`, `.expo/`, `node_modules/`, or any `.p8`,
   `.p12`, `.mobileprovision`, `.keystore`, `.jks`, or `google-services.json` /
