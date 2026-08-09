@@ -88,7 +88,7 @@ npx expo start --web
 npx expo export --platform web   # production web export
 npm run mock-gateway             # the fake backend everything is built against
 
-npx tsc --noEmit && npm run lint && npm test    # before every PR
+npm run typecheck && npm run lint && npm run format:check    # before every PR (no test runner yet)
 ```
 
 ✅ **This machine is ready for all three targets** (updated 2026-08-09, OC-1 and OC-2 both done):

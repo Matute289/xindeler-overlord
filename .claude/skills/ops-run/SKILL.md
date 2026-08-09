@@ -20,12 +20,13 @@ Reasoning: `docs/specs/2026-08-09-client-architecture-design.md`.
 | Watchman | ❌ absent | `brew install watchman` (optional; helps Metro) |
 | CocoaPods | ❌ absent | only needed for bare/prebuild flows |
 
-All three targets now have their toolchain prerequisites met (OC-1 and OC-2 both done). Remaining
-gaps (watchman, CocoaPods, `.nvmrc`, per-project `JAVA_HOME`) are optional or land with OC-4, repo
-hygiene.
+All three targets now have their toolchain prerequisites met (OC-1 and OC-2 both done). `.nvmrc` is
+pinned to `26.3.0` (OC-4) — the version already installed, which satisfies RN 0.86's own engines
+range, so there was no need to install a separate "LTS" Node. Watchman and CocoaPods remain optional
+and absent.
 
-**OC-3 (the Expo scaffold itself) is done.** Two gotchas hit while scaffolding, worth knowing before
-touching styling or dependencies:
+**OC-3 (the Expo scaffold) and OC-4 (repo hygiene) are both done.** Gotchas hit along the way, worth
+knowing before touching styling, linting, or dependencies:
 
 - **NativeWind 4.2.6 does not support Tailwind CSS v4** despite its loose `>3.3.0` peer range —
   `expo-doctor`'s Metro-config check throws `NativeWind only supports Tailwind CSS v3` at runtime if
@@ -36,6 +37,14 @@ touching styling or dependencies:
   bundle with `Unable to resolve module react-native-css-interop/jsx-runtime`. It's pinned as a
   direct dependency in `package.json` to force hoisting — if this error resurfaces after a dependency
   change, check `find node_modules -maxdepth 3 -iname react-native-css-interop`.
+- **ESLint 10.x breaks `eslint-config-expo`'s bundled `eslint-plugin-react@7.37.5`** with
+  `TypeError: contextOrFilename.getFilename is not a function` (ESLint 10 removed the deprecated
+  `context.getFilename()` API that plugin still calls). `eslint` is pinned to `9.39.5` in
+  `package.json` until `eslint-config-expo` ships a fixed `eslint-plugin-react` — don't bump past
+  the 9.x line without checking that first.
+- **Prettier is scoped to code, not docs** — `.prettierignore` excludes `*.md`. This repo's markdown
+  (worksheets, tables, `.editorconfig`'s 100-col prose wrap) has its own hand-tuned conventions that
+  Prettier's defaults would fight.
 
 ## 1. Install and start
 
