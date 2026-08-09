@@ -91,9 +91,13 @@ npm run mock-gateway             # the fake backend everything is built against
 npx tsc --noEmit && npm run lint && npm test    # before every PR
 ```
 
-⚠️ **This machine is not ready yet** (verified 2026-08-09): Xcode is **Command Line Tools only**,
-there is no Android SDK, and the system JDK is **26** where React Native's Gradle expects **17 or
-21**. See `docs/backlog.md` OC-1/OC-2 and `.claude/skills/ops-run/SKILL.md` §0.
+✅ **This machine is ready for all three targets** (updated 2026-08-09, OC-1 and OC-2 both done):
+Xcode 26.6 installed and selected (license accepted), iOS 26.5 simulator runtime installed. Android
+SDK installed via `brew install --cask android-commandlinetools` — `platforms;android-36`,
+`build-tools;36.0.0`, an arm64 emulator image, AVD `xindeler-ops-test`. JDK 17 (Temurin) is installed
+alongside the system JDK 26 — pin `JAVA_HOME=$(/usr/libexec/java_home -v 17)` **per project only**,
+never change the system default. See `docs/backlog.md` OC-1/OC-2 and
+`.claude/skills/ops-run/SKILL.md` §0 for the remaining optional gaps (watchman, CocoaPods).
 
 ## The invariants that are not negotiable
 
@@ -205,5 +209,13 @@ the end. **Read it on resume and before starting or after finishing any work.** 
 toolchain + store accounts + a "hello world" that reaches both stores — deliberately, because store
 pipelines are where the multi-day surprises live, not the UI.
 
-**Six decisions are owed by Matías** before Phase 0 starts; they are listed in
-`docs/specs/2026-08-09-client-architecture-design.md` §9. Put them to him as a worksheet.
+**The six decisions from `docs/specs/2026-08-09-client-architecture-design.md` §9 were resolved by
+Matías on 2026-08-09** via the fill-in-worksheet convention. Recorded in `docs/backlog.md` under
+"Decisions resolved". The two load-bearing ones for any session touching app identity or CI:
+
+- **App display name "Overlord", bundle id `com.xindeler.overlord`** (not the spec's placeholder
+  `dev.xindeler.opsconsole` / "Xindeler Ops" — that recommendation was superseded). Icon at
+  `~/MyXindeler/imagenes-assets/Overlord/overlord_app-icon.png`, copied into `assets/`.
+- **Repo stays public** — deliberate: this repo holds no secrets (enforced by
+  `ops-safety-reviewer`), the real access boundary is the gateway's WireGuard/TOTP posture, and
+  public keeps branch protection and CI minutes free on a personal GitHub account.

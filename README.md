@@ -1,7 +1,8 @@
 # Xindeler Ops Console
 
 A private operations app for the [Xindeler](https://github.com/Matute289/xindeler-new-horizon) game
-server — **iOS, Android and web from one codebase**.
+server — **iOS, Android and web from one codebase**. Ships under the app name **Overlord**
+(`com.xindeler.overlord`).
 
 It does two things:
 

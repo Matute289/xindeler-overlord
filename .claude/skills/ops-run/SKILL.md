@@ -8,19 +8,34 @@ description: Use when building, running, or debugging the Xindeler Ops Console l
 Stack: **Expo SDK 57 (React Native 0.86, React 19.2)**, TypeScript, Expo Router, NativeWind.
 Reasoning: `docs/specs/2026-08-09-client-architecture-design.md`.
 
-## 0. Machine prerequisites (verified 2026-08-09 — several are MISSING)
+## 0. Machine prerequisites (updated 2026-08-09 — iOS, Android and web are all ready)
 
 | | State | Fix |
 |---|---|---|
-| Node | ✅ v26.3.0, npm 11.16.0 | use the version in `.nvmrc` |
-| **Xcode** | ❌ **Command Line Tools only** | install **Xcode 26** from the App Store (~40 GB), then `sudo xcode-select -s /Applications/Xcode.app` and `sudo xcodebuild -license accept` |
-| **Android SDK** | ❌ absent | Android Studio → SDK Manager → **API 36** + an arm64 system image |
-| **JDK** | ⚠️ **26** installed (Homebrew) | RN's Gradle expects **17 or 21**. Install one and set `JAVA_HOME` for this project only — do **not** change the system default |
+| Node | ✅ v26.3.0, npm 11.16.0 | use the version in `.nvmrc` (not yet created — OC-4) |
+| **Xcode** | ✅ **26.6 installed and selected** — `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`, license accepted | — |
+| **iOS simulator runtime** | ✅ **iOS 26.5 installed** — `xcrun simctl list devices available` shows iPhone 17/17 Pro/17 Pro Max/17e/Air, iPad Pro 13"/11" (M5), iPad mini (A17 Pro), iPad Air 13"/11" (M4), iPad (A16) | — |
+| **Android SDK** | ✅ installed (OC-2, done) — cmdline-tools only via `brew install --cask android-commandlinetools`; `platforms;android-36`, `build-tools;36.0.0`, arm64 `system-images;android-36;google_apis;arm64-v8a`; AVD `xindeler-ops-test` (Pixel 7); SDK root `/opt/homebrew/share/android-commandlinetools` | — |
+| **JDK** | ⚠️ system default is still **26** (Homebrew); **17** (Temurin) is installed alongside it | RN's Gradle expects 17 or 21. Set `JAVA_HOME=$(/usr/libexec/java_home -v 17)` for this project only — do **not** change the system default |
 | Watchman | ❌ absent | `brew install watchman` (optional; helps Metro) |
 | CocoaPods | ❌ absent | only needed for bare/prebuild flows |
 
-If Xcode is not installed yet, **web and Android still work**, and EAS can produce iOS builds in the
-cloud. Do not let a missing Xcode block progress on anything else.
+All three targets now have their toolchain prerequisites met (OC-1 and OC-2 both done). Remaining
+gaps (watchman, CocoaPods, `.nvmrc`, per-project `JAVA_HOME`) are optional or land with OC-4, repo
+hygiene.
+
+**OC-3 (the Expo scaffold itself) is done.** Two gotchas hit while scaffolding, worth knowing before
+touching styling or dependencies:
+
+- **NativeWind 4.2.6 does not support Tailwind CSS v4** despite its loose `>3.3.0` peer range —
+  `expo-doctor`'s Metro-config check throws `NativeWind only supports Tailwind CSS v3` at runtime if
+  you install the v4 default. `tailwindcss` is pinned to `3.4.19` in `package.json`; don't let it
+  drift to v4 until NativeWind's own docs confirm support.
+- **`react-native-css-interop` (a NativeWind dependency) needs a top-level `node_modules` entry.**
+  npm sometimes nests it under `node_modules/nativewind/node_modules/`, which breaks Metro's web
+  bundle with `Unable to resolve module react-native-css-interop/jsx-runtime`. It's pinned as a
+  direct dependency in `package.json` to force hoisting — if this error resurfaces after a dependency
+  change, check `find node_modules -maxdepth 3 -iname react-native-css-interop`.
 
 ## 1. Install and start
 
