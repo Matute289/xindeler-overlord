@@ -21,8 +21,21 @@ Reasoning: `docs/specs/2026-08-09-client-architecture-design.md`.
 | CocoaPods | ❌ absent | only needed for bare/prebuild flows |
 
 All three targets now have their toolchain prerequisites met (OC-1 and OC-2 both done). Remaining
-gaps (watchman, CocoaPods, `.nvmrc`, per-project `JAVA_HOME`) are optional or land with OC-3/OC-4,
-the Expo scaffold itself.
+gaps (watchman, CocoaPods, `.nvmrc`, per-project `JAVA_HOME`) are optional or land with OC-4, repo
+hygiene.
+
+**OC-3 (the Expo scaffold itself) is done.** Two gotchas hit while scaffolding, worth knowing before
+touching styling or dependencies:
+
+- **NativeWind 4.2.6 does not support Tailwind CSS v4** despite its loose `>3.3.0` peer range —
+  `expo-doctor`'s Metro-config check throws `NativeWind only supports Tailwind CSS v3` at runtime if
+  you install the v4 default. `tailwindcss` is pinned to `3.4.19` in `package.json`; don't let it
+  drift to v4 until NativeWind's own docs confirm support.
+- **`react-native-css-interop` (a NativeWind dependency) needs a top-level `node_modules` entry.**
+  npm sometimes nests it under `node_modules/nativewind/node_modules/`, which breaks Metro's web
+  bundle with `Unable to resolve module react-native-css-interop/jsx-runtime`. It's pinned as a
+  direct dependency in `package.json` to force hoisting — if this error resurfaces after a dependency
+  change, check `find node_modules -maxdepth 3 -iname react-native-css-interop`.
 
 ## 1. Install and start
 
