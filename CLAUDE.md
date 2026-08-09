@@ -23,7 +23,7 @@ job is Phase 0 of `docs/backlog.md`.
 | Repo | Where | What |
 |---|---|---|
 | **`xindeler-ops-console`** (this one) | `Matute289/xindeler-ops-console`, **public** | The client app: iOS + Android + web |
-| **`xindeler-ops-gateway`** | **does not exist yet**; will be a private repo on the VPS | The backend this app talks to. Holds every secret. Also owns systemd control, ORACLE staging, and the LLM calls |
+| **`xindeler-ops-gateway`** | **does not exist yet**; will be its **own separate private repo** on GitHub (confirmed by Matías 2026-08-09, private for security — it holds `ui_api_secret`, vLLM/Bedrock keys, and operator sessions) | The backend this app talks to. Holds every secret. Also owns systemd control, ORACLE staging, and the LLM calls. **No owner/session has claimed creating it yet** — if you're picking up gateway work, check first whether it already exists before assuming you're starting from scratch |
 | **`xindeler-new-horizon`** | sibling local checkout at `~/Workspace/RustroverProjects/xindeler-new-horizon` | The Veloren-derived Rust game engine + server. **Never edit it from a session rooted here.** Its private design repo is nested at `docs/design/` |
 
 **Read the backend design before writing anything that talks to a server:**
