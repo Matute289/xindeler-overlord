@@ -121,15 +121,21 @@ suggestion. These come from NH-75 §9 and are enforced in *this* codebase:
 
 ## Git & PR policy
 
-- Default branch `main`. No `development` branch — this project is small enough for one.
-- Branch names `oc<N>/<slug>`; one PR per backlog item; base `main`.
+- Default branch is **`development`** — every PR targets `development`, branch off a freshly-synced
+  `development`. Periodically (Matías's own cadence, not every merge) `development` gets its own PR
+  into `main` — same discipline as the sibling `xindeler-new-horizon` repo.
+- Both `main` and `development` are protected (2026-08-09): PR + 1 approval required, force-push and
+  deletion blocked, `enforce_admins` OFF (Matías can bypass as repo admin if he chooses; agents never
+  do).
+- Branch names `oc<N>/<slug>`; one PR per backlog item; base `development`.
 - Conventional subjects: `feat(oc18): ...`, `fix(oc25): ...`, `docs: ...`, `chore: ...`.
 - Update the `OC-N` row's status in the same PR that does the work.
 
 **Hard rules for AI agents — no exceptions:**
 
 - NEVER merge or approve a PR. Open it, report the URL, stop. Only Matías merges.
-- NEVER push directly to `main` (the 2026-08-09 bootstrap commit was the one allowed exception).
+- NEVER push directly to `main` or `development` (the 2026-08-09 bootstrap commit predates branch
+  protection and was the one allowed exception — it cannot happen again now that both are protected).
 - NEVER change branch protection, repo visibility, or GitHub Actions secrets.
 - NEVER run `eas submit` or push a build to TestFlight/Play, and never create, rotate or delete
   signing credentials or keystores, without Matías asking in the current session.
