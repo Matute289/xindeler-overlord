@@ -1,5 +1,5 @@
 {
-  "name": "xindeler-ops-console",
+  "name": "xindeler-overlord",
   "main": "expo-router/entry",
   "version": "0.1.0",
   "dependencies": {
