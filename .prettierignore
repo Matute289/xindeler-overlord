@@ -1,0 +1,12 @@
+node_modules
+.expo
+dist
+web-build
+ios
+android
+package-lock.json
+*.gitkeep
+
+# Hand-formatted docs with their own conventions (tables, worksheet blocks,
+# the .editorconfig prose-wrap rules) — not Prettier's job.
+*.md
