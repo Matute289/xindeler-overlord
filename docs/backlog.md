@@ -157,8 +157,9 @@ OC-33 preview card.
 | `xindeler-ops-gateway` repo does not exist | Everything past OC-13 against a real backend | Matías / a separate session |
 | NH-75's open questions Q1–Q8 unanswered | Exposure posture (Q1) directly shapes OC-12 and OC-22 | Matías |
 | The additive engine PRs (NH-75 §3.2) | Phase 2 and Phase 3 | `xindeler-new-horizon` |
-| Xcode not installed (OC-1) | All local iOS work | this machine |
-| Android SDK not installed (OC-2) | All local Android work | this machine |
+| Apple/Google/EAS accounts not set up (OC-6–OC-8) | OC-9, the Phase-0 exit criterion | Matías, at the consoles |
 
-**Design decisions still owed by Matías** are listed at the end of
-`docs/specs/2026-08-09-client-architecture-design.md` §9 as a fill-in worksheet.
+Xcode and the Android SDK (the old OC-1/OC-2 blockers) are resolved — see `.claude/skills/ops-run/SKILL.md`
+§0 for current toolchain state. **The six Phase-0 design decisions are resolved** too — see
+"Decisions resolved" above, not the §9 worksheet in the spec (that worksheet is now historical; the
+answers live in this file).
