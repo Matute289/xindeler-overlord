@@ -10,6 +10,9 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: 'com.xindeler.overlord',
+    config: {
+      usesNonExemptEncryption: false,
+    },
   },
   android: {
     package: 'com.xindeler.overlord',
