@@ -3,6 +3,7 @@ import type { ExpoConfig } from 'expo/config';
 const config: ExpoConfig = {
   name: 'Overlord',
   slug: 'overlord',
+  owner: 'xindeler-team',
   version: '0.1.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
@@ -40,6 +41,11 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+  },
+  extra: {
+    eas: {
+      projectId: 'd69bccd1-09b8-4fe7-a94f-dbef184d0208',
+    },
   },
 };
 
