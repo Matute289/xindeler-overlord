@@ -52,6 +52,47 @@ config (`tailwind.config.js`) reads the same token values so `className` usage a
   data (e.g. no players online), not just Phase-0 stubs.
 - Both import nothing but the theme, per the existing layering rule in `CLAUDE.md`.
 
+## Visual identity
+
+Real brand assets landed 2026-08-10 in `~/MyXindeler/imagenes-assets/Overlord/`: a corrected app
+icon (`overlord_app-icon.png` — old `assets/images/icon.png` had wasted black padding around the
+artwork; the new one is full-bleed), an "O" gem mark for a future loading-screen glow effect
+(deferred — not native-Expo-splash-compatible, needs a custom animated component, out of scope for
+this slice), and three hero-illustration backgrounds (vertical/horizontal/web) — gothic-steampunk
+cathedral scenes with the Overlord crest, reserved for a future login/loading screen, **not** used
+behind the data-dense tab screens (would fight the "instrument panel" legibility rule in
+`ops-ui` SKILL.md — those screens keep the plain dark background color).
+
+**Color tokens** (eyeballed from the assets, refine visually once rendered):
+| Token | Hex (approx.) | Use |
+|---|---|---|
+| `bg.base` | `#0B0F14` | screen background (already matched the placeholder) |
+| `bg.surface` | `#131B24` | cards/panels, one step up from base |
+| `accent.cyan` | `#3AD6FF` | primary accent — glow, active states, links |
+| `accent.cyanMuted` | `#1C8FB0` | secondary accent — less emphasis |
+| `steel.light` | `#B9C4CE` | primary text on dark, metal highlights |
+| `steel.dark` | `#3A4550` | borders, dividers, disabled state |
+
+**Typography:** the gothic "OVERLORD" wordmark in the assets is baked into the artwork, not a font
+file — used as a static image wherever the wordmark itself appears (not this slice). Body/UI text
+uses **Inter** (`@expo-google-fonts/inter`) — excellent legibility and numeral rendering, which
+matters for a stats-heavy ops console; a safe, easily-swappable default.
+
+**Icon replacement:** `assets/images/icon.png`, `favicon.png`, and `splash-icon.png` are replaced
+with the corrected `overlord_app-icon.png`. `android-icon-foreground.png` is also swapped for now
+but flagged as imperfect — Android adaptive icons need generous transparent safe-zone padding
+around the subject, which this asset doesn't have; acceptable since Android isn't being tested this
+round (OC-7 pending), fix when Android work resumes. A follow-up asset request is worth making for
+a true edge-to-edge icon source (no baked-in rounded-square border) so iOS's own corner mask
+doesn't double up with one already in the artwork — noted for the image-prompt list Matías asked
+for, not blocking now.
+
+**Orientation:** `app.config.ts`'s `orientation: 'portrait'` becomes `orientation: 'default'`
+(unlocked, follows device rotation) so iPad gets landscape — simpler than fighting per-idiom native
+config for iPhone-portrait-only + iPad-both. iPhone landscape becomes technically possible too as a
+side effect; no screens are landscape-optimized yet in this slice, so it'll just look like a wider
+portrait layout until that's addressed, if ever.
+
 ## Platform handling
 
 Per `ops-ui` SKILL.md's table: safe areas (notch/Dynamic Island on iPhone, none on web), tab bar
