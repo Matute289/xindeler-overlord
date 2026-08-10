@@ -5,7 +5,7 @@ repository.
 
 ## What this repo is
 
-`xindeler-ops-console` is the **client app** for operating the live Xindeler game server from a
+`xindeler-overlord` is the **client app** for operating the live Xindeler game server from a
 phone, tablet, or browser: start/stop/restart the server, see status and players and logs, and —
 later — talk to PROJECT ORACLE to draft and fire world events.
 
@@ -22,12 +22,12 @@ consoles, not solo Claude work. **Read `docs/backlog.md` for the live status bef
 else** — it is kept current after every merged PR and is the source of truth for exactly where to
 pick up.
 
-### The three repos in play
+### The repos in play
 
 | Repo | Where | What |
 |---|---|---|
-| **`xindeler-ops-console`** (this one) | `Matute289/xindeler-ops-console`, **public** | The client app: iOS + Android + web |
-| **`xindeler-ops-gateway`** | **does not exist yet**; will be its **own separate private repo** on GitHub (confirmed by Matías 2026-08-09, private for security — it holds `ui_api_secret`, vLLM/Bedrock keys, and operator sessions) | The backend this app talks to. Holds every secret. Also owns systemd control, ORACLE staging, and the LLM calls. **No owner/session has claimed creating it yet** — if you're picking up gateway work, check first whether it already exists before assuming you're starting from scratch |
+| **`xindeler-overlord`** (this one) | `Matute289/xindeler-overlord`, **public** — renamed 2026-08-10 from `xindeler-ops-console` to match the app's own name, "Overlord". GitHub keeps the old name redirecting. | The client app: iOS + Android + web |
+| **`xindeler-zuul`** | `Matute289/xindeler-zuul`, **private**, sibling local checkout at `~/Workspace/RustroverProjects/xindeler-zuul` — created 2026-08-10 | The ops gateway this app talks to. Holds every secret (`ui_api_secret`, vLLM/Bedrock keys, operator sessions). Also owns systemd control, ORACLE staging, and the LLM calls. **Never edit it from a session rooted here** — same rule as the engine repo below. |
 | **`xindeler-new-horizon`** | sibling local checkout at `~/Workspace/RustroverProjects/xindeler-new-horizon` | The Veloren-derived Rust game engine + server. **Never edit it from a session rooted here.** Its private design repo is nested at `docs/design/` |
 
 **Read the backend design before writing anything that talks to a server:**
@@ -186,7 +186,7 @@ If you are blocked and Matías is not around:
 
 ```bash
 python /Users/mgrinberg/MyXindeler/Discord/scripts/discord_api.py notify \
-  --project "xindeler-ops-console" --session "<short task name>" \
+  --project "xindeler-overlord" --session "<short task name>" \
   --type blocked --message "<what you need decided and why>"
 ```
 

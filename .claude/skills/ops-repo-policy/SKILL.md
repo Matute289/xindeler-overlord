@@ -1,16 +1,16 @@
 ---
 name: ops-repo-policy
-description: Use before committing, pushing, branching, opening a PR, or writing any doc/spec/backlog entry in xindeler-ops-console — the repo layout, where each document goes, and the hard rules for AI agents
+description: Use before committing, pushing, branching, opening a PR, or writing any doc/spec/backlog entry in xindeler-overlord — the repo layout, where each document goes, and the hard rules for AI agents
 ---
 
-# Repo layout & git policy — xindeler-ops-console
+# Repo layout & git policy — xindeler-overlord
 
 ## One repo, and what is deliberately NOT in it
 
 | Path / thing | Where it lives | Rule |
 |---|---|---|
-| `/` (app source, `docs/`, `.claude/`) | `Matute289/xindeler-ops-console` (`origin`, GitHub, public) | Feature branch + PR |
-| The backend it talks to | `xindeler-ops-gateway` — a **separate private repo that does not exist yet** | Never vendored here |
+| `/` (app source, `docs/`, `.claude/`) | `Matute289/xindeler-overlord` (`origin`, GitHub, public — renamed 2026-08-10 from `xindeler-ops-console`) | Feature branch + PR |
+| The backend it talks to | `xindeler-zuul` — a **separate private repo**, `Matute289/xindeler-zuul` | Never vendored here |
 | The game engine | `Matute289/xindeler-new-horizon` (sibling local checkout) | **Never edit from this repo** |
 | The design/lore canon | `Matute289/xindeler-design`, nested at `xindeler-new-horizon/docs/design/` | Read-only from here; `git pull` before every read |
 | Secrets (`ui_api_secret`, vLLM key, AWS creds) | `/etc/xindeler-ops/ops.env` on the VPS | **Never** in this repo, never shipped to a client |
@@ -76,7 +76,7 @@ If you are blocked and Matías is not around:
 
 ```bash
 python /Users/mgrinberg/MyXindeler/Discord/scripts/discord_api.py notify \
-  --project "xindeler-ops-console" --session "<short task name>" \
+  --project "xindeler-overlord" --session "<short task name>" \
   --type blocked --message "<what you need decided and why you are stuck>"
 ```
 
