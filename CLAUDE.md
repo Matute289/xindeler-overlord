@@ -14,9 +14,13 @@ recommended a responsive PWA), he asked instead for **real native apps for iOS a
 web, from one codebase**. He has Apple Developer and Google Play accounts and this is a Mac, so the
 native path is open.
 
-**Status: bootstrapped, not implemented.** As of 2026-08-09 this repo contains documentation,
-project conventions, and `.claude/` tooling — and **no application code at all**. The next session's
-job is Phase 0 of `docs/backlog.md`.
+**Status: Phase 0 in progress.** As of 2026-08-09 (evening) OC-1 through OC-5 are done — toolchain
+ready on this machine, the Expo app scaffolded (name "Overlord", bundle id `com.xindeler.overlord`),
+repo hygiene (ESLint/Prettier/`.nvmrc`) and CI all in place. **OC-6 through OC-9 remain**: the Apple/
+Google/EAS account setup and the first round-trip build to both stores — these need Matías at the
+consoles, not solo Claude work. **Read `docs/backlog.md` for the live status before doing anything
+else** — it is kept current after every merged PR and is the source of truth for exactly where to
+pick up.
 
 ### The three repos in play
 

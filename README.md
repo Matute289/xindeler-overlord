@@ -14,21 +14,25 @@ It does two things:
 
 ---
 
-## 🚧 Status: bootstrapped, not implemented
+## 🚧 Status: Phase 0 in progress
 
-As of **2026-08-09** this repo contains design docs, conventions and `.claude/` tooling — and **no
-application code yet**. It was set up so that a fresh session can open it and start Phase 0
-immediately.
+As of **2026-08-09** (evening) the app is scaffolded and buildable on all three targets, but Phase 0
+isn't done — the store accounts and the first real build haven't happened yet.
 
 | | |
 |---|---|
 | Framework decision | ✅ made — Expo / React Native (SDK 57), see below |
 | Distribution decision | ✅ made — TestFlight internal + Play internal testing |
+| App identity | ✅ decided — name "Overlord", bundle id `com.xindeler.overlord` |
+| Local toolchain | ✅ ready — Xcode, Android SDK, JDK all installed and verified |
+| App code | ✅ scaffolded (OC-3) — hello screen renders on iOS, Android and web |
+| Repo hygiene + CI | ✅ done (OC-4, OC-5) |
+| Apple / Google / EAS accounts | ❌ not set up yet (OC-6–OC-8) |
+| First TestFlight + Play build | ❌ not done yet (OC-9) — the actual Phase-0 exit criterion |
 | Backend (`xindeler-ops-gateway`) | ❌ does not exist yet |
-| App code | ❌ none |
-| Local toolchain | ⚠️ incomplete — no Xcode, no Android SDK, wrong JDK |
 
-**Start here:** [`docs/backlog.md`](docs/backlog.md) → Phase 0.
+**Start here:** [`docs/backlog.md`](docs/backlog.md) — always current, read it before picking up
+any work.
 
 ---
 
@@ -122,16 +126,17 @@ docs/reference/          the gateway API contract
 .claude/skills|agents/   project-specific Claude Code tooling
 ```
 
-## Getting started (once Phase 0 lands)
+## Getting started
 
 ```bash
 npm install
-npm run mock-gateway     # in one terminal
-npx expo start           # in another; press i / a / w
+npx expo start           # dev server; press i / a / w
 ```
 
-⚠️ First, `docs/backlog.md` OC-1/OC-2: this Mac has **Command Line Tools only** (no Xcode), no
-Android SDK, and JDK 26 where React Native expects 17 or 21.
+There's no gateway yet (`tools/mock-gateway/` is an empty placeholder — that's OC-13, still ahead),
+so today this only gets you the "Overlord" hello screen, not a working console. Toolchain is ready
+on the primary dev Mac (Xcode, Android SDK, JDK — see `.claude/skills/ops-run/SKILL.md` §0); on a
+fresh machine, do OC-1/OC-2 from `docs/backlog.md` first.
 
 ---
 
