@@ -3,6 +3,7 @@ import { Link, Slot, Tabs, usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { EnvironmentBadge } from '@/features/environment/EnvironmentBadge';
 import { useBreakpoint } from '@/ui/useBreakpoint';
 import { fonts, useTheme } from '@/ui/theme';
 
@@ -25,33 +26,38 @@ export default function TabsLayout() {
   const breakpoint = useBreakpoint();
   const { colors } = useTheme();
 
-  if (breakpoint === 'wide') {
-    return <SidebarLayout />;
-  }
-
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarLabelStyle: { fontFamily: fonts.regular },
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
-      }}
-    >
-      {DESTINATIONS.map((dest) => (
-        <Tabs.Screen
-          key={dest.routeName}
-          name={dest.routeName}
-          options={{
-            title: dest.label,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name={dest.icon} color={color} size={size} />
-            ),
-          }}
-        />
-      ))}
-    </Tabs>
+    <View className="flex-1">
+      <EnvironmentBadge />
+      <View className="flex-1">
+        {breakpoint === 'wide' ? (
+          <SidebarLayout />
+        ) : (
+          <Tabs
+            screenOptions={{
+              headerShown: false,
+              tabBarLabelStyle: { fontFamily: fonts.regular },
+              tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+              tabBarActiveTintColor: colors.accent,
+              tabBarInactiveTintColor: colors.textMuted,
+            }}
+          >
+            {DESTINATIONS.map((dest) => (
+              <Tabs.Screen
+                key={dest.routeName}
+                name={dest.routeName}
+                options={{
+                  title: dest.label,
+                  tabBarIcon: ({ color, size }) => (
+                    <Ionicons name={dest.icon} color={color} size={size} />
+                  ),
+                }}
+              />
+            ))}
+          </Tabs>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -61,13 +67,15 @@ function SidebarLayout() {
 
   return (
     <View className="flex-1 flex-row bg-bg-base dark:bg-night-bg-base">
-      {/* `left`/`top`/`bottom`: this is a persistent left-edge column, so only
+      {/* `left`/`bottom`: this is a persistent left-edge column, so only
           those device edges can be obscured (notch/Dynamic Island in
-          landscape, home indicator). `right` is an internal border, not a
-          device edge — the content pane picks up its own safe area via
-          Screen. */}
+          landscape, home indicator). `top` is deliberately excluded —
+          EnvironmentBadge (rendered above this whole layout) already
+          accounts for the top inset, so adding it here would double-pad.
+          `right` is an internal border, not a device edge — the content
+          pane picks up its own safe area via Screen. */}
       <SafeAreaView
-        edges={['left', 'top', 'bottom']}
+        edges={['left', 'bottom']}
         className="w-[220px] border-r border-steel-dark pt-8 dark:border-night-steel-dark"
       >
         {DESTINATIONS.map((dest) => {
