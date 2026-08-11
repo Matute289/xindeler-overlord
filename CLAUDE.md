@@ -79,7 +79,9 @@ the framework question without reading it.**
 ```
 
 **Layering rule (the one worth enforcing in review):** `features/` may import `api/`, `stream/`,
-`ui/`, `auth/`. Nothing imports `features/` except `app/`. `ui/` imports only the theme.
+`ui/`, `auth/`, `config/`. Nothing imports `features/` except `app/`. `ui/` imports only the theme.
+`config/` is static configuration (environment profiles, feature flags) — like the theme, it may be
+imported from anywhere and never imports application logic itself.
 
 ## Commands
 
