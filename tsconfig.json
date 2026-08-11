@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // Lets TS resolve Metro's platform-specific file convention
+    // (Foo.native.ts / Foo.web.ts / bare Foo.ts as the fallback) - matches
+    // Metro's actual resolution order for `ios`/`android` (native) and `web`.
+    "moduleSuffixes": [".ios", ".android", ".native", ".web", ""],
     "paths": {
       "@/*": ["./src/*"],
       "@/assets/*": ["./assets/*"]
