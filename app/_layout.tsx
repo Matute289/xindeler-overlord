@@ -11,6 +11,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { EnvironmentProvider } from '@/config/EnvironmentContext';
+
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -33,9 +35,9 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <EnvironmentProvider>
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false }} />
-    </>
+    </EnvironmentProvider>
   );
 }
