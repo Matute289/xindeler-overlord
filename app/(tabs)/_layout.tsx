@@ -3,7 +3,7 @@ import { Link, Slot, Tabs, usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { useBreakpoint } from '@/ui/useBreakpoint';
-import { useTheme } from '@/ui/theme';
+import { fonts, useTheme } from '@/ui/theme';
 
 type Destination = {
   href: '/' | '/players' | '/logs' | '/oracle' | '/more';
@@ -22,13 +22,22 @@ const DESTINATIONS: Destination[] = [
 
 export default function TabsLayout() {
   const breakpoint = useBreakpoint();
+  const { colors } = useTheme();
 
   if (breakpoint === 'wide') {
     return <SidebarLayout />;
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarLabelStyle: { fontFamily: fonts.regular },
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
+      }}
+    >
       {DESTINATIONS.map((dest) => (
         <Tabs.Screen
           key={dest.routeName}
@@ -74,7 +83,14 @@ function SidebarLayout() {
                 }}
               >
                 <Ionicons name={dest.icon} color={active ? colors.accent : colors.text} size={20} />
-                <Text style={{ color: active ? colors.accent : colors.text }}>{dest.label}</Text>
+                <Text
+                  style={{
+                    color: active ? colors.accent : colors.text,
+                    fontFamily: active ? fonts.semibold : fonts.regular,
+                  }}
+                >
+                  {dest.label}
+                </Text>
               </Pressable>
             </Link>
           );

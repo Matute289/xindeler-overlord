@@ -40,6 +40,14 @@ export const typography = {
   heading: 28,
 } as const;
 
+// Family names must match the keys passed to useFonts() in app/_layout.tsx —
+// @expo-google-fonts/inter registers each weight under its export name.
+export const fonts = {
+  regular: 'Inter_400Regular',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+} as const;
+
 export type ColorScheme = 'light' | 'dark';
 export type ThemeColors = typeof darkColors;
 
@@ -51,5 +59,6 @@ export function useTheme() {
     colors: (isDark ? darkColors : lightColors) as ThemeColors,
     spacing,
     typography,
+    fonts,
   };
 }

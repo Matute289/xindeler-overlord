@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { useTheme } from './theme';
 
 export function Empty({ title, message }: { title: string; message: string }) {
-  const { colors, spacing, typography } = useTheme();
+  const { colors, spacing, typography, fonts } = useTheme();
   return (
     <View
       style={{
@@ -14,7 +14,7 @@ export function Empty({ title, message }: { title: string; message: string }) {
         paddingHorizontal: spacing.xl,
       }}
     >
-      <Text style={{ color: colors.text, fontSize: typography.title, fontWeight: '700' }}>
+      <Text style={{ color: colors.text, fontSize: typography.title, fontFamily: fonts.bold }}>
         {title}
       </Text>
       <Text
@@ -23,6 +23,7 @@ export function Empty({ title, message }: { title: string; message: string }) {
           textAlign: 'center',
           color: colors.textMuted,
           fontSize: typography.body,
+          fontFamily: fonts.regular,
         }}
       >
         {message}
