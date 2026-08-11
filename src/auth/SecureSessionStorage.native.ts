@@ -2,27 +2,36 @@ import * as SecureStore from 'expo-secure-store';
 
 import type { SaveSessionInput, SessionStorage, StoredSession } from './types';
 
-const TOKEN_KEY = 'overlord.session.token';
-const METADATA_KEY = 'overlord.session.metadata';
+const SESSION_KEY = 'overlord.session';
+
+type StoredSessionWithToken = StoredSession & { token: string };
 
 export const sessionStorage: SessionStorage = {
-  async save({ token, ...metadata }: SaveSessionInput) {
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
-    await SecureStore.setItemAsync(METADATA_KEY, JSON.stringify(metadata));
+  async save(session: SaveSessionInput) {
+    // Single write, not separate token/metadata writes - two writes can be
+    // interrupted between them, leaving read() and getAuthHeader()
+    // disagreeing about whether a session exists.
+    await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
   },
 
   async read(): Promise<StoredSession | null> {
-    const raw = await SecureStore.getItemAsync(METADATA_KEY);
-    return raw ? (JSON.parse(raw) as StoredSession) : null;
+    const stored = await readStoredSession();
+    if (!stored) return null;
+    const { token: _token, ...metadata } = stored;
+    return metadata;
   },
 
   async clear() {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(METADATA_KEY);
+    await SecureStore.deleteItemAsync(SESSION_KEY);
   },
 
   async getAuthHeader() {
-    const token = await SecureStore.getItemAsync(TOKEN_KEY);
-    return token ? { Authorization: `Bearer ${token}` } : undefined;
+    const stored = await readStoredSession();
+    return stored ? { Authorization: `Bearer ${stored.token}` } : undefined;
   },
 };
+
+async function readStoredSession(): Promise<StoredSessionWithToken | null> {
+  const raw = await SecureStore.getItemAsync(SESSION_KEY);
+  return raw ? (JSON.parse(raw) as StoredSessionWithToken) : null;
+}
