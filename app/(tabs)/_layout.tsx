@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, Slot, Tabs, usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useBreakpoint } from '@/ui/useBreakpoint';
 import { fonts, useTheme } from '@/ui/theme';
@@ -56,38 +57,36 @@ export default function TabsLayout() {
 
 function SidebarLayout() {
   const pathname = usePathname();
-  const { colors, spacing } = useTheme();
+  const { colors } = useTheme();
 
   return (
-    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
-      <View
-        style={{
-          width: 220,
-          borderRightWidth: 1,
-          borderRightColor: colors.border,
-          paddingTop: spacing.xl,
-        }}
+    <View className="flex-1 flex-row bg-bg-base dark:bg-night-bg-base">
+      {/* `left`/`top`/`bottom`: this is a persistent left-edge column, so only
+          those device edges can be obscured (notch/Dynamic Island in
+          landscape, home indicator). `right` is an internal border, not a
+          device edge — the content pane picks up its own safe area via
+          Screen. */}
+      <SafeAreaView
+        edges={['left', 'top', 'bottom']}
+        className="w-[220px] border-r border-steel-dark pt-8 dark:border-night-steel-dark"
       >
         {DESTINATIONS.map((dest) => {
           const active = pathname === dest.href;
           return (
             <Link key={dest.href} href={dest.href} asChild>
               <Pressable
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: spacing.sm,
-                  paddingVertical: spacing.md,
-                  paddingHorizontal: spacing.lg,
-                  backgroundColor: active ? colors.surface : 'transparent',
-                }}
+                className={`flex-row items-center gap-2 px-6 py-4 ${
+                  active ? 'bg-bg-surface dark:bg-night-bg-surface' : 'bg-transparent'
+                }`}
               >
                 <Ionicons name={dest.icon} color={active ? colors.accent : colors.text} size={20} />
                 <Text
-                  style={{
-                    color: active ? colors.accent : colors.text,
-                    fontFamily: active ? fonts.semibold : fonts.regular,
-                  }}
+                  className={
+                    active
+                      ? 'text-accent-cyan dark:text-night-accent-cyan'
+                      : 'text-steel-light dark:text-night-steel-light'
+                  }
+                  style={{ fontFamily: active ? fonts.semibold : fonts.regular }}
                 >
                   {dest.label}
                 </Text>
@@ -95,8 +94,8 @@ function SidebarLayout() {
             </Link>
           );
         })}
-      </View>
-      <View style={{ flex: 1 }}>
+      </SafeAreaView>
+      <View className="flex-1">
         <Slot />
       </View>
     </View>

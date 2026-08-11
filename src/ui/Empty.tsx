@@ -1,30 +1,20 @@
 // src/ui/Empty.tsx
 import { Text, View } from 'react-native';
 
-import { useTheme } from './theme';
+import { fonts } from './theme';
 
 export function Empty({ title, message }: { title: string; message: string }) {
-  const { colors, spacing, typography, fonts } = useTheme();
   return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: spacing.xl,
-      }}
-    >
-      <Text style={{ color: colors.text, fontSize: typography.title, fontFamily: fonts.bold }}>
+    <View className="flex-1 items-center justify-center px-8">
+      <Text
+        className="text-xl text-steel-light dark:text-night-steel-light"
+        style={{ fontFamily: fonts.bold }}
+      >
         {title}
       </Text>
       <Text
-        style={{
-          marginTop: spacing.sm,
-          textAlign: 'center',
-          color: colors.textMuted,
-          fontSize: typography.body,
-          fontFamily: fonts.regular,
-        }}
+        className="mt-2 text-center text-base text-steel-muted dark:text-night-steel-muted"
+        style={{ fontFamily: fonts.regular }}
       >
         {message}
       </Text>

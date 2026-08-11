@@ -26,22 +26,11 @@ const lightColors = {
   border: '#D3D9DE',
 };
 
-export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-} as const;
-
-export const typography = {
-  body: 16,
-  title: 20,
-  heading: 28,
-} as const;
-
 // Family names must match the keys passed to useFonts() in app/_layout.tsx —
 // @expo-google-fonts/inter registers each weight under its export name.
+// RN's <Text> `fontFamily` must exactly match a loaded font's registered name,
+// so this stays a real JS value (like the Ionicons `color` prop below) rather
+// than a NativeWind className — see docs/specs/2026-08-10-navigable-shell-design.md.
 export const fonts = {
   regular: 'Inter_400Regular',
   semibold: 'Inter_600SemiBold',
@@ -51,14 +40,18 @@ export const fonts = {
 export type ColorScheme = 'light' | 'dark';
 export type ThemeColors = typeof darkColors;
 
+// Kept for the handful of things that genuinely need a real JS value instead
+// of a NativeWind className: component props like Ionicons' `color`, and
+// picking which className string applies (active/inactive). Layout (spacing)
+// and text sizing (typography) moved entirely to Tailwind's default scale /
+// tailwind.config.js color tokens — see src/ui/Screen.tsx, src/ui/Empty.tsx,
+// app/(tabs)/_layout.tsx.
 export function useTheme() {
   const scheme = useColorScheme();
   const isDark = scheme !== 'light';
   return {
     scheme: (isDark ? 'dark' : 'light') as ColorScheme,
     colors: (isDark ? darkColors : lightColors) as ThemeColors,
-    spacing,
-    typography,
     fonts,
   };
 }
