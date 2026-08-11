@@ -5,7 +5,7 @@ const config: ExpoConfig = {
   slug: 'overlord',
   owner: 'xindeler-team',
   version: '0.1.0',
-  orientation: 'portrait',
+  orientation: 'default',
   icon: './assets/images/icon.png',
   scheme: 'overlord',
   userInterfaceStyle: 'automatic',
