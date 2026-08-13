@@ -542,7 +542,7 @@ async function testNormalScenario(token: string) {
 }
 
 async function testStreamDropScenario(token: string) {
-  await setScenario('stream_drop', { stream_drop: { afterSeconds: 2 } });
+  await setScenario('stream_drop', { afterSeconds: 2 });
   const client = createStreamClient(`${BASE_URL}/api/v1/stream`, {
     getAuthHeader: async () => ({ Authorization: `Bearer ${token}` }),
     fetchImpl: fetch as never,
@@ -907,7 +907,7 @@ sitting on any `(tabs)` screen.
 ```bash
 curl -X POST http://localhost:4000/mock/scenario \
   -H 'Content-Type: application/json' \
-  -d '{"scenario":"stream_drop","params":{"stream_drop":{"afterSeconds":3}}}'
+  -d '{"scenario":"stream_drop","params":{"afterSeconds":3}}'
 ```
 
 Expected: within ~4 seconds (the 3s drop delay plus the client's first 1s backoff), the red
