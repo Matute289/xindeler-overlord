@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (stored) {
           await sessionStorage.clear();
         }
+        if (cancelled) return;
         setStatus('unauthenticated');
       })
       .catch(() => {
@@ -89,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleAuthError = useCallback((error: unknown): boolean => {
     if (error instanceof ApiError && (error.code === 'session_expired' || error.code === 'unauthorized')) {
-      sessionStorage.clear();
+      sessionStorage.clear().catch(() => {});
       setOperator(null);
       setStatus('unauthenticated');
       return true;
