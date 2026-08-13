@@ -22,4 +22,44 @@ const logLineTemplates = [
   { level: 'info', target: 'xindeler::server', message: 'Guardado automático completado' },
 ];
 
-module.exports = { players, chatMessages, logLineTemplates };
+const entityTemplates = [
+  { id: 'tpl_wolf_pack', name: 'Manada de lobos' },
+  { id: 'tpl_bandit_camp', name: 'Campamento de bandidos' },
+  { id: 'tpl_storm_elemental', name: 'Elemental de tormenta' },
+];
+
+const oraclePresets = [
+  {
+    id: 'preset_wolf_ambush',
+    name: 'Emboscada de lobos',
+    dm_event: { kind: 'spawn', template_id: 'tpl_wolf_pack', intensity: 6, radius: 20 },
+  },
+  {
+    id: 'preset_magic_storm',
+    name: 'Tormenta mágica',
+    dm_event: { kind: 'weather', intensity: 8, radius: 50 },
+  },
+  {
+    id: 'preset_bandit_raid',
+    name: 'Asalto de bandidos',
+    dm_event: { kind: 'spawn', template_id: 'tpl_bandit_camp', intensity: 5, radius: 30 },
+  },
+];
+
+const oracleCannedReply =
+  'Puedo generar un evento de emboscada de lobos cerca del jugador. ¿Confirmás?';
+
+const oracleDraftPool = [
+  { kind: 'spawn', template_id: 'tpl_wolf_pack', intensity: 6, radius: 20 },
+  { kind: 'weather', intensity: 8, radius: 50 },
+];
+
+module.exports = {
+  players,
+  chatMessages,
+  logLineTemplates,
+  entityTemplates,
+  oraclePresets,
+  oracleCannedReply,
+  oracleDraftPool,
+};
