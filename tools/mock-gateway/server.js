@@ -42,7 +42,14 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed' || (err.status === 400 && err.message.includes('JSON'))) {
     sendError(res, 400, 'invalid_json', 'El body no es JSON válido');
   } else {
-    sendError(res, 500, 'internal_error', 'Error interno del mock gateway');
+    const status = err.status || err.statusCode || 500;
+    const codeByStatus = { 413: 'payload_too_large', 415: 'unsupported_media_type' };
+    const code = codeByStatus[status] || 'internal_error';
+    const message =
+      code !== 'internal_error' && typeof err.message === 'string' && err.message
+        ? err.message
+        : 'Error interno del mock gateway';
+    sendError(res, status, code, message);
   }
 });
 

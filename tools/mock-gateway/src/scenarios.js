@@ -106,11 +106,13 @@ function startDrainingCountdown() {
     state.drainingCountdown = null;
     state.lifecyclePhase = 'stopped';
     broadcast('lifecycle', { state: 'stopped' });
+    broadcast('status', statusSnapshot());
 
     state.recoveryTimers = [];
     const startingTimer = setTimeout(() => {
       state.lifecyclePhase = 'starting';
       broadcast('lifecycle', { state: 'starting' });
+      broadcast('status', statusSnapshot());
       const runningTimer = setTimeout(() => {
         state.scenario = 'normal';
         state.recoveryTimers = null;

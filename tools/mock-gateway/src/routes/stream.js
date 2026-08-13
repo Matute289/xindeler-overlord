@@ -15,11 +15,15 @@ router.get('/', (req, res) => {
 
   registerClient(res);
   writeEventTo(res, 'status', statusSnapshot());
-  writeEventTo(
-    res,
-    'lifecycle',
-    state.scenario === 'down' ? { state: 'stopped' } : { state: 'running' },
-  );
+  let lifecycleEvent;
+  if (state.lifecyclePhase === 'stopped' || state.lifecyclePhase === 'starting') {
+    lifecycleEvent = { state: state.lifecyclePhase };
+  } else if (state.lifecyclePhase === 'draining' && state.drainingCountdown) {
+    lifecycleEvent = { state: 'draining', seconds_left: state.drainingCountdown.secondsLeft };
+  } else {
+    lifecycleEvent = { state: 'running' };
+  }
+  writeEventTo(res, 'lifecycle', lifecycleEvent);
 
   const pingTimer = setInterval(() => {
     res.write(': ping\n\n');
