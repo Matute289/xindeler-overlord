@@ -24,7 +24,7 @@ export function StreamProvider({ children }: { children: ReactNode }) {
     () =>
       createStreamClient(`${environment.baseUrl}/api/v1/stream`, {
         getAuthHeader: () => sessionStorage.getAuthHeader(),
-        fetchImpl: expoFetch as unknown as FetchLike,
+        fetchImpl: expoFetch.bind(globalThis) as unknown as FetchLike,
       }),
     [environment.baseUrl],
   );
