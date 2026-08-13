@@ -265,19 +265,26 @@ already established and extending it one layer further:
 - **`StreamClient.ts` also has zero Expo/native imports** — `fetchImpl` is injected, so a throwaway
   `npx tsx` script can pass Node's own global `fetch` (Node 18+'s `Response.body` is a real
   `ReadableStream`, `getReader()` included) and drive it against a live `npm run mock-gateway`
-  exactly like `httpClient.ts`'s own verification does. Exercised there: the mock's scenario switch
-  (`POST /mock/scenario`) driving `normal` (events land on subscribed listeners with correctly-typed
-  payloads, malformed/unknown events are dropped without killing the connection), `stream_drop`
-  (backoff retries visible in the script's own logging, reconnects once the drop window passes and
-  the next attempt lands during `normal` again), `down` (connect attempts fail immediately, backoff
-  grows across attempts, `getStatus()` never reports `open`).
+  exactly like `httpClient.ts`'s own verification does. Exercised there: `normal` (events land on
+  subscribed listeners with correctly-typed payloads — including the periodic unconditional 5s
+  `status` broadcast `server.js` already runs regardless of scenario — and malformed/unknown events
+  are dropped without killing the connection); `stream_drop` (`POST /mock/scenario`, `afterSeconds:
+  10` by default — `tools/mock-gateway/src/routes/stream.js` calls `res.end()` on its own timer,
+  a real server-initiated close — backoff retries visible in the script's own logging, reconnects
+  once the drop window passes and the next attempt lands during `normal` again); a genuine
+  connection failure, verified by pointing the client at an unreachable port rather than via a
+  `/mock/scenario` mode — **the mock's own `down` scenario does not reject the SSE connection at
+  all**, it only changes `statusSnapshot()`'s payload content (`service: 'inactive'`) while the
+  stream itself opens and stays open normally, confirmed by reading `routes/stream.js`, which never
+  checks `state.scenario` before accepting a connection. `down` is therefore not a reconnect-path
+  test case for this client — noted here so a future reader doesn't assume otherwise.
 - **`StreamContext.tsx`/`StreamStatusBanner.tsx` need the Expo runtime** (they're the files that
   import `expo/fetch` and React; `expo/fetch`'s native binding does not resolve under plain
   `tsx`/Node — confirmed by reading `node_modules/expo/src/winter/fetch/`, the native path goes
   through `ExpoFetchModule`, an Expo native module). Verified via `npx tsc --noEmit` plus a live web
-  build (`npx expo start --web`) against `npm run mock-gateway`, confirming the same three scenarios
-  end-to-end through the real React tree: `normal` (banner absent), `stream_drop` (banner appears,
-  disappears once reconnected), `down` (banner stays up).
+  build (`npx expo start --web`) against `npm run mock-gateway`, confirming both real scenarios
+  end-to-end through the React tree: `normal` (banner absent) and `stream_drop` (banner appears,
+  disappears once reconnected).
 - **Foreground resume is honestly unverifiable in this pass.** `AppState`'s `'active'` transition
   fires reliably on web (tab visibility), so the *code path* (`reconnectNow()` clearing a pending
   timer) is exercised and confirmed correct, but whether a real iOS/Android device's socket actually
