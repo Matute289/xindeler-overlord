@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/api/ApiContext';
 import type { LogLine } from '@/api/schemas';
@@ -14,7 +14,13 @@ const FLUSH_INTERVAL_MS = 150;
 export function useLogsQuery() {
   const api = useApi();
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.logs(BOOTSTRAP_LIMIT);
+  // queryKeys.logs() returns a fresh array reference every call (it's not memoized) — if this
+  // hook re-created `queryKey` on every render and left it in the flush effect's dependency
+  // array, React's reference-based dep comparison would tear the interval down and rebuild it
+  // on every re-render (e.g. every successful flush, since that triggers a re-render via
+  // useQuery's subscription), defeating the "fixed 150ms cadence" this hook exists to provide.
+  // BOOTSTRAP_LIMIT is a module-level constant, so the key never actually needs to change.
+  const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
   const query = useQuery({
     queryKey,
