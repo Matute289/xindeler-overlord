@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { EnvironmentProvider } from '@/config/EnvironmentContext';
+import { StreamProvider } from '@/stream/StreamContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,8 +39,10 @@ export default function RootLayout() {
   return (
     <EnvironmentProvider>
       <AuthProvider>
-        <StatusBar style="light" />
-        <RootNavigator />
+        <StreamProvider>
+          <StatusBar style="light" />
+          <RootNavigator />
+        </StreamProvider>
       </AuthProvider>
     </EnvironmentProvider>
   );
