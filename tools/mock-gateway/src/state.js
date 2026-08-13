@@ -9,6 +9,7 @@ const state = {
   sessions: new Map(), // token -> { operator, expiresAt, createdAt }
   challenges: new Map(), // challengeId -> { username }
   logBuffer: [], // { ts, level, target, message }, capped at 500
+  chatHistory: [],
   serverStartedAt: Date.now(),
   drainingCountdown: null, // { secondsLeft, timer } | null
   logGeneratorTimer: null,
