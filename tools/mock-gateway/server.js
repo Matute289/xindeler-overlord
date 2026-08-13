@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { sendError } = require('./src/errors');
+const authRoutes = require('./src/routes/auth');
 
 const app = express();
 app.use(cors());
@@ -15,7 +16,7 @@ app.use((err, req, res, next) => {
   }
 });
 
-// Routes are mounted here in later tasks.
+app.use('/api/v1/auth', authRoutes);
 
 app.use((req, res) => {
   sendError(res, 404, 'not_found', `No existe ${req.method} ${req.path}`);
