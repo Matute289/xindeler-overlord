@@ -56,7 +56,24 @@ to reuse, but building them is out of scope here.
 ```ts
 import { QueryClient } from '@tanstack/react-query';
 
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // httpClient.ts's requestWithRetry already owns retry policy (network_error/timeout/5xx
+      // only, capped attempts with its own backoff) — a second retry layer on top of it would
+      // both slow down surfacing a real failure and blindly retry errors httpClient deliberately
+      // does not (401/403/404). Added during the OC-18 final-review fix wave after the default
+      // `retry: 3` was found stacking with httpClient's own retries, producing ~2 minutes of
+      // undifferentiated loading state against an unreachable gateway.
+      retry: false,
+      // The stream (src/stream/) is this app's live-update mechanism and already reconnects on
+      // app foreground (StreamContext.tsx) — a query refetch on every window/tab focus is mostly
+      // redundant traffic on top of that. 30s keeps a safety net for a genuine long absence
+      // without refetching on routine tab switching.
+      staleTime: 30_000,
+    },
+  },
+});
 
 // One key per gateway read endpoint, defined now so every future screen (OC-19 players, OC-20
 // logs, OC-21 chat, OC-28 audit) reuses the same convention instead of inventing its own. Params
@@ -207,30 +224,56 @@ singleton) but must wrap anything using `useQuery`, i.e. everything under it.
 ### `src/features/status/useStatusQuery.ts`
 
 ```ts
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
+import type { ApiClient } from '@/api/apiClient';
 import { useApi } from '@/api/ApiContext';
 import { queryKeys } from '@/api/queryClient';
+import { useAuth } from '@/auth/AuthContext';
 import { useStreamEvent } from '@/stream/StreamContext';
+
+// A typed queryOptions() rather than a bare {queryKey, queryFn} object, scoped to `status` only
+// (not the other five endpoints in queryKeys, which have no consumer yet) — this is the one place
+// a same-shaped-payload stream event writes into the cache, so it's the one place setQueryData's
+// lack of type-checking against a bare array key would actually bite. Added during the OC-18
+// final-review fix wave.
+function statusQueryOptions(api: ApiClient) {
+  return queryOptions({
+    queryKey: queryKeys.status,
+    queryFn: () => api.read.getStatus(),
+  });
+}
 
 export function useStatusQuery() {
   const api = useApi();
   const queryClient = useQueryClient();
+  const { handleAuthError } = useAuth();
 
-  const query = useQuery({
-    queryKey: queryKeys.status,
-    queryFn: () => api.read.getStatus(),
-  });
+  const options = statusQueryOptions(api);
+  const query = useQuery(options);
 
   // The stream's `status` event is byte-for-byte the same shape as this query's own response
   // (contract §3.1: "same shape as GET /status") — write it straight into the cache instead of
   // calling `refetch()`. This is what makes "live via SSE, never a 1 Hz full refresh" literally
-  // true: the only REST call this screen ever makes is the one bootstrap fetch above (plus
-  // TanStack's own default retry-on-failure and refetch-on-reconnect, both one-shot events, not
-  // a poll loop).
+  // true: the only REST call this screen ever makes is the one bootstrap fetch above (retry is
+  // disabled at the QueryClient level — see queryClient.ts — so there is no retry loop either).
+  // Known, accepted, self-healing race: if the bootstrap fetch resolves after a stream push has
+  // already landed, it overwrites the newer value with an older one — corrects itself within one
+  // broadcast interval (worst case, a `pending_shutdown` countdown ticks up once), not worth a
+  // revision-number scheme for how rarely and briefly it matters.
   useStreamEvent('status', (data) => {
-    queryClient.setQueryData(queryKeys.status, data);
+    queryClient.setQueryData(options.queryKey, data);
   });
+
+  // The REST layer has no session-clearing logic of its own (see AuthContext's own doc comment on
+  // handleAuthError) — this is the first real caller. Without it, a 401/session_expired on the
+  // bootstrap fetch would just render as inline error text while the operator stays stuck inside
+  // (tabs) with a dead session; the stream's own onUnauthorized (OC-17) only catches this on its
+  // next reconnect attempt, which can be a long wait against an already-open connection.
+  useEffect(() => {
+    if (query.error) handleAuthError(query.error);
+  }, [query.error, handleAuthError]);
 
   return query;
 }
