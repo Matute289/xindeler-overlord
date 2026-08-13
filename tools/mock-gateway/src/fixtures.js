@@ -46,10 +46,20 @@ const oraclePresets = [
   },
 ];
 
+const oracleCannedReply =
+  'Puedo generar un evento de emboscada de lobos cerca del jugador. ¿Confirmás?';
+
+const oracleDraftPool = [
+  { kind: 'spawn', template_id: 'tpl_wolf_pack', intensity: 6, radius: 20 },
+  { kind: 'weather', intensity: 8, radius: 50 },
+];
+
 module.exports = {
   players,
   chatMessages,
   logLineTemplates,
   entityTemplates,
   oraclePresets,
+  oracleCannedReply,
+  oracleDraftPool,
 };
