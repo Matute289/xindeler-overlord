@@ -16,6 +16,8 @@ const broadcastRoutes = require('./src/routes/broadcast');
 const oracleEventsRoutes = require('./src/routes/oracleEvents');
 const oraclePresetsRoutes = require('./src/routes/oraclePresets');
 const oracleStageRoutes = require('./src/routes/oracleStage');
+const oracleTriggerRoutes = require('./src/routes/oracleTrigger');
+const oracleEnabledRoutes = require('./src/routes/oracleEnabled');
 const { requireStepUp } = require('./src/middleware/stepUp');
 const { broadcast } = require('./src/sse');
 const { statusSnapshot, setScenario } = require('./src/scenarios');
@@ -41,6 +43,8 @@ app.use('/api/v1/broadcast', requireAuth, broadcastRoutes);
 app.use('/api/v1/oracle/events', requireAuth, oracleEventsRoutes);
 app.use('/api/v1/oracle/presets', requireAuth, oraclePresetsRoutes);
 app.use('/api/v1/oracle/stage', requireAuth, requireStepUp, oracleStageRoutes);
+app.use('/api/v1/oracle/trigger', requireAuth, requireStepUp, oracleTriggerRoutes);
+app.use('/api/v1/oracle/enabled', requireAuth, requireStepUp, oracleEnabledRoutes);
 app.use('/mock/scenario', mockRoutes);
 
 app.use((req, res) => {
