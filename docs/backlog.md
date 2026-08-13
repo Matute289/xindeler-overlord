@@ -147,6 +147,7 @@ OC-33 preview card.
 | OC-47 | Widget / Live Activity | iOS: server status on the lock screen. Expo UI's SwiftUI APIs went stable in SDK 56. Pure delight, zero necessity. | 🅿️ |
 | OC-48 | Add a second operator | Multi-operator support once a moderator needs access — tester allowlists, audit attribution. | 🅿️ |
 | OC-49 | World Director approval queue | Reuse the OC-33 card as the `PROPOSED → VALIDATED` human step for the autonomous director (NH-75 §5.1). | 🅿️ |
+| OC-50 | AURORA tab + ON/OFF placeholder | Mirrors `xindeler-zuul` ZG-40 (merged 2026-08-13): add an inert tab and a kill-switch-style ON/OFF control for AURORA, the companion system to ORACLE (per-NPC intelligence / social-simulation layer). AURORA has zero runtime implementation in the engine today (NH-75 §1.8) — there is no gateway route to call yet. The control must ship genuinely disabled (not just styled to look inactive) with honest "not implemented yet" copy, never implying a capability that doesn't exist (invariant #8 above). Goal: when AURORA ships in `xindeler-new-horizon` and the gateway exposes a route for it, turning this on in the app is just wiring an already-built control to that route, not building UI from scratch. Revisit scope/placement once ORACLE's own OC-31/OC-34 screens exist, since this should likely sit alongside them rather than stand alone. | 🅿️ |
 
 ---
 
