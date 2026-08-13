@@ -12,6 +12,7 @@ const darkColors = {
   text: '#B9C4CE',
   textMuted: '#7C8A96',
   border: '#3A4550',
+  danger: '#FF6B6B',
 };
 
 // Light is a courtesy, not the design (ops-ui SKILL.md) - same structure,
@@ -24,6 +25,7 @@ const lightColors = {
   text: '#1A222A',
   textMuted: '#5B6672',
   border: '#D3D9DE',
+  danger: '#D64545',
 };
 
 // Family names must match the keys passed to useFonts() in app/_layout.tsx —

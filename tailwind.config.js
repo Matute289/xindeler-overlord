@@ -31,6 +31,7 @@ module.exports = {
           dark: '#D3D9DE',
           muted: '#5B6672',
         },
+        danger: '#D64545',
         night: {
           bg: {
             base: '#0B0F14',
@@ -45,6 +46,7 @@ module.exports = {
             dark: '#3A4550',
             muted: '#7C8A96',
           },
+          danger: '#FF6B6B',
         },
       },
     },

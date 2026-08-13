@@ -21,6 +21,7 @@ export function TextField({ label, ...inputProps }: TextFieldProps) {
         className="w-full rounded-lg border border-steel-dark bg-bg-surface px-4 py-3 text-base text-steel-light dark:border-night-steel-dark dark:bg-night-bg-surface dark:text-night-steel-light"
         placeholderTextColor={colors.textMuted}
         style={{ fontFamily: fonts.regular }}
+        accessibilityLabel={label}
         {...inputProps}
       />
     </View>
