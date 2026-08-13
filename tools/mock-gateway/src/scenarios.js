@@ -196,6 +196,7 @@ function startServer() {
   broadcast('status', statusSnapshot());
   const runningTimer = setTimeout(() => {
     state.scenario = 'normal';
+    startLogGenerator();
     state.lifecyclePhase = 'running';
     state.shutdownReason = null;
     broadcast('lifecycle', { state: 'running' });
@@ -212,6 +213,7 @@ function cancelShutdown() {
   }
   clearTimers();
   state.scenario = 'normal';
+  startLogGenerator();
   state.lifecyclePhase = 'running';
   state.shutdownReason = null;
   broadcast('lifecycle', { state: 'running' });
