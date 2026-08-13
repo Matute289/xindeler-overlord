@@ -1,10 +1,10 @@
-import { Empty } from '@/ui/Empty';
+import { PlayersScreen } from '@/features/players/PlayersScreen';
 import { Screen } from '@/ui/Screen';
 
-export default function PlayersScreen() {
+export default function PlayersRoute() {
   return (
     <Screen>
-      <Empty title="Jugadores" message="Se conecta al gateway más adelante en esta fase." />
+      <PlayersScreen />
     </Screen>
   );
 }
