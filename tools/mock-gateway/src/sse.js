@@ -6,6 +6,9 @@ function writeEventTo(res, event, data) {
 
 function registerClient(res) {
   state.streamClients.add(res);
+  res.on('error', () => {
+    unregisterClient(res);
+  });
 }
 
 function unregisterClient(res) {
