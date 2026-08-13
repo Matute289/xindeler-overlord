@@ -434,15 +434,19 @@ const { setScenario, getScenarioSnapshot } = require('./src/scenarios');
 setScenario('draining', { seconds: 2 });
 console.log('right after switch:', getScenarioSnapshot().scenario);
 setTimeout(() => {
-  console.log('after 4.5s (should be back to normal):', getScenarioSnapshot().scenario);
+  console.log('after 5.5s (should be back to normal):', getScenarioSnapshot().scenario);
   process.exit(0);
-}, 4500);
+}, 5500);
 "
 ```
+The wait must exceed 5000ms: a 2-second countdown (2000ms) plus the fixed 1500ms `stopped` pause
+plus the fixed 1500ms `starting` pause is 5000ms minimum before `state.scenario` flips back to
+`'normal'`. 5500ms gives a small margin.
+
 Expected:
 ```
 right after switch: draining
-after 4.5s (should be back to normal): normal
+after 5.5s (should be back to normal): normal
 ```
 
 - [ ] **Step 3: Commit**
