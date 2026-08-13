@@ -9,7 +9,7 @@ export function createAuthApi(http: HttpClient) {
       return http.request(
         '/api/v1/auth/login',
         { method: 'POST', body: { username, password } },
-        LoginResponseSchema
+        LoginResponseSchema,
       );
     },
 
@@ -17,7 +17,7 @@ export function createAuthApi(http: HttpClient) {
       return http.request(
         '/api/v1/auth/totp',
         { method: 'POST', body: { challenge_id: challengeId, code } },
-        TotpResponseSchema
+        TotpResponseSchema,
       );
     },
 

@@ -21,14 +21,11 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
   async function request<T>(
     path: string,
     options: RequestOptions,
-    responseSchema?: ZodType<T>
+    responseSchema?: ZodType<T>,
   ): Promise<T> {
     const method = options.method ?? 'GET';
     const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-    );
+    const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
     try {
       const authHeader = await deps.getAuthHeader();
@@ -63,7 +60,7 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         throw new ApiError(
           'unknown_error',
           `Error inesperado del gateway (${response.status})`,
-          response.status
+          response.status,
         );
       }
 
@@ -80,7 +77,7 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         throw new ApiError(
           'invalid_response',
           'La respuesta del gateway no tiene el formato esperado',
-          response.status
+          response.status,
         );
       }
       return result.data;
@@ -92,7 +89,7 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
   async function requestWithRetry<T>(
     path: string,
     options: RequestOptions,
-    responseSchema?: ZodType<T>
+    responseSchema?: ZodType<T>,
   ): Promise<T> {
     let lastError: ApiError | undefined;
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {

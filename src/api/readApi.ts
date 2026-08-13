@@ -35,17 +35,13 @@ export function createReadApi(http: HttpClient) {
       return http.requestWithRetry(
         `/api/v1/chronicle${query}`,
         { method: 'GET' },
-        ChronicleResponseSchema
+        ChronicleResponseSchema,
       );
     },
 
     getAudit(limit?: number) {
       const query = limit !== undefined ? `?limit=${limit}` : '';
-      return http.requestWithRetry(
-        `/api/v1/audit${query}`,
-        { method: 'GET' },
-        AuditResponseSchema
-      );
+      return http.requestWithRetry(`/api/v1/audit${query}`, { method: 'GET' }, AuditResponseSchema);
     },
   };
 }
