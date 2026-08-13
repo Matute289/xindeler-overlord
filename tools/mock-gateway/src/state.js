@@ -12,6 +12,7 @@ const state = {
   serverStartedAt: Date.now(),
   drainingCountdown: null, // { secondsLeft, timer } | null
   logGeneratorTimer: null,
+  recoveryTimers: null,
   streamClients: new Set(), // Set<express.Response> currently open on /api/v1/stream
 };
 

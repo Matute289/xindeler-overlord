@@ -13,6 +13,10 @@ function clearTimers() {
     clearInterval(state.drainingCountdown.timer);
     state.drainingCountdown = null;
   }
+  if (state.recoveryTimers) {
+    state.recoveryTimers.forEach(clearTimeout);
+    state.recoveryTimers = null;
+  }
 }
 
 function pushLogLine() {
@@ -92,14 +96,18 @@ function startDrainingCountdown() {
     state.drainingCountdown = null;
     broadcast('lifecycle', { state: 'stopped' });
 
-    setTimeout(() => {
+    state.recoveryTimers = [];
+    const startingTimer = setTimeout(() => {
       broadcast('lifecycle', { state: 'starting' });
-      setTimeout(() => {
+      const runningTimer = setTimeout(() => {
         state.scenario = 'normal';
+        state.recoveryTimers = null;
         broadcast('lifecycle', { state: 'running' });
         broadcast('status', statusSnapshot());
       }, 1500);
+      state.recoveryTimers.push(runningTimer);
     }, 1500);
+    state.recoveryTimers.push(startingTimer);
   }, 1000);
 }
 
