@@ -1,9 +1,10 @@
+import { memo } from 'react';
 import { Text, View } from 'react-native';
 
 import type { Player } from '@/api/schemas';
 import { fonts } from '@/ui/theme';
 
-export function PlayerRow({ player }: { player: Player }) {
+export const PlayerRow = memo(function PlayerRow({ player }: { player: Player }) {
   return (
     <View className="flex-row items-center justify-between border-b border-steel-dark px-6 py-3 dark:border-night-steel-dark">
       <Text
@@ -20,4 +21,4 @@ export function PlayerRow({ player }: { player: Player }) {
       </Text>
     </View>
   );
-}
+});

@@ -192,6 +192,19 @@ error banner). `ListEmptyComponent` covers the **legitimate** zero-players case,
 loading/error states above it — an empty server is a valid, common state for this screen (unlike
 Status, which almost always has *something* to show).
 
+⚠️ **Honest gap, not a blocking fix (added post-merge, final whole-branch review 2026-08-13)**: the
+"`RefreshControl`'s own spinner already communicates the in-flight/failed state" half of that rationale
+does not hold on web. `RefreshControl` is a confirmed no-op there (see `docs/backlog.md`'s OC-19 row —
+`react-native-web`'s implementation renders a bare `<View>` with no gesture-responder path at all), so
+a failed background refetch on web — whether from the tab blur/focus path or the wide-breakpoint
+navigate-away-and-back path, both described in that same backlog row — currently has **no visible
+indicator whatsoever**: the list just silently stays at whatever it last showed, with nothing telling
+the operator the refresh even happened, let alone failed. This is inherited from `RefreshControl` being
+platform-limited on web, not something this implementation introduced, and is a reasonable follow-up
+once a web-specific refresh affordance exists (see the Recommendation in this branch's final review)
+rather than something to fix now — no error banner or toast is being added here; that would be scope
+creep beyond a documentation correction.
+
 `app/(tabs)/players.tsx` replaces its placeholder the same way OC-18's `index.tsx` did — wraps
 `PlayersScreen` in `<Screen>`, route-file default export renamed to `PlayersRoute` to avoid a same-
 name-different-symbol clash with `src/features/players/PlayersScreen.tsx`'s own export.

@@ -1,5 +1,7 @@
+import { useCallback, useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
+import type { Player } from '@/api/schemas';
 import { Empty } from '@/ui/Empty';
 import { fonts, useTheme } from '@/ui/theme';
 
@@ -9,6 +11,18 @@ import { usePlayersQuery } from './usePlayersQuery';
 export function PlayersScreen() {
   const query = usePlayersQuery();
   const { colors } = useTheme();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const renderItem = useCallback(({ item }: { item: Player }) => <PlayerRow player={item} />, []);
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    try {
+      await query.refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   if (query.data === undefined) {
     if (query.error) {
@@ -32,11 +46,11 @@ export function PlayersScreen() {
       <FlatList
         data={players}
         keyExtractor={(player) => player.uuid}
-        renderItem={({ item }) => <PlayerRow player={item} />}
+        renderItem={renderItem}
         refreshControl={
           <RefreshControl
-            refreshing={query.isRefetching}
-            onRefresh={query.refetch}
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
             tintColor={colors.accent}
           />
         }
