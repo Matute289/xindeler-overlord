@@ -1,10 +1,9 @@
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import { useApi } from '@/api/ApiContext';
 import type { ApiClient } from '@/api/apiClient';
 import { queryKeys } from '@/api/queryClient';
-import { useAuth } from '@/auth/AuthContext';
+import { useAuthErrorRouting } from '@/auth/useAuthErrorRouting';
 import { useStreamEvent } from '@/stream/StreamContext';
 
 // queryOptions() (TanStack v5) instead of a plain object literal so `queryClient.setQueryData`
@@ -23,7 +22,6 @@ function statusQueryOptions(api: ApiClient) {
 export function useStatusQuery() {
   const api = useApi();
   const queryClient = useQueryClient();
-  const { handleAuthError } = useAuth();
 
   const options = statusQueryOptions(api);
   const query = useQuery(options);
@@ -41,14 +39,7 @@ export function useStatusQuery() {
     queryClient.setQueryData(options.queryKey, data);
   });
 
-  // Route a bootstrap-fetch auth failure (session_expired/unauthorized) into AuthContext so the
-  // guard flips back to unauthenticated instead of leaving the operator stuck in (tabs) staring at
-  // a dead-session error string. Without this, only the stream's own onUnauthorized would ever
-  // catch it, and an already-open SSE connection isn't force-closed by the mock on token expiry, so
-  // that could be a long wait.
-  useEffect(() => {
-    if (query.error) handleAuthError(query.error);
-  }, [query.error, handleAuthError]);
+  useAuthErrorRouting(query.error);
 
   return query;
 }
