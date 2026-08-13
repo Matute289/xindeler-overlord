@@ -1,10 +1,10 @@
-import { Empty } from '@/ui/Empty';
+import { StatusScreen } from '@/features/status/StatusScreen';
 import { Screen } from '@/ui/Screen';
 
-export default function StatusScreen() {
+export default function StatusRoute() {
   return (
     <Screen>
-      <Empty title="Status" message="Fase 1 — todavía sin conexión al gateway." />
+      <StatusScreen />
     </Screen>
   );
 }
