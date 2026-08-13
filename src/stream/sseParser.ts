@@ -15,27 +15,56 @@ export async function* parseSseStream(
 ): AsyncGenerator<SseEvent> {
   const decoder = new TextDecoder();
   let buffer = '';
+  // A `\r` at the very end of one decoded chunk and a `\n` at the start of the
+  // next form a single CRLF line terminator, but they arrive in separate
+  // `read()` calls — normalizing each chunk in isolation would treat the lone
+  // trailing `\r` as its own terminator and then see the next chunk's `\n` as
+  // a second one, splitting one record into two. Hold the trailing `\r` back
+  // and prepend it to the next chunk before normalizing so it's never judged
+  // in isolation.
+  let pendingCr = false;
 
   try {
     while (!signal.aborted) {
       const { done, value } = await reader.read();
-      if (done) return;
+      if (done) {
+        // A stream that ends right after a lone trailing `\r` still terminated
+        // that line — flush it rather than silently dropping it. Still run the
+        // extraction below on the flushed buffer: this can complete a final
+        // event's `\n\n` terminator that no earlier chunk had a chance to see.
+        if (pendingCr) buffer += '\n';
+        yield* drainCompleteEvents();
+        return;
+      }
       // The SSE wire format (WHATWG spec) allows CRLF, LF, or bare CR as line
       // terminators — normalize to LF right after decoding so the `\n\n` block
       // separator below matches regardless of what the server/proxy emits.
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
-
-      let separatorIndex = buffer.indexOf('\n\n');
-      while (separatorIndex !== -1) {
-        const rawEvent = buffer.slice(0, separatorIndex);
-        buffer = buffer.slice(separatorIndex + 2);
-        const parsed = parseRawEvent(rawEvent);
-        if (parsed) yield parsed;
-        separatorIndex = buffer.indexOf('\n\n');
+      let text = decoder.decode(value, { stream: true });
+      if (pendingCr) {
+        text = `\r${text}`;
+        pendingCr = false;
       }
+      if (text.endsWith('\r')) {
+        pendingCr = true;
+        text = text.slice(0, -1);
+      }
+      buffer += text.replace(/\r\n|\r/g, '\n');
+
+      yield* drainCompleteEvents();
     }
   } finally {
     reader.cancel().catch(() => {});
+  }
+
+  function* drainCompleteEvents(): Generator<SseEvent> {
+    let separatorIndex = buffer.indexOf('\n\n');
+    while (separatorIndex !== -1) {
+      const rawEvent = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      const parsed = parseRawEvent(rawEvent);
+      if (parsed) yield parsed;
+      separatorIndex = buffer.indexOf('\n\n');
+    }
   }
 }
 
