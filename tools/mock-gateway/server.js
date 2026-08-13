@@ -17,17 +17,9 @@ const { chatMessages } = require('./src/fixtures');
 const { state } = require('./src/state');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
+app.use(require('cookie-parser')());
 app.use(express.json());
-
-// Error handler for malformed JSON bodies
-app.use((err, req, res, next) => {
-  if (err.type === 'entity.parse.failed' || (err.status === 400 && err.message.includes('JSON'))) {
-    sendError(res, 400, 'invalid_json', 'El body no es JSON válido');
-  } else {
-    next(err);
-  }
-});
 
 app.use('/api/v1/auth', authRoutes);
 
@@ -44,15 +36,30 @@ app.use((req, res) => {
   sendError(res, 404, 'not_found', `No existe ${req.method} ${req.path}`);
 });
 
+// Catch-all error handler — must be last so it also catches errors thrown by route
+// handlers, not just malformed-JSON body-parsing errors.
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed' || (err.status === 400 && err.message.includes('JSON'))) {
+    sendError(res, 400, 'invalid_json', 'El body no es JSON válido');
+  } else {
+    sendError(res, 500, 'internal_error', 'Error interno del mock gateway');
+  }
+});
+
 setInterval(() => {
   broadcast('status', statusSnapshot());
 }, 5000);
 
 let chatIndex = 0;
 setInterval(() => {
-  const message = { ...chatMessages[chatIndex % chatMessages.length], ts: new Date().toISOString() };
+  if (state.scenario === 'down') return; // no chat activity while the server is "down"
+  const message = {
+    ...chatMessages[chatIndex % chatMessages.length],
+    ts: new Date().toISOString(),
+  };
   chatIndex += 1;
   state.chatHistory.push(message);
+  if (state.chatHistory.length > 500) state.chatHistory.shift();
   broadcast('chat', message);
 }, 15000);
 

@@ -33,6 +33,7 @@ function pushLogLine() {
 }
 
 function startLogGenerator() {
+  if (state.scenario === 'down') return; // no log activity while the server is "down"
   const rateMs =
     state.scenario === 'log_flood'
       ? Math.max(1, Math.round(1000 / state.scenarioParams.log_flood.logsPerSec))
@@ -41,7 +42,11 @@ function startLogGenerator() {
 }
 
 function statusSnapshot() {
-  if (state.scenario === 'down') {
+  if (
+    state.scenario === 'down' ||
+    state.lifecyclePhase === 'stopped' ||
+    state.lifecyclePhase === 'starting'
+  ) {
     return {
       service: 'inactive',
       health: false,
@@ -67,7 +72,7 @@ function statusSnapshot() {
     chunk_count: 340 + Math.floor(Math.random() * 20),
     pending_shutdown: null,
   };
-  if (state.scenario === 'draining' && state.drainingCountdown) {
+  if (state.lifecyclePhase === 'draining' && state.drainingCountdown) {
     base.pending_shutdown = {
       seconds_left: state.drainingCountdown.secondsLeft,
       reason: 'Restart solicitado',
@@ -79,6 +84,7 @@ function statusSnapshot() {
 function startDrainingCountdown() {
   const totalSeconds = state.scenarioParams.draining.seconds;
   state.drainingCountdown = { secondsLeft: totalSeconds, timer: null };
+  state.lifecyclePhase = 'draining';
   broadcast('lifecycle', { state: 'draining', seconds_left: totalSeconds });
   broadcast('status', statusSnapshot());
 
@@ -87,21 +93,28 @@ function startDrainingCountdown() {
     state.drainingCountdown.secondsLeft -= 1;
 
     if (state.drainingCountdown.secondsLeft > 0) {
-      broadcast('lifecycle', { state: 'draining', seconds_left: state.drainingCountdown.secondsLeft });
+      state.lifecyclePhase = 'draining';
+      broadcast('lifecycle', {
+        state: 'draining',
+        seconds_left: state.drainingCountdown.secondsLeft,
+      });
       broadcast('status', statusSnapshot());
       return;
     }
 
     clearInterval(state.drainingCountdown.timer);
     state.drainingCountdown = null;
+    state.lifecyclePhase = 'stopped';
     broadcast('lifecycle', { state: 'stopped' });
 
     state.recoveryTimers = [];
     const startingTimer = setTimeout(() => {
+      state.lifecyclePhase = 'starting';
       broadcast('lifecycle', { state: 'starting' });
       const runningTimer = setTimeout(() => {
         state.scenario = 'normal';
         state.recoveryTimers = null;
+        state.lifecyclePhase = 'running';
         broadcast('lifecycle', { state: 'running' });
         broadcast('status', statusSnapshot());
       }, 1500);
@@ -119,10 +132,21 @@ function setScenario(name, params) {
   }
   if (params) {
     for (const key of Object.keys(params)) {
-      if (!state.scenarioParams[name] || !(key in state.scenarioParams[name])) {
+      if (
+        !state.scenarioParams[name] ||
+        !Object.prototype.hasOwnProperty.call(state.scenarioParams[name], key)
+      ) {
         const err = new Error(`Unknown param '${key}' for scenario '${name}'`);
         err.code = 'invalid_scenario_param';
         throw err;
+      }
+      if (name === 'log_flood' && key === 'logsPerSec') {
+        const value = params[key];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+          const err = new Error("'logsPerSec' must be a finite number >= 1");
+          err.code = 'invalid_scenario_param';
+          throw err;
+        }
       }
       state.scenarioParams[name][key] = params[key];
     }
@@ -131,10 +155,16 @@ function setScenario(name, params) {
   clearTimers();
   state.scenario = name;
   startLogGenerator();
-  if (name === 'draining') startDrainingCountdown();
+  if (name === 'draining') {
+    startDrainingCountdown();
+  } else {
+    state.lifecyclePhase = name === 'down' ? 'stopped' : 'running';
+  }
 
   broadcast('status', statusSnapshot());
-  broadcast('lifecycle', name === 'down' ? { state: 'stopped' } : { state: 'running' });
+  if (name !== 'draining') {
+    broadcast('lifecycle', name === 'down' ? { state: 'stopped' } : { state: 'running' });
+  }
 }
 
 function getScenarioSnapshot() {

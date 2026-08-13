@@ -84,7 +84,7 @@ actually needs to test it.
 | `GET /api/v1/status` | `scenario === 'down'` → `{service: 'inactive', health: false, version: '0.1.0-mock', started_at: null, uptime_secs: 0, players_online: 0, tick_time_ms: null, entity_count: 0, chunk_count: 0, pending_shutdown: null}`. `scenario === 'draining'` → same shape as `normal` below, plus `pending_shutdown: {seconds_left: state.drainingCountdown.secondsLeft, reason: 'Restart solicitado'}`. Otherwise (`normal`, `log_flood`, `auth_expiry`, `stream_drop`) → `{service: 'active', health: true, version: '0.1.0-mock', started_at: <ISO from serverStartedAt>, uptime_secs, players_online: fixtures.players.length, tick_time_ms: 45 + jitter, entity_count: 1200 + jitter, chunk_count: 340 + jitter, pending_shutdown: null}`. |
 | `GET /api/v1/players` | `scenario === 'down'` → `[]`. Otherwise → `fixtures.players` (5 fixed `{alias, uuid}` entries). |
 | `GET /api/v1/logs?limit=N` | Last `N` (default 50) entries from `state.logBuffer`. |
-| `GET /api/v1/chat?since=<rfc3339>` | `fixtures.chatMessages` filtered to `ts > since` when provided, else all. |
+| `GET /api/v1/chat?since=<rfc3339>` | `state.chatHistory` (populated by the periodic chat-cycle timer in `server.js`, seeded from `fixtures.chatMessages`) filtered to `ts > since` when provided, else all. |
 | `GET /api/v1/chronicle?limit=N` | `[]` — honest: nothing produces chronicle entries until Phase 3 exists, real or mock. |
 | `GET /api/v1/audit?limit=N` | `[]` — same reasoning, Phase 2. |
 

@@ -2,9 +2,14 @@ const { state } = require('../state');
 const { sendError } = require('../errors');
 
 function requireAuth(req, res, next) {
+  // Native builds always send the bearer header — prefer it when present. Web builds may
+  // instead rely on the HttpOnly `overlord_session` cookie (see gateway-api-contract.md §1).
   const header = req.headers.authorization || '';
-  const [scheme, token] = header.split(' ');
-  if (scheme !== 'Bearer' || !token) {
+  const [scheme, bearerToken] = header.split(' ');
+  const hasBearer = scheme === 'Bearer' && !!bearerToken;
+  const token = hasBearer ? bearerToken : req.cookies?.overlord_session;
+
+  if (!token) {
     return sendError(res, 401, 'unauthorized', 'Falta el header Authorization: Bearer <token>');
   }
 
@@ -18,6 +23,7 @@ function requireAuth(req, res, next) {
   }
 
   req.operator = session.operator;
+  req.token = token;
   next();
 }
 

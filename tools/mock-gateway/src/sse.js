@@ -1,7 +1,11 @@
 const { state } = require('./state');
 
 function writeEventTo(res, event, data) {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  try {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  } catch {
+    unregisterClient(res);
+  }
 }
 
 function registerClient(res) {

@@ -15,7 +15,11 @@ router.get('/', (req, res) => {
 
   registerClient(res);
   writeEventTo(res, 'status', statusSnapshot());
-  writeEventTo(res, 'lifecycle', state.scenario === 'down' ? { state: 'stopped' } : { state: 'running' });
+  writeEventTo(
+    res,
+    'lifecycle',
+    state.scenario === 'down' ? { state: 'stopped' } : { state: 'running' },
+  );
 
   const pingTimer = setInterval(() => {
     res.write(': ping\n\n');
