@@ -13,6 +13,10 @@ const streamRoutes = require('./src/routes/stream');
 const mockRoutes = require('./src/routes/mock');
 const serverRoutes = require('./src/routes/server');
 const broadcastRoutes = require('./src/routes/broadcast');
+const oracleEventsRoutes = require('./src/routes/oracleEvents');
+const oraclePresetsRoutes = require('./src/routes/oraclePresets');
+const oracleStageRoutes = require('./src/routes/oracleStage');
+const { requireStepUp } = require('./src/middleware/stepUp');
 const { broadcast } = require('./src/sse');
 const { statusSnapshot, setScenario } = require('./src/scenarios');
 const { chatMessages } = require('./src/fixtures');
@@ -34,6 +38,9 @@ app.use('/api/v1/audit', requireAuth, auditRoutes);
 app.use('/api/v1/stream', requireAuth, streamRoutes);
 app.use('/api/v1/server', requireAuth, serverRoutes);
 app.use('/api/v1/broadcast', requireAuth, broadcastRoutes);
+app.use('/api/v1/oracle/events', requireAuth, oracleEventsRoutes);
+app.use('/api/v1/oracle/presets', requireAuth, oraclePresetsRoutes);
+app.use('/api/v1/oracle/stage', requireAuth, requireStepUp, oracleStageRoutes);
 app.use('/mock/scenario', mockRoutes);
 
 app.use((req, res) => {
