@@ -290,6 +290,12 @@ already established and extending it one layer further:
   timer) is exercised and confirmed correct, but whether a real iOS/Android device's socket actually
   needs this after a genuine background suspension can't be confirmed without a device pass — flagged
   the same way OC-16 flagged its keyboard-avoidance fix as native-only-unverifiable.
+- **`TextDecoder`'s native availability is assumed, not device-verified in this pass either.**
+  `sseParser.ts` needs it to turn stream bytes into text; browsers (and thus the web build) have it
+  natively, and recent Hermes versions (the JS engine RN 0.86 ships) build it in as an intrinsic — RN
+  itself has no JS-level polyfill for it (confirmed absent from `node_modules/react-native/`, so it's
+  relying on the engine, not a shim). Same honest gap as the line above: correct by construction on
+  the current toolchain, not independently confirmed on an iOS/Android device in this pass.
 
 ## Out of scope (deliberately)
 
