@@ -11,6 +11,9 @@ router.post('/', (req, res) => {
     return sendError(res, 403, 'oracle_disabled', 'ORACLE está deshabilitado');
   }
   const { event_id: eventId, target, dry_run: dryRun } = req.body || {};
+  if (dryRun !== undefined && typeof dryRun !== 'boolean') {
+    return sendError(res, 400, 'invalid_body', 'dry_run debe ser boolean');
+  }
   if (!target) {
     return sendError(res, 400, 'missing_target', 'target es requerido');
   }

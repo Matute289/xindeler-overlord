@@ -15,8 +15,8 @@ router.post('/', (req, res) => {
   if (!id || !dmEvent) {
     return sendError(res, 400, 'invalid_body', 'id y dm_event son requeridos');
   }
-  state.oracleEvents.set(id, { dm_event: dmEvent, status: 'staging', stagedAt: Date.now() });
   const { sanitized, diff } = sanitizeDmEvent(dmEvent);
+  state.oracleEvents.set(id, { dm_event: sanitized, status: 'staging', stagedAt: Date.now() });
 
   setTimeout(() => {
     const entry = state.oracleEvents.get(id);

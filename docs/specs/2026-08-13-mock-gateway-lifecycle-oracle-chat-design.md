@@ -106,11 +106,11 @@ has `state`/`seconds_left`) — `reason` stays in `pending_shutdown`, matching t
 - **`restart`** — `beginGracefulStop({seconds, reason, autoRestart: true})`. This *is* what the
   `draining` scenario already does; the scenario keeps working exactly as before (it's the same
   function, called with `autoRestart: true` and a fixed reason).
-- **`cancel_shutdown`** — only valid while `lifecyclePhase === 'draining'` or `'stopped'` from a
-  non-auto-restart stop that hasn't been restarted yet. Clears whatever timers are running (reusing
-  `clearTimers()`), sets `lifecyclePhase`/`scenario` back to `running`/`normal`, broadcasts both
-  events. If nothing is pending, `400 {code: 'no_pending_shutdown'}` — more useful to the UI than a
-  silent no-op.
+- **`cancel_shutdown`** — only valid while `lifecyclePhase === 'draining'`; a countdown that already
+  reached `'stopped'` is not cancellable (use `POST /server/start` to bring it back). Clears whatever
+  timers are running (reusing `clearTimers()`), sets `lifecyclePhase`/`scenario` back to
+  `running`/`normal`, broadcasts both events. If nothing is pending, `400 {code:
+  'no_pending_shutdown'}` — more useful to the UI than a silent no-op.
 - **`disconnect_all`** — the mock has no per-connection player sockets to actually drop (`players`
   is a static fixture, not live connections). Simulate the *audit-visible* effect only: write a log
   line ("Todos los jugadores fueron desconectados") through the existing log generator's buffer

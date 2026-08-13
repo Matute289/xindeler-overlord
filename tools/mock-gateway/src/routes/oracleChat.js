@@ -34,6 +34,10 @@ router.post('/', (req, res) => {
     i += 1;
   }, 80);
 
+  // Unlike stream.js's req.on('close'), this listens on `res`: this route parses a JSON
+  // body via express.json(), and on this stack req's own 'close' event fires as soon as
+  // the body is fully read — not when the client actually disconnects — which would kill
+  // the token stream before any token event ever fires.
   res.on('close', () => clearInterval(tokenTimer));
 });
 

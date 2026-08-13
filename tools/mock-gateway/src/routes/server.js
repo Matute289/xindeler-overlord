@@ -20,9 +20,17 @@ router.post('/stop', requireStepUp, (req, res) => {
   if (mode === 'immediate') {
     scenarios.stopImmediately(reason);
   } else {
+    if (seconds !== undefined && (typeof seconds !== 'number' || seconds < 0)) {
+      return sendError(res, 400, 'invalid_seconds', 'seconds debe ser un número >= 0');
+    }
     scenarios.beginGracefulStop({ seconds: seconds ?? 30, reason, autoRestart: false });
   }
-  recordAudit({ operator: req.operator, action: 'server.stop', payload: req.body, outcome: 'ok' });
+  recordAudit({
+    operator: req.operator,
+    action: 'server.stop',
+    payload: { mode, seconds, reason },
+    outcome: 'ok',
+  });
   res.json({ ok: true });
 });
 
@@ -35,7 +43,7 @@ router.post('/restart', requireStepUp, (req, res) => {
   recordAudit({
     operator: req.operator,
     action: 'server.restart',
-    payload: req.body,
+    payload: { seconds, reason },
     outcome: 'ok',
   });
   res.json({ ok: true });
