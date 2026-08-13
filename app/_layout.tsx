@@ -11,6 +11,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { ApiProvider } from '@/api/ApiContext';
+import { QueryProvider } from '@/api/QueryProvider';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { EnvironmentProvider } from '@/config/EnvironmentContext';
 import { StreamProvider } from '@/stream/StreamContext';
@@ -39,10 +41,14 @@ export default function RootLayout() {
   return (
     <EnvironmentProvider>
       <AuthProvider>
-        <StreamProvider>
-          <StatusBar style="light" />
-          <RootNavigator />
-        </StreamProvider>
+        <ApiProvider>
+          <QueryProvider>
+            <StreamProvider>
+              <StatusBar style="light" />
+              <RootNavigator />
+            </StreamProvider>
+          </QueryProvider>
+        </ApiProvider>
       </AuthProvider>
     </EnvironmentProvider>
   );
