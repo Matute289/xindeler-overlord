@@ -79,7 +79,13 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
   function setStatus(next: StreamStatus) {
     if (status === next) return;
     status = next;
-    for (const listener of statusListeners) listener(status);
+    for (const listener of [...statusListeners]) {
+      try {
+        listener(status);
+      } catch (error) {
+        console.error('[stream] status listener threw', error);
+      }
+    }
   }
 
   function emit(event: StreamEventName, data: unknown) {
@@ -160,8 +166,16 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
     if (response.status === 401) {
       // A dead credential, not a transient failure — retrying it forever would leave
       // the operator stuck on "Reconectando..." instead of dropping to the login screen.
-      // The provider's onUnauthorized hook routes into AuthContext.handleAuthError, which
-      // will flip auth status and cause the provider to call stop() on its own.
+      // This client reaches its own safe, non-retrying terminal state regardless of
+      // whether a caller wired `onUnauthorized` — `running = false` + `setStatus`
+      // back to `'connecting'` (not `'reconnecting'`, so the "stream lost" banner
+      // doesn't lie about a retry that will never happen) must not depend on the
+      // hook. When `onUnauthorized` *is* wired, it additionally routes into
+      // `AuthContext.handleAuthError`, which flips auth status and causes the
+      // provider to call this same `stop()` shortly after — redundant with the
+      // lines above, and harmless (`stop()` is idempotent-safe to call again).
+      running = false;
+      setStatus('connecting');
       deps.onUnauthorized?.();
       return;
     }
@@ -183,8 +197,11 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
     } catch (error) {
       // A read error is a disconnect — fall through to the retry below. Deliberate
       // aborts (stop() / a new generation superseding this one) are expected and not
-      // worth logging; anything else is worth a breadcrumb.
-      if (!(error instanceof Error && error.name === 'AbortError')) {
+      // worth logging; anything else is worth a breadcrumb. Checking the controller's
+      // own signal — not the error's `name` — works regardless of how a given
+      // `fetch` implementation shapes its abort error (a DOMException named
+      // `AbortError` on web; native implementations aren't guaranteed to match).
+      if (!controller.signal.aborted) {
         console.warn('[stream] read loop ended', error);
       }
     }
