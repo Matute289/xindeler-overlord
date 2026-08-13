@@ -11,6 +11,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { EnvironmentProvider } from '@/config/EnvironmentContext';
 
 SplashScreen.preventAutoHideAsync();
@@ -36,8 +37,25 @@ export default function RootLayout() {
 
   return (
     <EnvironmentProvider>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false }} />
+      <AuthProvider>
+        <StatusBar style="light" />
+        <RootNavigator />
+      </AuthProvider>
     </EnvironmentProvider>
+  );
+}
+
+function RootNavigator() {
+  const { status } = useAuth();
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={status === 'authenticated'}>
+        <Stack.Screen name="(tabs)" />
+      </Stack.Protected>
+      <Stack.Protected guard={status === 'unauthenticated'}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+    </Stack>
   );
 }
