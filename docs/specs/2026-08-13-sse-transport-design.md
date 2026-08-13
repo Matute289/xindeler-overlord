@@ -39,13 +39,20 @@ modes, not just the stream. This spec's banner only speaks to the stream's own c
 `src/stream/` (currently empty, just `.gitkeep`) — matches the layering rule in `CLAUDE.md`:
 `features/` may import `api/`, `stream/`, `ui/`, `auth/`, `config/`. `stream/` itself may import
 `api/` (reuses its zod schemas and `ApiError`) and `auth/` (reuses `sessionStorage` for the same
-auth-header lookup `httpClient.ts` already does).
+auth-header lookup `httpClient.ts` already does). The one visible piece of UI this spec ships
+(the banner) follows the precedent `EnvironmentBadge` already set: `EnvironmentContext` (the
+headless context) lives in `src/config/`, but `EnvironmentBadge` (the component that renders it)
+lives in `src/features/environment/` — infra folders in this repo don't hold components. Same split
+here: `StreamContext.tsx` (headless) stays in `src/stream/`; `StreamStatusBanner.tsx` goes in
+`src/features/connectivity/` — a name chosen to double as OC-22 (Connectivity UX)'s future home,
+since that item will need somewhere to grow this exact kind of "can we reach the gateway" UI.
 
 ```
 src/stream/
   sseParser.ts          # parseSseStream() — raw SSE wire format -> {event, data} objects
   StreamClient.ts        # createStreamClient(url, deps) — connect/backoff/pub-sub, the transport itself
   StreamContext.tsx       # StreamProvider, useStreamEvent, useStreamStatus — the React binding
+src/features/connectivity/
   StreamStatusBanner.tsx  # the one small piece of UI this spec ships
 ```
 
