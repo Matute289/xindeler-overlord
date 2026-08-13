@@ -5,6 +5,7 @@ import { ErrorEnvelopeSchema } from './schemas';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const RETRY_DELAYS_MS = [300, 900];
+const PARSE_FAILED = Symbol('parse-failed');
 
 type HttpClientDeps = {
   getAuthHeader: () => Promise<Record<string, string> | undefined>;
@@ -30,9 +31,9 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
     try {
       const authHeader = await deps.getAuthHeader();
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(authHeader ?? {}),
-        ...(method === 'POST' ? { 'Idempotency-Key': deps.generateIdempotencyKey() } : {}),
+        ...(method !== 'GET' ? { 'Idempotency-Key': deps.generateIdempotencyKey() } : {}),
       };
 
       let response: Response;
@@ -68,7 +69,14 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         return undefined as T;
       }
 
-      const json = await response.json();
+      const json = await response.json().catch(() => PARSE_FAILED);
+      if (json === PARSE_FAILED) {
+        throw new ApiError(
+          'invalid_response',
+          'La respuesta del gateway no tiene el formato esperado',
+          response.status,
+        );
+      }
       if (!responseSchema) {
         return json as T;
       }
@@ -91,6 +99,9 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
     options: RequestOptions,
     responseSchema?: ZodType<T>,
   ): Promise<T> {
+    if ((options.method ?? 'GET') !== 'GET') {
+      throw new Error('requestWithRetry is GET-only — mutations must use request() directly');
+    }
     let lastError: ApiError | undefined;
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
       try {

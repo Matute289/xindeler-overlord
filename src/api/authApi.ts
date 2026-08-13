@@ -25,7 +25,7 @@ export function createAuthApi(http: HttpClient) {
       return http.request('/api/v1/auth/refresh', { method: 'POST' }, TotpResponseSchema);
     },
 
-    logout() {
+    logout(): Promise<void> {
       return http.request('/api/v1/auth/logout', { method: 'POST' });
     },
   };

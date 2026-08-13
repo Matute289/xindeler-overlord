@@ -8,3 +8,7 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+export function isApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError;
+}

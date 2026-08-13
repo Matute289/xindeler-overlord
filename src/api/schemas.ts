@@ -11,12 +11,14 @@ export const LoginResponseSchema = z.object({
   totp_required: z.literal(true),
   challenge_id: z.string(),
 });
+export type LoginChallenge = z.infer<typeof LoginResponseSchema>;
 
 export const TotpResponseSchema = z.object({
   token: z.string(),
   expires_at: z.string(),
   operator: z.string(),
 });
+export type Session = z.infer<typeof TotpResponseSchema>;
 
 export const StatusSchema = z.object({
   service: z.enum(['active', 'inactive', 'failed']),

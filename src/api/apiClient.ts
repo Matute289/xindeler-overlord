@@ -7,7 +7,7 @@ import { createReadApi } from './readApi';
 
 export function createApiClient(baseUrl: string) {
   const http = createHttpClient(baseUrl, {
-    getAuthHeader: sessionStorage.getAuthHeader,
+    getAuthHeader: () => sessionStorage.getAuthHeader(),
     generateIdempotencyKey: () => Crypto.randomUUID(),
   });
 
