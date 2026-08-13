@@ -106,7 +106,7 @@ theme.extend.colors").
 
 ```ts
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/api/ApiContext';
 import type { LogLine } from '@/api/schemas';
@@ -121,7 +121,12 @@ const FLUSH_INTERVAL_MS = 150;
 export function useLogsQuery() {
   const api = useApi();
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.logs(BOOTSTRAP_LIMIT);
+  // queryKeys.logs() is a factory returning a fresh array reference every call — memoized because
+  // this value sits in the flush effect's dependency array below; an unstable reference there would
+  // tear down/rebuild the interval on every re-render (including ones the flush's own writes
+  // trigger), defeating the "persistent 150ms interval" premise this hook exists for. Found and
+  // fixed during Task 1's own review.
+  const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
   const query = useQuery({
     queryKey,

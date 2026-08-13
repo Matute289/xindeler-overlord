@@ -51,7 +51,7 @@ composes patterns OC-18–19 already established.
 
 ```ts
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import type { LogLine } from '@/api/schemas';
 import { useApi } from '@/api/ApiContext';
@@ -66,7 +66,12 @@ const FLUSH_INTERVAL_MS = 150;
 export function useLogsQuery() {
   const api = useApi();
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.logs(BOOTSTRAP_LIMIT);
+  // queryKeys.logs() is a factory — it returns a fresh array reference every call. Memoized here
+  // because this value sits in the flush effect's dependency array below: an unstable reference
+  // there would tear down and rebuild the interval on every re-render (including ones the flush's
+  // own writes trigger), defeating the whole "persistent 150ms interval" premise this hook exists
+  // for. Found and fixed during Task 1's own review, not part of the original design pass.
+  const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
   const query = useQuery({
     queryKey,
