@@ -11,6 +11,8 @@ const chronicleRoutes = require('./src/routes/chronicle');
 const auditRoutes = require('./src/routes/audit');
 const streamRoutes = require('./src/routes/stream');
 const mockRoutes = require('./src/routes/mock');
+const serverRoutes = require('./src/routes/server');
+const broadcastRoutes = require('./src/routes/broadcast');
 const { broadcast } = require('./src/sse');
 const { statusSnapshot, setScenario } = require('./src/scenarios');
 const { chatMessages } = require('./src/fixtures');
@@ -30,6 +32,8 @@ app.use('/api/v1/chat', requireAuth, chatRoutes);
 app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);
 app.use('/api/v1/audit', requireAuth, auditRoutes);
 app.use('/api/v1/stream', requireAuth, streamRoutes);
+app.use('/api/v1/server', requireAuth, serverRoutes);
+app.use('/api/v1/broadcast', requireAuth, broadcastRoutes);
 app.use('/mock/scenario', mockRoutes);
 
 app.use((req, res) => {
