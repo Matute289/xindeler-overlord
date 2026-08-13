@@ -7,6 +7,13 @@ import { fonts } from '@/ui/theme';
 import { StatRow } from './StatRow';
 import { useStatusQuery } from './useStatusQuery';
 
+// Hoisted to module scope rather than constructed inside formatStartedAt — that function is
+// re-invoked on every render, including once per second during a pending_shutdown countdown.
+const dateTimeFormat = new Intl.DateTimeFormat('es-AR', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
+
 function formatUptime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -16,10 +23,13 @@ function formatUptime(seconds: number): string {
 
 function formatStartedAt(startedAt: string | null): string {
   if (!startedAt) return '—';
-  return new Intl.DateTimeFormat('es-AR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(new Date(startedAt));
+  const date = new Date(startedAt);
+  // StatusSchema only validates `z.string().nullable()`, nothing about date-ness — a malformed
+  // value makes `new Date(x)` an Invalid Date, and formatting that throws a RangeError. No
+  // ErrorBoundary exists anywhere in this app, so an unguarded throw here would unmount the whole
+  // app rather than just show a bad timestamp.
+  if (Number.isNaN(date.getTime())) return '—';
+  return dateTimeFormat.format(date);
 }
 
 function serviceLabel(status: Status): string {
@@ -49,7 +59,9 @@ export function StatusScreen() {
   return (
     <View className="flex-1 px-6 pt-8">
       <View className="flex-row items-center gap-2">
-        <View className={`h-3 w-3 rounded-full ${isUp ? 'bg-accent-cyan' : 'bg-danger'}`} />
+        <View
+          className={`h-3 w-3 rounded-full ${isUp ? 'bg-accent-cyan dark:bg-night-accent-cyan' : 'bg-danger dark:bg-night-danger'}`}
+        />
         <Text
           className="text-xl text-steel-light dark:text-night-steel-light"
           style={{ fontFamily: fonts.bold }}

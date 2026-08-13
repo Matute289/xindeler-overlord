@@ -160,7 +160,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   // reason — that's the boot-time environment value, not a real switch.
   useEffect(() => {
     queryClient.clear();
-  }, [api]);
+  }, [environment.baseUrl]);
 
   return <ApiContext.Provider value={api}>{children}</ApiContext.Provider>;
 }
@@ -181,14 +181,18 @@ not the REST client built on top of one), and `AuthContext` already builds its o
 (`createApiClient` is a pure factory closing over nothing shared/mutable), and keeping them separate
 means `api/` doesn't reach into `auth/`'s internals or vice versa.
 
-**A note on the `useEffect`'s dependency array** (`[api]`, not `[environment.baseUrl]`): `api` is
-already `useMemo`'d on `environment.baseUrl`, so a new `api` instance *is* the signal a switch
-happened — depending on the derived value here rather than duplicating the same condition twice
-keeps the two effects (this one, and `useMemo`'s own recomputation) from being able to disagree.
-Unlike `AuthContext`'s analogous effect, this one does *not* need an `isFirstRender` guard: clearing
-an empty cache on the very first render is a no-op, whereas `AuthContext`'s equivalent effect clears
-a *real, freshly-restored session* if it fires on mount — the two effects look similar but guard
-against different things.
+**A note on the `useEffect`'s dependency array** (`[environment.baseUrl]`, not `[api]`): this effect
+is destructive (it wipes the entire query cache), so it must be keyed on the actual primitive that
+changes, not a `useMemo`-derived object identity — React only documents `useMemo` as a performance
+hint, never a guarantee that it returns the same reference for the same inputs, so a spurious `api`
+identity change could spuriously wipe a live cache. `environment.baseUrl` is a plain string: it
+changes if and only if a real environment switch happened, so it can never fire spuriously. `api`
+itself is already derived from `environment.baseUrl` via the `useMemo` above, so keying on the
+primitive instead of the derived value carries no risk of the two disagreeing about when a switch
+occurred. Unlike `AuthContext`'s analogous effect, this one does *not* need an `isFirstRender` guard:
+clearing an empty cache on the very first render is a no-op, whereas `AuthContext`'s equivalent
+effect clears a *real, freshly-restored session* if it fires on mount — the two effects look similar
+but guard against different things.
 
 `app/_layout.tsx` gains `ApiProvider` and `QueryProvider` alongside the existing three:
 `EnvironmentProvider > AuthProvider > ApiProvider > QueryProvider > StreamProvider > (StatusBar +
@@ -245,8 +249,10 @@ source.
 Replaces the current `<Empty title="Status" message="Fase 1 — todavía sin conexión al gateway." />`
 placeholder. Layout, top to bottom:
 
-- **Up/down header**: `service` + `health` as one glanceable line — a colored dot (`accent-cyan` for
-  `active`+healthy, `danger` for anything else) and text (`"En línea"` / `"Inactiva"` / `"Falló"`,
+- **Up/down header**: `service` + `health` as one glanceable line — a colored dot (`accent-cyan
+  dark:night-accent-cyan` for `active`+healthy, `danger dark:night-danger` for anything else,
+  matching every other color-conditional className in this codebase pairing light/dark variants) and
+  text (`"En línea"` / `"Inactiva"` / `"Falló"`,
   mapped from `service`, with `health === false` while `service === 'active'` rendering `"En línea
   (unhealthy)"` — the gateway distinguishes "the process is up" from "the process is healthy" and
   collapsing that distinction would hide exactly the case an operator most needs to see).
