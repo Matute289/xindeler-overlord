@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -15,6 +15,10 @@ export default function TotpScreen() {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  if (!challengeId) {
+    return <Redirect href="/login" />;
+  }
 
   async function handleSubmit() {
     setError(null);
