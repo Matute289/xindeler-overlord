@@ -52,7 +52,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "mock-gateway": "npm --prefix tools/mock-gateway install --silent && npm --prefix tools/mock-gateway start"
   },
   "private": true
 }
