@@ -3,12 +3,13 @@ import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { ApiError } from '@/api';
+
 import { useAuth } from '../auth/AuthContext';
 import { sessionStorage } from '../auth/sessionStorage';
 import { useEnvironment } from '../config/EnvironmentContext';
 import {
   createStreamClient,
-  type FetchLike,
   type StreamClient,
   type StreamEventMap,
   type StreamStatus,
@@ -18,15 +19,20 @@ const StreamClientContext = createContext<StreamClient | null>(null);
 
 export function StreamProvider({ children }: { children: ReactNode }) {
   const { environment } = useEnvironment();
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, handleAuthError } = useAuth();
 
   const client = useMemo(
     () =>
       createStreamClient(`${environment.baseUrl}/api/v1/stream`, {
         getAuthHeader: () => sessionStorage.getAuthHeader(),
-        fetchImpl: expoFetch.bind(globalThis) as unknown as FetchLike,
+        fetchImpl: expoFetch.bind(globalThis),
+        onUnauthorized: () => {
+          handleAuthError(new ApiError('unauthorized', 'La sesión del stream expiró', 401));
+        },
       }),
-    [environment.baseUrl],
+    // `handleAuthError` is a stable identity (useCallback([]) in AuthContext), so this
+    // still only recreates the client on an environment switch, same as before this fix.
+    [environment.baseUrl, handleAuthError],
   );
 
   useEffect(() => {
@@ -75,6 +81,17 @@ export function useStreamEvent<E extends keyof StreamEventMap>(
 export function useStreamStatus(): StreamStatus {
   const client = useStreamClient();
   const [status, setStatus] = useState(client.getStatus());
+
+  // If a new client instance is memoized (e.g. an environment switch) while this hook
+  // is already mounted, resync `status` to the new client's current status. This is
+  // React's documented "adjust state during render" pattern rather than a setState
+  // call inside the effect body below — the latter trips the
+  // `react-hooks/set-state-in-effect` lint rule and causes an extra cascading render.
+  const [trackedClient, setTrackedClient] = useState(client);
+  if (trackedClient !== client) {
+    setTrackedClient(client);
+    setStatus(client.getStatus());
+  }
 
   useEffect(() => client.onStatusChange(setStatus), [client]);
 

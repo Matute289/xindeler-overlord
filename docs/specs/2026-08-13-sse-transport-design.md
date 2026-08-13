@@ -296,6 +296,13 @@ already established and extending it one layer further:
   itself has no JS-level polyfill for it (confirmed absent from `node_modules/react-native/`, so it's
   relying on the engine, not a shim). Same honest gap as the line above: correct by construction on
   the current toolchain, not independently confirmed on an iOS/Android device in this pass.
+- **The native Bearer-header auth path has never been exercised live, in this pass or any prior
+  one.** `StreamClient.ts`'s `connect()` spreads `getAuthHeader()`'s result onto the request headers
+  (`{ Accept: 'text/event-stream', ...(authHeader ?? {}) }`) so a native build without a usable cookie
+  jar can authenticate the stream via `Authorization: Bearer ...` instead. Every browser pass to date
+  — web's `credentials: 'include'` — only ever exercises the empty-header/cookie branch of
+  `getAuthHeader()`; the non-empty-header branch is correct by code reading only, not independently
+  confirmed against a live gateway.
 
 ## Out of scope (deliberately)
 

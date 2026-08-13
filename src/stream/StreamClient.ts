@@ -47,6 +47,12 @@ export type FetchLike = (url: string, init: FetchInit) => Promise<Response>;
 type StreamClientDeps = {
   getAuthHeader: () => Promise<Record<string, string> | undefined>;
   fetchImpl: FetchLike;
+  /**
+   * Called when the stream fetch itself comes back 401 — a dead credential, not a
+   * transient network blip. The stream layer has no session-clearing logic of its
+   * own; this is the hook the provider uses to route into `AuthContext.handleAuthError`.
+   */
+  onUnauthorized?: () => void;
 };
 
 export interface StreamClient {
@@ -79,7 +85,13 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
   function emit(event: StreamEventName, data: unknown) {
     const listeners = eventListeners.get(event);
     if (!listeners) return;
-    for (const listener of listeners) listener(data);
+    for (const listener of [...listeners]) {
+      try {
+        listener(data);
+      } catch (error) {
+        console.error(`[stream] listener for "${event}" threw`, error);
+      }
+    }
   }
 
   function handleRawEvent(rawEvent: { event: string; data: string }) {
@@ -124,7 +136,10 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
     let response: Response;
     try {
       const authHeader = await deps.getAuthHeader();
-      if (myGeneration !== generation) return;
+      if (myGeneration !== generation) {
+        clearTimeout(timeoutId);
+        return;
+      }
 
       response = await deps.fetchImpl(url, {
         method: 'GET',
@@ -142,6 +157,15 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
 
     if (myGeneration !== generation) return;
 
+    if (response.status === 401) {
+      // A dead credential, not a transient failure — retrying it forever would leave
+      // the operator stuck on "Reconectando..." instead of dropping to the login screen.
+      // The provider's onUnauthorized hook routes into AuthContext.handleAuthError, which
+      // will flip auth status and cause the provider to call stop() on its own.
+      deps.onUnauthorized?.();
+      return;
+    }
+
     if (!response.ok || !response.body) {
       scheduleRetry(myGeneration);
       return;
@@ -156,8 +180,13 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
         if (myGeneration !== generation) return;
         handleRawEvent(rawEvent);
       }
-    } catch {
-      // A read error is a disconnect — fall through to the retry below.
+    } catch (error) {
+      // A read error is a disconnect — fall through to the retry below. Deliberate
+      // aborts (stop() / a new generation superseding this one) are expected and not
+      // worth logging; anything else is worth a breadcrumb.
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        console.warn('[stream] read loop ended', error);
+      }
     }
 
     if (myGeneration !== generation) return;

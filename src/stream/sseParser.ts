@@ -16,19 +16,26 @@ export async function* parseSseStream(
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (!signal.aborted) {
-    const { done, value } = await reader.read();
-    if (done) return;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      // The SSE wire format (WHATWG spec) allows CRLF, LF, or bare CR as line
+      // terminators — normalize to LF right after decoding so the `\n\n` block
+      // separator below matches regardless of what the server/proxy emits.
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
 
-    let separatorIndex = buffer.indexOf('\n\n');
-    while (separatorIndex !== -1) {
-      const rawEvent = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
-      const parsed = parseRawEvent(rawEvent);
-      if (parsed) yield parsed;
-      separatorIndex = buffer.indexOf('\n\n');
+      let separatorIndex = buffer.indexOf('\n\n');
+      while (separatorIndex !== -1) {
+        const rawEvent = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        const parsed = parseRawEvent(rawEvent);
+        if (parsed) yield parsed;
+        separatorIndex = buffer.indexOf('\n\n');
+      }
     }
+  } finally {
+    reader.cancel().catch(() => {});
   }
 }
 
