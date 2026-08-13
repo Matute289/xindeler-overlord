@@ -10,8 +10,9 @@ const chatRoutes = require('./src/routes/chat');
 const chronicleRoutes = require('./src/routes/chronicle');
 const auditRoutes = require('./src/routes/audit');
 const streamRoutes = require('./src/routes/stream');
+const mockRoutes = require('./src/routes/mock');
 const { broadcast } = require('./src/sse');
-const { statusSnapshot } = require('./src/scenarios');
+const { statusSnapshot, setScenario } = require('./src/scenarios');
 const { chatMessages } = require('./src/fixtures');
 const { state } = require('./src/state');
 
@@ -37,6 +38,7 @@ app.use('/api/v1/chat', requireAuth, chatRoutes);
 app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);
 app.use('/api/v1/audit', requireAuth, auditRoutes);
 app.use('/api/v1/stream', requireAuth, streamRoutes);
+app.use('/mock/scenario', mockRoutes);
 
 app.use((req, res) => {
   sendError(res, 404, 'not_found', `No existe ${req.method} ${req.path}`);
@@ -53,6 +55,8 @@ setInterval(() => {
   state.chatHistory.push(message);
   broadcast('chat', message);
 }, 15000);
+
+setScenario('normal');
 
 const PORT = process.env.MOCK_GATEWAY_PORT || 4000;
 app.listen(PORT, () => {
