@@ -79,3 +79,11 @@ export const AuditRowSchema = z.object({
 });
 export type AuditRow = z.infer<typeof AuditRowSchema>;
 export const AuditResponseSchema = z.array(AuditRowSchema);
+
+// Stream-only — the `lifecycle` SSE event has no equivalent REST response to
+// already own its schema, unlike `status`/`log`/`chat`/`audit`.
+export const LifecycleEventSchema = z.object({
+  state: z.enum(['running', 'draining', 'stopped', 'starting']),
+  seconds_left: z.number().optional(),
+});
+export type LifecycleEvent = z.infer<typeof LifecycleEventSchema>;

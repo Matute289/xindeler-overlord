@@ -3,6 +3,7 @@ import { Link, Slot, Tabs, usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { StreamStatusBanner } from '@/features/connectivity/StreamStatusBanner';
 import { EnvironmentBadge } from '@/features/environment/EnvironmentBadge';
 import { useBreakpoint } from '@/ui/useBreakpoint';
 import { fonts, useTheme } from '@/ui/theme';
@@ -29,6 +30,7 @@ export default function TabsLayout() {
   return (
     <View className="flex-1">
       <EnvironmentBadge />
+      <StreamStatusBanner />
       <View className="flex-1">
         {breakpoint === 'wide' ? (
           <SidebarLayout />
