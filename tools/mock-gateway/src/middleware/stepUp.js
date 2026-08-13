@@ -7,7 +7,7 @@ function requireStepUp(req, res, next) {
       res,
       403,
       'step_up_required',
-      'Esta acción requiere el código TOTP en el header X-Ops-Totp'
+      'Esta acción requiere el código TOTP en el header X-Ops-Totp',
     );
   }
   if (code !== '000000') {

@@ -16,12 +16,7 @@ router.post('/', (req, res) => {
   }
   const entry = state.oracleEvents.get(eventId);
   if (!entry || entry.status !== 'loaded') {
-    return sendError(
-      res,
-      404,
-      'event_not_found',
-      `No hay un evento cargado con id '${eventId}'`
-    );
+    return sendError(res, 404, 'event_not_found', `No hay un evento cargado con id '${eventId}'`);
   }
 
   const result = {
