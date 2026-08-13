@@ -19,8 +19,9 @@ function clearTimers() {
   }
 }
 
-function pushLogLine() {
-  const template = logLineTemplates[Math.floor(Math.random() * logLineTemplates.length)];
+function pushLogLine(override) {
+  const template =
+    override || logLineTemplates[Math.floor(Math.random() * logLineTemplates.length)];
   const line = {
     ts: new Date().toISOString(),
     level: template.level,
@@ -30,6 +31,7 @@ function pushLogLine() {
   state.logBuffer.push(line);
   if (state.logBuffer.length > 500) state.logBuffer.shift();
   broadcast('log', line);
+  return line;
 }
 
 function startLogGenerator() {
@@ -75,17 +77,30 @@ function statusSnapshot() {
   if (state.lifecyclePhase === 'draining' && state.drainingCountdown) {
     base.pending_shutdown = {
       seconds_left: state.drainingCountdown.secondsLeft,
-      reason: 'Restart solicitado',
+      reason: state.shutdownReason || 'Restart solicitado',
     };
   }
   return base;
 }
 
-function startDrainingCountdown() {
-  const totalSeconds = state.scenarioParams.draining.seconds;
-  state.drainingCountdown = { secondsLeft: totalSeconds, timer: null };
+function beginGracefulStop({ seconds, reason, autoRestart }) {
+  // Any in-flight countdown/recovery must die first — this function has three callers
+  // (the `draining` scenario, POST /server/restart, POST /server/stop) and two of them
+  // do not clearTimers() beforehand. A surviving interval would decrement the new
+  // countdown in parallel and run its own stale `autoRestart` tail.
+  if (state.drainingCountdown) {
+    clearInterval(state.drainingCountdown.timer);
+    state.drainingCountdown = null;
+  }
+  if (state.recoveryTimers) {
+    state.recoveryTimers.forEach(clearTimeout);
+    state.recoveryTimers = null;
+  }
+
+  state.drainingCountdown = { secondsLeft: seconds, timer: null };
   state.lifecyclePhase = 'draining';
-  broadcast('lifecycle', { state: 'draining', seconds_left: totalSeconds });
+  state.shutdownReason = reason || null;
+  broadcast('lifecycle', { state: 'draining', seconds_left: seconds });
   broadcast('status', statusSnapshot());
 
   state.drainingCountdown.timer = setInterval(() => {
@@ -105,8 +120,17 @@ function startDrainingCountdown() {
     clearInterval(state.drainingCountdown.timer);
     state.drainingCountdown = null;
     state.lifecyclePhase = 'stopped';
+    if (!autoRestart) {
+      state.scenario = 'down';
+      if (state.logGeneratorTimer) {
+        clearInterval(state.logGeneratorTimer);
+        state.logGeneratorTimer = null;
+      }
+    }
     broadcast('lifecycle', { state: 'stopped' });
     broadcast('status', statusSnapshot());
+
+    if (!autoRestart) return; // stays stopped until POST /server/start
 
     state.recoveryTimers = [];
     const startingTimer = setTimeout(() => {
@@ -117,6 +141,7 @@ function startDrainingCountdown() {
         state.scenario = 'normal';
         state.recoveryTimers = null;
         state.lifecyclePhase = 'running';
+        state.shutdownReason = null;
         broadcast('lifecycle', { state: 'running' });
         broadcast('status', statusSnapshot());
       }, 1500);
@@ -158,7 +183,11 @@ function setScenario(name, params) {
   state.scenario = name;
   startLogGenerator();
   if (name === 'draining') {
-    startDrainingCountdown();
+    beginGracefulStop({
+      seconds: state.scenarioParams.draining.seconds,
+      reason: 'Restart solicitado',
+      autoRestart: true,
+    });
   } else {
     state.lifecyclePhase = name === 'down' ? 'stopped' : 'running';
   }
@@ -169,8 +198,59 @@ function setScenario(name, params) {
   }
 }
 
+function stopImmediately(reason) {
+  clearTimers();
+  state.scenario = 'down';
+  state.lifecyclePhase = 'stopped';
+  state.shutdownReason = reason || null;
+  broadcast('lifecycle', { state: 'stopped' });
+  broadcast('status', statusSnapshot());
+}
+
+function startServer() {
+  if (state.lifecyclePhase === 'running') return; // already running, no-op success
+  clearTimers();
+  state.lifecyclePhase = 'starting';
+  broadcast('lifecycle', { state: 'starting' });
+  broadcast('status', statusSnapshot());
+  const runningTimer = setTimeout(() => {
+    state.scenario = 'normal';
+    startLogGenerator();
+    state.lifecyclePhase = 'running';
+    state.shutdownReason = null;
+    broadcast('lifecycle', { state: 'running' });
+    broadcast('status', statusSnapshot());
+  }, 1500);
+  state.recoveryTimers = [runningTimer];
+}
+
+function cancelShutdown() {
+  if (state.lifecyclePhase !== 'draining') {
+    const err = new Error('No hay una detención en curso para cancelar');
+    err.code = 'no_pending_shutdown';
+    throw err;
+  }
+  clearTimers();
+  state.scenario = 'normal';
+  startLogGenerator();
+  state.lifecyclePhase = 'running';
+  state.shutdownReason = null;
+  broadcast('lifecycle', { state: 'running' });
+  broadcast('status', statusSnapshot());
+}
+
 function getScenarioSnapshot() {
   return { scenario: state.scenario, params: state.scenarioParams };
 }
 
-module.exports = { setScenario, getScenarioSnapshot, statusSnapshot, VALID_SCENARIOS };
+module.exports = {
+  setScenario,
+  getScenarioSnapshot,
+  statusSnapshot,
+  VALID_SCENARIOS,
+  beginGracefulStop,
+  stopImmediately,
+  startServer,
+  cancelShutdown,
+  pushLogLine,
+};
