@@ -84,6 +84,19 @@ function statusSnapshot() {
 }
 
 function beginGracefulStop({ seconds, reason, autoRestart }) {
+  // Any in-flight countdown/recovery must die first — this function has three callers
+  // (the `draining` scenario, POST /server/restart, POST /server/stop) and two of them
+  // do not clearTimers() beforehand. A surviving interval would decrement the new
+  // countdown in parallel and run its own stale `autoRestart` tail.
+  if (state.drainingCountdown) {
+    clearInterval(state.drainingCountdown.timer);
+    state.drainingCountdown = null;
+  }
+  if (state.recoveryTimers) {
+    state.recoveryTimers.forEach(clearTimeout);
+    state.recoveryTimers = null;
+  }
+
   state.drainingCountdown = { secondsLeft: seconds, timer: null };
   state.lifecyclePhase = 'draining';
   state.shutdownReason = reason || null;
@@ -107,7 +120,13 @@ function beginGracefulStop({ seconds, reason, autoRestart }) {
     clearInterval(state.drainingCountdown.timer);
     state.drainingCountdown = null;
     state.lifecyclePhase = 'stopped';
-    if (!autoRestart) state.scenario = 'down';
+    if (!autoRestart) {
+      state.scenario = 'down';
+      if (state.logGeneratorTimer) {
+        clearInterval(state.logGeneratorTimer);
+        state.logGeneratorTimer = null;
+      }
+    }
     broadcast('lifecycle', { state: 'stopped' });
     broadcast('status', statusSnapshot());
 
