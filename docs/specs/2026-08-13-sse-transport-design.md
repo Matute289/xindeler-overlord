@@ -87,7 +87,7 @@ Responsibilities:
 
 ## `StreamClient.ts` — connect, validate, fan out, reconnect
 
-`createStreamClient(url: string, deps: {getAuthHeader, credentials})` returns:
+`createStreamClient(url: string, deps: {getAuthHeader, fetchImpl})` returns:
 
 ```ts
 type StreamStatus = 'connecting' | 'open' | 'reconnecting';
@@ -109,13 +109,16 @@ interface StreamClient {
 }
 ```
 
-**Connecting:** `import { fetch as expoFetch } from 'expo/fetch'` — verified in `node_modules` to
-resolve to `globalThis.fetch` on web (`fetch.web.ts` is a one-line re-export) and to a native-module
-binding on iOS/Android, so this one import is correct on all three targets, matching the client spec
-§5.2's "browser-shaped SSE code runs unchanged" claim. Request: `GET {url}` with `Accept:
-text/event-stream`, the same auth header `httpClient.ts` attaches (`deps.getAuthHeader()`), and
-`credentials: 'include'` (web's cookie, a native no-op) — reusing exactly `httpClient.ts`'s auth
-pattern rather than inventing a second one.
+**Connecting:** `StreamClient.ts` itself has **zero Expo/native imports** — `deps.fetchImpl` is an
+injected `fetch`-shaped function, the same DI-for-testability split `httpClient.ts` already uses
+(`createHttpClient` never imports `fetch` either; it just calls the ambient global). The real call
+site, `StreamContext.tsx`, is the one file that does `import { fetch as expoFetch } from 'expo/fetch'`
+and passes it in as `deps.fetchImpl` — verified in `node_modules` to resolve to `globalThis.fetch` on
+web (`fetch.web.ts` is a one-line re-export) and to a native-module binding on iOS/Android, so this
+one import is correct on all three targets, matching the client spec §5.2's "browser-shaped SSE code
+runs unchanged" claim. Request: `GET {url}` with `Accept: text/event-stream`, the same auth header
+`httpClient.ts` attaches (`deps.getAuthHeader()`), and `credentials: 'include'` (web's cookie, a
+native no-op) — reusing exactly `httpClient.ts`'s auth pattern rather than inventing a second one.
 
 **Connect timeout, not a stream timeout:** a 10s `AbortController` timer (matching
 `httpClient.ts`'s `DEFAULT_TIMEOUT_MS`) guards only the initial `fetch()` call — cleared the moment a
@@ -156,6 +159,7 @@ a re-render calling it twice); `stop()` is always safe to call, including with n
 const client = useMemo(
   () => createStreamClient(`${environment.baseUrl}/api/v1/stream`, {
     getAuthHeader: () => sessionStorage.getAuthHeader(),
+    fetchImpl: expoFetch,
   }),
   [environment.baseUrl],
 );
@@ -243,23 +247,30 @@ placement, so it's real and observable now instead of waiting for a data screen 
 
 ## Testing
 
-No test runner in this repo. Two tiers, matching the split `httpClient.ts` vs. `AuthContext.tsx`
-already established:
+No test runner in this repo. Three tiers, matching the DI-for-testability split `httpClient.ts`
+already established and extending it one layer further:
 
 - **`sseParser.ts` is pure** (a reader-in, events-out generator with zero Expo/native imports) —
   verified via a throwaway `npx tsx` script feeding it a hand-built reader, including a chunk-
   boundary case that splits a single event's `data:` line across two separate `read()` calls (a real
   TCP-framing scenario the mock's own byte-for-byte output doesn't control), and the mock's exact `:
   ping\n\n` keep-alive line to confirm it's silently skipped rather than mis-parsed as an event.
-- **`StreamClient.ts`/`StreamContext.tsx` need the Expo runtime** (`expo/fetch`'s native binding does
-  not resolve under plain `tsx`/Node — confirmed by reading `node_modules/expo/src/winter/fetch/`,
-  the native path goes through `ExpoFetchModule`, an Expo native module). Verified via `npx tsc
-  --noEmit` plus a live web build (`npx expo start --web`) against `npm run mock-gateway`, exercising
-  the mock's scenario switch (`POST /mock/scenario`) to drive: `normal` (banner absent, `status`/
-  `lifecycle` events land on subscribed listeners with correctly-typed payloads), `stream_drop`
-  (banner appears, backoff retries visible in a throwaway console log, reconnects once the mock's
-  drop window passes and the next connection attempt lands during `normal` again), `down` (connect
-  attempts fail immediately, banner stays up, backoff grows across the visible attempts).
+- **`StreamClient.ts` also has zero Expo/native imports** — `fetchImpl` is injected, so a throwaway
+  `npx tsx` script can pass Node's own global `fetch` (Node 18+'s `Response.body` is a real
+  `ReadableStream`, `getReader()` included) and drive it against a live `npm run mock-gateway`
+  exactly like `httpClient.ts`'s own verification does. Exercised there: the mock's scenario switch
+  (`POST /mock/scenario`) driving `normal` (events land on subscribed listeners with correctly-typed
+  payloads, malformed/unknown events are dropped without killing the connection), `stream_drop`
+  (backoff retries visible in the script's own logging, reconnects once the drop window passes and
+  the next attempt lands during `normal` again), `down` (connect attempts fail immediately, backoff
+  grows across attempts, `getStatus()` never reports `open`).
+- **`StreamContext.tsx`/`StreamStatusBanner.tsx` need the Expo runtime** (they're the files that
+  import `expo/fetch` and React; `expo/fetch`'s native binding does not resolve under plain
+  `tsx`/Node — confirmed by reading `node_modules/expo/src/winter/fetch/`, the native path goes
+  through `ExpoFetchModule`, an Expo native module). Verified via `npx tsc --noEmit` plus a live web
+  build (`npx expo start --web`) against `npm run mock-gateway`, confirming the same three scenarios
+  end-to-end through the real React tree: `normal` (banner absent), `stream_drop` (banner appears,
+  disappears once reconnected), `down` (banner stays up).
 - **Foreground resume is honestly unverifiable in this pass.** `AppState`'s `'active'` transition
   fires reliably on web (tab visibility), so the *code path* (`reconnectNow()` clearing a pending
   timer) is exercised and confirmed correct, but whether a real iOS/Android device's socket actually
