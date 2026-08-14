@@ -48,11 +48,19 @@ export async function* streamOracleChat(
   const reader = response.body.getReader();
   for await (const event of parseSseStream(reader, signal)) {
     if (event.event === 'token') {
-      const parsed = OracleChatTokenSchema.safeParse(JSON.parse(event.data));
-      if (parsed.success) yield { type: 'token', text: parsed.data.text };
+      try {
+        const parsed = OracleChatTokenSchema.safeParse(JSON.parse(event.data));
+        if (parsed.success) yield { type: 'token', text: parsed.data.text };
+      } catch {
+        // Malformed JSON in one event — skip it, don't kill the whole stream.
+      }
     } else if (event.event === 'draft') {
-      const parsed = DmEventSchema.safeParse(JSON.parse(event.data));
-      if (parsed.success) yield { type: 'draft', draft: parsed.data };
+      try {
+        const parsed = DmEventSchema.safeParse(JSON.parse(event.data));
+        if (parsed.success) yield { type: 'draft', draft: parsed.data };
+      } catch {
+        // Malformed JSON in one event — skip it, don't kill the whole stream.
+      }
     }
   }
 }
