@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Platform, Text, View } from 'react-native';
 
+import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Empty } from '@/ui/Empty';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { fonts } from '@/ui/theme';
@@ -117,7 +118,7 @@ export function LogsScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <Empty title="Logs" message={query.error.message} />;
+      return <GatewayErrorEmpty title="Logs" error={query.error} />;
     }
     return <Empty title="Logs" message="Cargando…" />;
   }

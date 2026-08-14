@@ -3,6 +3,7 @@ import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Text, View } from 'react-native';
 
 import type { ChatMessage } from '@/api/schemas';
+import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Empty } from '@/ui/Empty';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { fonts } from '@/ui/theme';
@@ -55,7 +56,7 @@ export function ChatScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <Empty title="Chat" message={query.error.message} />;
+      return <GatewayErrorEmpty title="Chat" error={query.error} />;
     }
     return <Empty title="Chat" message="Cargando…" />;
   }

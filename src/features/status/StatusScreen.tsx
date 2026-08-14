@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 
 import type { Status } from '@/api/schemas';
+import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Empty } from '@/ui/Empty';
 import { fonts } from '@/ui/theme';
 
@@ -48,7 +49,7 @@ export function StatusScreen() {
   // bootstrap-retry failure must not blank a screen that already has something to show.
   if (query.data === undefined) {
     if (query.error) {
-      return <Empty title="Status" message={query.error.message} />;
+      return <GatewayErrorEmpty title="Status" error={query.error} />;
     }
     return <Empty title="Status" message="Cargando…" />;
   }
