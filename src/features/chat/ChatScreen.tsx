@@ -29,6 +29,16 @@ export function ChatScreen() {
     }
   }, [messages, followTail]);
 
+  // messages goes back to undefined when the active environment changes (ApiContext calls
+  // queryClient.clear()) — the FlatList unmounts and remounts fresh at offset 0, but this ref
+  // wouldn't otherwise reset, leaving handleScroll's next movedUp check comparing against a stale
+  // large offset from the previous environment and spuriously disengaging follow-tail.
+  useEffect(() => {
+    if (messages === undefined) {
+      lastOffsetYRef.current = 0;
+    }
+  }, [messages]);
+
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const movedUp = contentOffset.y < lastOffsetYRef.current - 1;
@@ -61,6 +71,11 @@ export function ChatScreen() {
         </Text>
         <FollowTailToggle followTail={followTail} onToggle={toggleFollowTail} />
       </View>
+      {query.error && (
+        <View className="items-center bg-danger px-4 py-1 dark:bg-night-danger">
+          <Text className="text-xs text-white">{query.error.message}</Text>
+        </View>
+      )}
       <FlatList
         ref={flatListRef}
         data={messages}

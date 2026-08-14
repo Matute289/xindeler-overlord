@@ -24,7 +24,12 @@ export const ChatMessageRow = memo(function ChatMessageRow({ message }: { messag
       </View>
       <Text
         className="mt-0.5 text-steel-light dark:text-night-steel-light"
-        style={{ fontFamily: fonts.regular }}
+        // flexShrink: 1 — without it, Yoga sizes this Text to its own intrinsic content width
+        // before wrapping applies, so a long space-free token (a URL, a pasted string with no
+        // whitespace) can render wider than the row and overflow instead of wrapping. Letting the
+        // box shrink to the available width is what makes wrapping (including a forced mid-word
+        // break for a single unbreakable token) kick in on every platform, not just web.
+        style={{ fontFamily: fonts.regular, flexShrink: 1 }}
       >
         {message.message}
       </Text>
