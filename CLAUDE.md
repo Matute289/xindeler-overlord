@@ -27,7 +27,7 @@ pick up.
 | Repo | Where | What |
 |---|---|---|
 | **`xindeler-overlord`** (this one) | `Matute289/xindeler-overlord`, **public** — renamed 2026-08-10 from `xindeler-ops-console` to match the app's own name, "Overlord". GitHub keeps the old name redirecting. | The client app: iOS + Android + web |
-| **`xindeler-zuul`** | `Matute289/xindeler-zuul`, **private**, sibling local checkout at `~/Workspace/RustroverProjects/xindeler-zuul` — created 2026-08-10 | The ops gateway this app talks to. Holds every secret (`ui_api_secret`, vLLM/Bedrock keys, operator sessions). Also owns systemd control, ORACLE staging, and the LLM calls. **Never edit it from a session rooted here** — same rule as the engine repo below. |
+| **`xindeler-zuul`** | `Matute289/xindeler-zuul`, **private**, sibling local checkout at `~/Workspace/RustroverProjects/xindeler-zuul` — created 2026-08-10, **live in production as of 2026-08-15** | The ops gateway this app talks to. Holds every secret (`ui_api_secret`, vLLM/Bedrock keys, operator sessions). Also owns systemd control, ORACLE staging, and the LLM calls. **Never edit it from a session rooted here** — same rule as the engine repo below. Being productive does **not** mean this client is ratified against it yet — `docs/reference/gateway-api-contract.md` is still PROPOSED, and Phase 1 client work still targets `tools/mock-gateway`, per Matías's explicit direction (2026-08-15). |
 | **`xindeler-new-horizon`** | sibling local checkout at `~/Workspace/RustroverProjects/xindeler-new-horizon` | The Veloren-derived Rust game engine + server. **Never edit it from a session rooted here.** Its private design repo is nested at `docs/design/` |
 
 **Read the backend design before writing anything that talks to a server:**
