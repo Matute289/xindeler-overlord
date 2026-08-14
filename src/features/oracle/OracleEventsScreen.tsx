@@ -145,13 +145,13 @@ export function OracleEventsScreen() {
         </Text>
       </View>
       <View className="mx-6 mt-4 rounded-lg border border-steel-dark p-4 dark:border-night-steel-dark">
-        <View className="flex-row items-center justify-between">
-          <Text
-            className="text-steel-light dark:text-night-steel-light"
-            style={{ fontFamily: fonts.semibold }}
-          >
-            {oracleEnabled ? 'ORACLE: Activo' : 'ORACLE: Desactivado'}
-          </Text>
+        <Text
+          className="text-steel-light dark:text-night-steel-light"
+          style={{ fontFamily: fonts.semibold }}
+        >
+          {oracleEnabled ? 'ORACLE: Activo' : 'ORACLE: Desactivado'}
+        </Text>
+        <View className="mt-2">
           <Button
             label={oracleEnabled ? 'Desactivar' : 'Activar'}
             onPress={oracleEnabled ? handleDisable : () => setConfirmEnable(true)}
