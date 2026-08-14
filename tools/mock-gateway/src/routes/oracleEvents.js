@@ -10,7 +10,12 @@ router.get('/', (req, res) => {
   for (const [id, entry] of state.oracleEvents) {
     (entry.status === 'loaded' ? loaded : staged).push(id);
   }
-  res.json({ staged, loaded, entity_templates: entityTemplates });
+  res.json({
+    staged,
+    loaded,
+    entity_templates: entityTemplates,
+    oracle_enabled: state.oracleEnabled,
+  });
 });
 
 module.exports = router;

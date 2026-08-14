@@ -2,7 +2,11 @@ import { z } from 'zod';
 
 import type { createHttpClient } from './httpClient';
 import type { DmEvent, OracleTarget } from './schemas';
-import { StageOracleEventResponseSchema, OracleTriggerResponseSchema } from './schemas';
+import {
+  StageOracleEventResponseSchema,
+  OracleTriggerResponseSchema,
+  OracleEnabledResponseSchema,
+} from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
@@ -87,8 +91,8 @@ export function createWriteApi(http: HttpClient) {
     // `dry_run: true` hardcoded"; a `boolean` parameter is exactly such a path, one keystroke
     // away from flipping the most dangerous parameter in the app with the compiler silent.
     // Narrowed to the literal, any call site passing `false` is a compile error. OC-34 (fire)
-    // will need to widen this to `boolean` — that becomes a visible, reviewable signature change
-    // instead of an invisible argument flip.
+    // adds a separate `fireOracleEvent` method below instead of widening this one — see its
+    // comment.
     triggerOracleEvent(
       eventId: string,
       target: OracleTarget,
@@ -105,6 +109,36 @@ export function createWriteApi(http: HttpClient) {
           idempotencyKey,
         },
         OracleTriggerResponseSchema,
+      );
+    },
+
+    // A separate method, not a widened `triggerOracleEvent` — deliberately. `triggerOracleEvent`'s
+    // `dryRun: true` literal type stays exactly as OC-32/33's final review narrowed it; this is the
+    // ONLY place `dry_run: false` appears anywhere in client code, and it's not a parameter — it's
+    // hardcoded. Grepping for `fireOracleEvent` finds every real-fire call site in this app.
+    fireOracleEvent(
+      eventId: string,
+      target: OracleTarget,
+      stepUpCode: string,
+      idempotencyKey?: string,
+    ) {
+      return http.request(
+        '/api/v1/oracle/trigger',
+        {
+          method: 'POST',
+          body: { event_id: eventId, target, dry_run: false },
+          stepUpCode,
+          idempotencyKey,
+        },
+        OracleTriggerResponseSchema,
+      );
+    },
+
+    setOracleEnabled(enabled: boolean, stepUpCode: string, idempotencyKey?: string) {
+      return http.request(
+        '/api/v1/oracle/enabled',
+        { method: 'POST', body: { enabled }, stepUpCode, idempotencyKey },
+        OracleEnabledResponseSchema,
       );
     },
   };

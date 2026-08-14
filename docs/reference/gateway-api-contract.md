@@ -130,12 +130,14 @@ throughout the draining phase.
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/api/v1/oracle/events` | staged + loaded `DmEvent` ids and `EntityTemplate` ids |
+| `GET` | `/api/v1/oracle/events` | staged + loaded `DmEvent` ids, `EntityTemplate` ids, and the current ORACLE kill-switch state (`oracle_enabled`) |
 | `GET` | `/api/v1/oracle/presets` | gateway-owned preset library (not game assets) |
 | `POST` | `/api/v1/oracle/stage` | `{ id, dm_event }` → writes the file, polls until loaded, returns `{ loaded: bool, sanitized: DmEvent, diff: [...] }` |
 | `DELETE` | `/api/v1/oracle/stage/{id}` | retires it (deletes the file) |
 | `POST` | `/api/v1/oracle/trigger` | `{ event_id, target, dry_run }` → `{ would_spawn, bodies, resolved_pos, nearest_player_dist }`. **`dry_run` is a required boolean — there is no default.** An absent or non-boolean `dry_run` is a `400 invalid_body`, never an implicit real fire; the caller must state which of the two it wants. |
 | `POST` | `/api/v1/oracle/enabled` | `{ enabled }` — the ORACLE-events kill switch |
+
+**Note on `/api/v1/oracle/enabled`:** there is no dedicated GET for this flag — its current value is read via `GET /oracle/events`'s `oracle_enabled` field, by design (not a gap).
 
 **The `dm_event` shape the client emits — MOCK-DERIVED, UNRATIFIED.** A stronger caveat than this
 doc's overall PROPOSED status: the rest of §5 comes from the NH-75 design, but the fields and bounds
