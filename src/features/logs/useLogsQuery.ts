@@ -27,6 +27,10 @@ let nextLogSeq = 0;
 // stream push) — never reassigned afterward.
 export type SequencedLogLine = LogLine & { _seq: number };
 
+// Module-level, not an inline arrow in the `useQuery` call: TanStack's `select` memoization
+// requires the SAME function reference across renders to skip re-running it (it compares
+// `options.select === this.#selectFn`). A fresh arrow every render defeats that and re-walks
+// the array on every render instead of only when the raw fetched data actually changes.
 function capBufferedLogs(rows: SequencedLogLine[]): SequencedLogLine[] {
   return rows.slice(-MAX_BUFFERED_LOGS);
 }
