@@ -2,8 +2,10 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 
-import { ApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { useEnvironment } from '@/config/EnvironmentContext';
+import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
+import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
 import { Screen } from '@/ui/Screen';
@@ -12,8 +14,9 @@ import { TextField } from '@/ui/TextField';
 export default function TotpScreen() {
   const { challengeId } = useLocalSearchParams<{ challengeId: string }>();
   const { totp } = useAuth();
+  const { environment } = useEnvironment();
   const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (!challengeId) {
@@ -28,7 +31,7 @@ export default function TotpScreen() {
       // No manual navigation on success — AuthContext's status flip to 'authenticated'
       // is what Stack.Protected reacts to; the app switches to (tabs) on its own.
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo conectar con el gateway');
+      setError(err instanceof Error ? err : new Error('No se pudo conectar con el gateway'));
       setLoading(false);
     }
   }
@@ -59,7 +62,12 @@ export default function TotpScreen() {
             />
           </View>
           {error && (
-            <Text className="text-center text-sm text-danger dark:text-night-danger">{error}</Text>
+            <>
+              <Text className="text-center text-sm text-danger dark:text-night-danger">
+                {gatewayErrorMessage(environment.id, error)}
+              </Text>
+              {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
+            </>
           )}
           <Button
             label="Confirmar"
