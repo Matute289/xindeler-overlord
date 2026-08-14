@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
-import { useEnvironment } from '@/config/EnvironmentContext';
+import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
-import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
-import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { useStreamStatus } from '@/stream/StreamContext';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
@@ -57,18 +55,6 @@ function lifecycleLabel(state: LifecycleState, secondsLeft: number | undefined):
     case 'starting':
       return 'Iniciando…';
   }
-}
-
-function ActionError({ error }: { error: Error }) {
-  const { environment } = useEnvironment();
-  return (
-    <View className="mt-2 items-center">
-      <Text className="text-center text-xs text-danger dark:text-night-danger">
-        {gatewayErrorMessage(environment.id, error)}
-      </Text>
-      {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
-    </View>
-  );
 }
 
 // Every one of these is confirm-by-typing gated except Cancel — see the "Confirm-by-typing gate"
