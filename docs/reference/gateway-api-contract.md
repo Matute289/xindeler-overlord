@@ -1,9 +1,12 @@
 # Gateway API contract (client-side assumptions)
 
-**Status:** PROPOSED — this is what the *client* assumes. It is not yet implemented.
-The server side of this contract is `xindeler-ops-gateway` (a separate, private repo that
-does not exist yet). Ratify it against the gateway before writing client code that depends
-on a field name.
+**Status:** PROPOSED — this is what the *client* assumes; it has not been ratified against the real
+gateway yet. The server side of this contract is `xindeler-zuul` (`Matute289/xindeler-zuul`, private,
+sibling local checkout at `~/Workspace/RustroverProjects/xindeler-zuul`) — as of 2026-08-15 it exists
+and is **live in production** (confirmed by Matías), superseding the "does not exist yet" framing this
+doc originally shipped with. This client's Phase 1 work still targets `tools/mock-gateway`, not the
+real gateway directly — ratify this contract's exact field names/shapes against `xindeler-zuul` before
+writing client code that depends on one, and before pointing any environment profile at it.
 
 **Source of truth for the design behind it:**
 `xindeler-new-horizon` → `docs/design/specs/2026-08-09-nh75-ops-console-oracle-design.md`
