@@ -119,6 +119,20 @@ export const OraclePresetSchema = z.object({
 export type OraclePreset = z.infer<typeof OraclePresetSchema>;
 export const OraclePresetsResponseSchema = z.array(OraclePresetSchema);
 
+export const OracleTargetSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('player'), alias: z.string() }),
+  z.object({ type: z.literal('coords'), x: z.number(), y: z.number(), z: z.number() }),
+]);
+export type OracleTarget = z.infer<typeof OracleTargetSchema>;
+
+export const OracleTriggerResponseSchema = z.object({
+  would_spawn: z.number(),
+  bodies: z.array(z.string()),
+  resolved_pos: z.unknown(),
+  nearest_player_dist: z.number(),
+});
+export type OracleTriggerResponse = z.infer<typeof OracleTriggerResponseSchema>;
+
 export const DmEventDiffEntrySchema = z.object({
   field: z.string(),
   from: z.unknown(),

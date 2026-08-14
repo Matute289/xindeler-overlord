@@ -1,5 +1,6 @@
 const express = require('express');
 const { state } = require('../state');
+const { players } = require('../fixtures');
 const { sendError } = require('../errors');
 const { recordAudit } = require('../audit');
 const { pushLogLine } = require('../scenarios');
@@ -16,6 +17,17 @@ router.post('/', (req, res) => {
   }
   if (!target) {
     return sendError(res, 400, 'missing_target', 'target es requerido');
+  }
+  if (target.type === 'player') {
+    const onlinePlayers = state.scenario === 'down' ? [] : players;
+    if (!onlinePlayers.some((p) => p.alias === target.alias)) {
+      return sendError(
+        res,
+        404,
+        'target_player_offline',
+        `El jugador '${target.alias}' no está conectado`,
+      );
+    }
   }
   const entry = state.oracleEvents.get(eventId);
   if (!entry || entry.status !== 'loaded') {

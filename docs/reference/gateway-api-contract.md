@@ -162,6 +162,25 @@ rather than relying on the server clamp. `kind`/`template_id` are not validated 
 today. `dimension_config`/`atmosphere` are the two fields invariant 4 below covers; the mock does
 not implement them, it passes them through its spread untouched.
 
+**The `target` shape the client sends to `/oracle/trigger` — CLIENT-INVENTED, UNRATIFIED.** Stronger
+caveat than the `dm_event` block above: nothing pins this shape today, not even the mock (`
+tools/mock-gateway/src/routes/oracleTrigger.js` only checks `if (!target)` and otherwise treats it as
+opaque). The private NH-75 design names a Rust enum (`OracleTarget::Player { alias }` /
+`OracleTarget::Coords { x, y, z }`) but no serialization. OC-32/33 picked the following idiomatic JSON
+tagged union; ratify it against the real `xindeler-zuul` gateway before this points at anything but the
+mock.
+
+```ts
+type OracleTarget =
+  | { type: 'player'; alias: string }
+  | { type: 'coords'; x: number; y: number; z: number };
+```
+
+`target.type === 'player'` is validated server-side against who's currently online (the same list `GET
+/players` returns) — an offline alias fails with `404 target_player_offline` rather than silently
+resolving to any position. This mirrors NH-75 §4.3's stated invariant: *"If a named player is not
+online, the request fails with a clear error — it must never silently fall back to the origin."*
+
 **Invariants the client must uphold (they are the whole safety story — NH-75 §9):**
 
 1. `target` is **always** an operator-chosen form field (player picker or explicit coords).
