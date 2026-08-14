@@ -1,9 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
-import type { OracleTarget, OracleTriggerResponse } from '@/api/schemas';
+import type { OracleTarget, OracleTriggerResponse, Player } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { usePlayersQuery } from '@/features/players/usePlayersQuery';
@@ -18,6 +18,10 @@ function parseNumeric(text: string): number | null {
   if (text.trim() === '') return null;
   const value = Number(text);
   return Number.isFinite(value) ? value : null;
+}
+
+function isOnline(players: Player[], candidateAlias: string): boolean {
+  return players.some((p) => p.alias === candidateAlias);
 }
 
 function formatResolvedPos(pos: unknown): string {
@@ -49,11 +53,10 @@ export function OracleDryRunScreen() {
   const [zText, setZText] = useState('');
   const [result, setResult] = useState<OracleTriggerResponse | null>(null);
 
-  function buildTarget(): OracleTarget | null {
+  function buildTarget(onlinePlayers: Player[]): OracleTarget | null {
     if (mode === 'player') {
       if (alias === null) return null;
-      const stillOnline = (playersQuery.data ?? []).some((p) => p.alias === alias);
-      if (!stillOnline) return null;
+      if (!isOnline(onlinePlayers, alias)) return null;
       return { type: 'player', alias };
     }
     const x = parseNumeric(xText);
@@ -63,19 +66,39 @@ export function OracleDryRunScreen() {
     return { type: 'coords', x, y, z };
   }
 
+  // `useDestructiveAction`'s `call` only actually fires after `await requestStepUp()` resolves —
+  // i.e. after the operator has gone off to read a TOTP code, possibly backgrounding the app to
+  // do it. `QueryProvider.tsx` wires TanStack's `focusManager` to `AppState`, so that
+  // background/foreground cycle is a completely ordinary trigger for `usePlayersQuery` to refetch
+  // mid-step-up. `call` is a closure created at the render when `run()` was first invoked; a
+  // plain read of `playersQuery.data` inside it would keep seeing that render's roster forever,
+  // silently missing a refetch that lands while the prompt is up. `playersRef.current` is read
+  // fresh at call time regardless of which render's closure is executing, which is what "still
+  // online" actually needs to mean here — this is the client-side half of the
+  // missing-player-is-an-error invariant (the server-side half is Task 1's
+  // `target_player_offline` check, the authoritative backstop either way), so it should hold in
+  // fact, not just on the common path. Render-time reads (`canTrigger`, `selectedPlayerOffline`
+  // below) don't have this problem — they're recomputed fresh on every render already — so they
+  // keep reading `playersQuery.data` directly rather than the ref, which would otherwise lag by
+  // one render behind a just-landed refetch (the ref only updates in the `useEffect` below, which
+  // runs after render commits).
+  const playersRef = useRef<Player[]>([]);
+  useEffect(() => {
+    if (playersQuery.data) playersRef.current = playersQuery.data;
+  }, [playersQuery.data]);
+
   const triggerAction = useDestructiveAction((code, idempotencyKey) => {
-    const target = buildTarget();
+    const target = buildTarget(playersRef.current);
     if (!target) {
       throw new Error('invalid target state');
     }
     return api.write.triggerOracleEvent(eventId, target, true, code, idempotencyKey);
   });
 
+  const onlinePlayers = playersQuery.data ?? [];
   const selectedPlayerOffline =
-    mode === 'player' &&
-    alias !== null &&
-    !(playersQuery.data ?? []).some((p) => p.alias === alias);
-  const canTrigger = buildTarget() !== null && !triggerAction.pending;
+    mode === 'player' && alias !== null && !isOnline(onlinePlayers, alias);
+  const canTrigger = buildTarget(onlinePlayers) !== null && !triggerAction.pending;
 
   async function handleTrigger() {
     if (!canTrigger) return;
