@@ -1,10 +1,10 @@
-import { Empty } from '@/ui/Empty';
+import { LogsScreen } from '@/features/logs/LogsScreen';
 import { Screen } from '@/ui/Screen';
 
-export default function LogsScreen() {
+export default function LogsRoute() {
   return (
     <Screen>
-      <Empty title="Logs" message="Todavía sin transporte de logs — llega con el mock gateway." />
+      <LogsScreen />
     </Screen>
   );
 }

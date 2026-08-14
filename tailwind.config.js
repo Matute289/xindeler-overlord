@@ -32,6 +32,7 @@ module.exports = {
           muted: '#5B6672',
         },
         danger: '#D64545',
+        warning: '#B8860F',
         night: {
           bg: {
             base: '#0B0F14',
@@ -47,6 +48,7 @@ module.exports = {
             muted: '#7C8A96',
           },
           danger: '#FF6B6B',
+          warning: '#E0A82E',
         },
       },
     },
