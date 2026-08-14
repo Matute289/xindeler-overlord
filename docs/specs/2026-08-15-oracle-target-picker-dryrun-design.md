@@ -23,8 +23,9 @@ out of OC-31's staging). The kill switch (`POST /oracle/enabled`) is also OC-34'
 Unlike OC-30/31's `DmEvent` (where the mock's fixtures pinned a concrete shape), nothing pins
 `target`'s JSON shape today: `tools/mock-gateway/src/routes/oracleTrigger.js` only checks `if (!target)`
 and echoes it back verbatim as `resolved_pos` — it never reads pinned. The private NH-75 design names
-a Rust enum, `OracleTarget::Player { alias: String }` / `OracleTarget::Coords { x, y, z: f32 }`, but
-gives no serialization detail. This design picks the obvious idiomatic JSON tagged union:
+a two-variant target type (a named player, or explicit coordinates) but gives no serialization detail
+— see `xindeler-new-horizon/docs/design/specs/2026-08-09-nh75-ops-console-oracle-design.md` §4.3
+(private repo). This design picks the obvious idiomatic JSON tagged union:
 
 ```ts
 type OracleTarget =
@@ -40,8 +41,9 @@ Ratify against the real gateway before this ever points at anything but the mock
 ## The mock needs one real addition: enforcing "missing player is an error"
 
 The backlog line is explicit and testable: *"A missing player is an error, never a silent fallback to
-the origin."* Per NH-75 §4.3, this is a **server-side** invariant (`OracleTarget::Player{alias}` looks
-up the alias in the live `Player` storage; if not found, the trigger request fails). The mock's current
+the origin."* Per NH-75 §4.3 (private repo, path above), this is a **server-side** invariant: a
+player-typed target's alias is looked up in the live player storage, and if it isn't found the trigger
+request fails rather than resolving to anything. The mock's current
 `oracleTrigger.js` does not implement this at all — it accepts and echoes any `target` unconditionally.
 Without fixing that, the invariant is unverifiable end-to-end, only assertable in the client's own code.
 
@@ -49,8 +51,8 @@ This ticket adds one check to `oracleTrigger.js`: when `target.type === 'player'
 `target.alias` against the same "who's currently online" list `tools/mock-gateway/src/routes/
 players.js` already reads (`state.scenario === 'down' ? [] : players`) — if not found, respond
 `404 target_player_offline`. This mirrors the existing `event_not_found` check already in that file
-(same shape, same file, same route) and is directly testable via the mock's existing `POST /mock`
-scenario switch (`{"scenario":"down"}` empties the players list, exactly like it already does for
+(same shape, same file, same route) and is directly testable via the mock's existing
+`POST /mock/scenario` switch (`{"scenario":"down"}` empties the players list, exactly like it already does for
 other "nobody's online" live-verification passes elsewhere in this project).
 
 The client-side defense is separate and stays regardless of the mock fix: `buildTarget()` (the
@@ -119,7 +121,7 @@ picker lists the mock's fixture players and selecting one enables the button; co
 disclosure reveals x/y/z fields and an entered set of coordinates also enables the button; confirm
 "Probar disparo" is disabled with neither a player nor complete coordinates chosen; run a dry-run with
 a player target, confirm step-up (`000000`) and the result card renders all four fields; switch the
-mock to the `down` scenario (`POST /mock {"scenario":"down"}`), confirm the player picker now shows an
+mock to the `down` scenario (`POST /mock/scenario {"scenario":"down"}`), confirm the player picker shows an
 empty state and, if a request is somehow still attempted with a stale alias, the `target_player_offline`
 error surfaces clearly rather than silently resolving to any position; switch back to `normal` and
 confirm recovery. Confirm no way exists anywhere in this ticket's code to send `dry_run: false`.

@@ -12,11 +12,23 @@ router.post('/', (req, res) => {
     return sendError(res, 403, 'oracle_disabled', 'ORACLE está deshabilitado');
   }
   const { event_id: eventId, target, dry_run: dryRun } = req.body || {};
-  if (dryRun !== undefined && typeof dryRun !== 'boolean') {
-    return sendError(res, 400, 'invalid_body', 'dry_run debe ser boolean');
+  // `dry_run` is REQUIRED, not optional — an absent value must never fall through to the
+  // live-fire branch below. Validating only the type (the previous `dryRun !== undefined &&`
+  // guard) meant an omitted field reached `if (!dryRun)` as `undefined`, i.e. a real spawn plus
+  // an audit row, purely because the caller forgot the most dangerous parameter in the API.
+  // Fail closed: no default, the caller must say which one it wants.
+  if (typeof dryRun !== 'boolean') {
+    return sendError(res, 400, 'invalid_body', 'dry_run es requerido y debe ser boolean');
   }
   if (!target) {
     return sendError(res, 400, 'missing_target', 'target es requerido');
+  }
+  // An unrecognized `target.type` must not fall through to being echoed back as `resolved_pos`
+  // with every check skipped. The client's zod discriminated union already prevents this on the
+  // write path, but this mock is the contract's executable spec — it should reject the shape
+  // itself, not rely on the only current caller happening to be well-behaved.
+  if (target.type !== 'player' && target.type !== 'coords') {
+    return sendError(res, 400, 'invalid_body', "target.type debe ser 'player' o 'coords'");
   }
   if (target.type === 'player') {
     const onlinePlayers = state.scenario === 'down' ? [] : players;

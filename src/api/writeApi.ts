@@ -82,10 +82,17 @@ export function createWriteApi(http: HttpClient) {
       );
     },
 
+    // `dryRun: true` is the TypeScript literal type, not `boolean` — deliberate, final-review
+    // finding 3. The plan's constraint is "no code path constructs a trigger request without
+    // `dry_run: true` hardcoded"; a `boolean` parameter is exactly such a path, one keystroke
+    // away from flipping the most dangerous parameter in the app with the compiler silent.
+    // Narrowed to the literal, any call site passing `false` is a compile error. OC-34 (fire)
+    // will need to widen this to `boolean` — that becomes a visible, reviewable signature change
+    // instead of an invisible argument flip.
     triggerOracleEvent(
       eventId: string,
       target: OracleTarget,
-      dryRun: boolean,
+      dryRun: true,
       stepUpCode: string,
       idempotencyKey?: string,
     ) {

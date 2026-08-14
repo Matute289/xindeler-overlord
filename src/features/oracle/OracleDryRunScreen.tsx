@@ -38,7 +38,11 @@ function formatResolvedPos(pos: unknown): string {
     const p = pos as { x: number; y: number; z: number };
     return `(${p.x}, ${p.y}, ${p.z})`;
   }
-  return JSON.stringify(pos);
+  // `JSON.stringify(undefined)` returns the value `undefined`, not a string — interpolated into a
+  // template literal that renders as the literal text "undefined". `resolved_pos` is typed
+  // `z.unknown()` precisely because the real gateway's shape isn't ratified, so an omitted field
+  // is plausible; `?? '—'` keeps that case honest.
+  return JSON.stringify(pos) ?? '—';
 }
 
 export function OracleDryRunScreen() {
@@ -52,6 +56,17 @@ export function OracleDryRunScreen() {
   const [yText, setYText] = useState('');
   const [zText, setZText] = useState('');
   const [result, setResult] = useState<OracleTriggerResponse | null>(null);
+
+  // The result card describes the target that produced it, and nothing else on screen says which
+  // target that was. Any edit to what would be submitted next — switching mode, picking a
+  // different player, retyping a coordinate — makes the rendered card describe a target the form
+  // is no longer set to, so every one of those paths clears it. `OracleComposerScreen` sets the
+  // same precedent with `setStageResult(null)`. This matters most for OC-34: the moment a Fire
+  // button hangs off this card, "card says target X, form says target Y" is a firing hazard, not
+  // just a confusing read.
+  function clearResult() {
+    setResult(null);
+  }
 
   function buildTarget(onlinePlayers: Player[]): OracleTarget | null {
     if (mode === 'player') {
@@ -90,7 +105,11 @@ export function OracleDryRunScreen() {
   const triggerAction = useDestructiveAction((code, idempotencyKey) => {
     const target = buildTarget(playersRef.current);
     if (!target) {
-      throw new Error('invalid target state');
+      // Operator-facing Spanish, not an internal debug string: the only way to actually reach
+      // this throw is the selected player going offline DURING the step-up wait (the button is
+      // disabled otherwise), and this message renders verbatim through `gatewayErrorMessage`/
+      // `ActionError`. Same text as the `selectedPlayerOffline` banner below, deliberately.
+      throw new Error('Este jugador ya no está conectado.');
     }
     return api.write.triggerOracleEvent(eventId, target, true, code, idempotencyKey);
   });
@@ -102,6 +121,7 @@ export function OracleDryRunScreen() {
 
   async function handleTrigger() {
     if (!canTrigger) return;
+    clearResult();
     const response = await triggerAction.run();
     if (response) setResult(response);
   }
@@ -150,7 +170,10 @@ export function OracleDryRunScreen() {
               <ChipPicker
                 options={players.map((p) => ({ value: p.alias, label: p.alias }))}
                 selected={alias}
-                onSelect={setAlias}
+                onSelect={(value) => {
+                  clearResult();
+                  setAlias(value);
+                }}
               />
             </View>
           )
@@ -160,9 +183,30 @@ export function OracleDryRunScreen() {
                 neither `number-pad` nor `decimal-pad` allow a leading minus sign on either
                 platform — the default text keyboard is the only one that reliably accepts
                 signed decimals here. */}
-            <TextField label="X" value={xText} onChangeText={setXText} />
-            <TextField label="Y" value={yText} onChangeText={setYText} />
-            <TextField label="Z" value={zText} onChangeText={setZText} />
+            <TextField
+              label="X"
+              value={xText}
+              onChangeText={(text) => {
+                clearResult();
+                setXText(text);
+              }}
+            />
+            <TextField
+              label="Y"
+              value={yText}
+              onChangeText={(text) => {
+                clearResult();
+                setYText(text);
+              }}
+            />
+            <TextField
+              label="Z"
+              value={zText}
+              onChangeText={(text) => {
+                clearResult();
+                setZText(text);
+              }}
+            />
             <Text
               className="text-xs text-steel-muted dark:text-night-steel-muted"
               style={{ fontFamily: fonts.regular }}
@@ -177,7 +221,10 @@ export function OracleDryRunScreen() {
           </Text>
         )}
         <Pressable
-          onPress={() => setMode(mode === 'player' ? 'coords' : 'player')}
+          onPress={() => {
+            clearResult();
+            setMode(mode === 'player' ? 'coords' : 'player');
+          }}
           accessibilityRole="button"
           className="mt-3"
         >
@@ -206,6 +253,17 @@ export function OracleDryRunScreen() {
               style={{ fontFamily: fonts.semibold }}
             >
               Resultado
+            </Text>
+            {/* The conditional mood of "Se generarían" was carrying the whole "nothing actually
+                happened" message on its own, straight after the same TOTP step-up modal used for
+                genuinely destructive lifecycle actions. Say it outright instead — and pre-position
+                the card for OC-34, where "this was a preview" vs "this actually happened" stops
+                being cosmetic. */}
+            <Text
+              className="mt-2 text-xs text-steel-muted dark:text-night-steel-muted"
+              style={{ fontFamily: fonts.regular }}
+            >
+              Simulación: no se generó nada en el mundo todavía.
             </Text>
             <Text
               className="mt-2 text-steel-light dark:text-night-steel-light"

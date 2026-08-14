@@ -182,12 +182,14 @@ it:
 
 ```markdown
 **The `target` shape the client sends to `/oracle/trigger` — CLIENT-INVENTED, UNRATIFIED.** Stronger
-caveat than the `dm_event` block above: nothing pins this shape today, not even the mock (`
-tools/mock-gateway/src/routes/oracleTrigger.js` only checks `if (!target)` and otherwise treats it as
-opaque). The private NH-75 design names a Rust enum (`OracleTarget::Player { alias }` /
-`OracleTarget::Coords { x, y, z }`) but no serialization. OC-32/33 picked the following idiomatic JSON
-tagged union; ratify it against the real `xindeler-zuul` gateway before this points at anything but the
-mock.
+caveat than the `dm_event` block above: nothing outside this client pins this shape today. The mock
+(`tools/mock-gateway/src/routes/oracleTrigger.js`) validates that `target` is present and that
+`target.type` is one of the two variants below, but treats everything inside a variant as opaque. The
+private NH-75 design names a two-variant target type (a named player, or explicit coordinates) but no
+serialization format — see
+`xindeler-new-horizon/docs/design/specs/2026-08-09-nh75-ops-console-oracle-design.md` §4.3 (private
+repo). OC-32/33 picked the following idiomatic JSON tagged union; ratify it against the real
+`xindeler-zuul` gateway before this points at anything but the mock.
 
 ​```ts
 type OracleTarget =
@@ -197,8 +199,9 @@ type OracleTarget =
 
 `target.type === 'player'` is validated server-side against who's currently online (the same list `GET
 /players` returns) — an offline alias fails with `404 target_player_offline` rather than silently
-resolving to any position. This mirrors NH-75 §4.3's stated invariant: *"If a named player is not
-online, the request fails with a clear error — it must never silently fall back to the origin."*
+resolving to any position. The invariant, as stated in this repo's own `docs/backlog.md` (OC-32): a
+named player who is not online must produce a clear error, never a silent fallback to the origin.
+NH-75 §4.3 (private repo, path above) is the design source for it.
 ```
 
 (Write the fenced code block above using real triple-backtick fences, not the escaped ones shown here —
@@ -648,12 +651,14 @@ session's `oracleEvents` map is empty — the mock resets it on restart).
 5. With a player selected, tap "Probar disparo". Confirm the step-up prompt appears; enter `000000`;
    confirm the result card renders `would_spawn`, `bodies` (comma-joined), a resolved position, and
    `nearest_player_dist`.
-6. Switch the mock to the offline scenario: `curl -s -X POST http://localhost:<mock-port>/mock -H
+6. Switch the mock to the offline scenario:
+   `curl -s -X POST http://localhost:<mock-port>/mock/scenario -H
    'Content-Type: application/json' -d '{"scenario":"down"}'` (check `tools/mock-gateway`'s actual
    listening port/README if unsure). Reload the dry-run screen (or navigate back and re-enter it);
    confirm the player picker now shows "Sin jugadores conectados." and coordinates remain available as
    the only option.
-7. Switch the mock back to normal: `curl -s -X POST http://localhost:<mock-port>/mock -H
+7. Switch the mock back to normal:
+   `curl -s -X POST http://localhost:<mock-port>/mock/scenario -H
    'Content-Type: application/json' -d '{"scenario":"normal"}'`. Confirm the player picker repopulates
    on a fresh load.
 8. Grep the diff for `dry_run: false` and confirm zero matches anywhere in `OracleDryRunScreen.tsx` —

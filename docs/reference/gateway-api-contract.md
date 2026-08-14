@@ -134,7 +134,7 @@ throughout the draining phase.
 | `GET` | `/api/v1/oracle/presets` | gateway-owned preset library (not game assets) |
 | `POST` | `/api/v1/oracle/stage` | `{ id, dm_event }` → writes the file, polls until loaded, returns `{ loaded: bool, sanitized: DmEvent, diff: [...] }` |
 | `DELETE` | `/api/v1/oracle/stage/{id}` | retires it (deletes the file) |
-| `POST` | `/api/v1/oracle/trigger` | `{ event_id, target, dry_run }` → `{ would_spawn, bodies, resolved_pos, nearest_player_dist }` |
+| `POST` | `/api/v1/oracle/trigger` | `{ event_id, target, dry_run }` → `{ would_spawn, bodies, resolved_pos, nearest_player_dist }`. **`dry_run` is a required boolean — there is no default.** An absent or non-boolean `dry_run` is a `400 invalid_body`, never an implicit real fire; the caller must state which of the two it wants. |
 | `POST` | `/api/v1/oracle/enabled` | `{ enabled }` — the ORACLE-events kill switch |
 
 **The `dm_event` shape the client emits — MOCK-DERIVED, UNRATIFIED.** A stronger caveat than this
@@ -163,12 +163,16 @@ today. `dimension_config`/`atmosphere` are the two fields invariant 4 below cove
 not implement them, it passes them through its spread untouched.
 
 **The `target` shape the client sends to `/oracle/trigger` — CLIENT-INVENTED, UNRATIFIED.** Stronger
-caveat than the `dm_event` block above: nothing pins this shape today, not even the mock (`
-tools/mock-gateway/src/routes/oracleTrigger.js` only checks `if (!target)` and otherwise treats it as
-opaque). The private NH-75 design names a Rust enum (`OracleTarget::Player { alias }` /
-`OracleTarget::Coords { x, y, z }`) but no serialization. OC-32/33 picked the following idiomatic JSON
-tagged union; ratify it against the real `xindeler-zuul` gateway before this points at anything but the
-mock.
+caveat than the `dm_event` block above: nothing outside this client pins this shape today. The mock
+(`tools/mock-gateway/src/routes/oracleTrigger.js`) validates that `target` is present, that
+`target.type` is one of the two variants below (anything else is `400 invalid_body`), and — for
+`type: 'player'` — that the alias is currently online. Everything *inside* a variant it still treats
+as opaque: `coords`'s `x`/`y`/`z` get no type, finiteness or world-bounds check whatsoever and are
+echoed straight back as `resolved_pos`. The private NH-75 design names a two-variant target type (a
+named player, or explicit coordinates) but no serialization format — see
+`xindeler-new-horizon/docs/design/specs/2026-08-09-nh75-ops-console-oracle-design.md` §4.3 (private
+repo). OC-32/33 picked the following idiomatic JSON tagged union; ratify it against the real
+`xindeler-zuul` gateway before this points at anything but the mock.
 
 ```ts
 type OracleTarget =
@@ -178,8 +182,9 @@ type OracleTarget =
 
 `target.type === 'player'` is validated server-side against who's currently online (the same list `GET
 /players` returns) — an offline alias fails with `404 target_player_offline` rather than silently
-resolving to any position. This mirrors NH-75 §4.3's stated invariant: *"If a named player is not
-online, the request fails with a clear error — it must never silently fall back to the origin."*
+resolving to any position. The invariant, as stated in this repo's own `docs/backlog.md` (OC-32): a
+named player who is not online must produce a clear error, never a silent fallback to the origin.
+NH-75 §4.3 (private repo, path above) is the design source for it.
 
 **Invariants the client must uphold (they are the whole safety story — NH-75 §9):**
 
@@ -187,8 +192,12 @@ online, the request fails with a clear error — it must never silently fall bac
    It is **never** taken from an LLM draft. A draft `DmEvent` has no target field at all.
 2. `dry_run: true` runs first, and its result is shown as a preview card. `dry_run: false`
    is only reachable from that card.
-3. The preview card shows the **diff between the draft and the post-`sanitize()` value**, so
-   clamped values are visible instead of silently absorbed.
+3. The **diff between the draft and the post-`sanitize()` value is surfaced at stage time**, not at
+   trigger/dry-run time, so clamped values are visible instead of silently absorbed: `POST
+   /oracle/stage`'s response carries `diff`, and OC-31's composer renders it before anything can be
+   fired. `POST /oracle/trigger`'s response has **no `diff` field to show** — nothing is sanitized at
+   trigger time — so OC-33's dry-run card deliberately does not restate one (see `docs/backlog.md`,
+   OC-33). Fabricating a client-side diff on that card would misrepresent what the gateway does.
 4. `atmosphere` and `dimension_config` render with a "stored, not applied to the live world"
    badge — the engine ignores them today (NH-75 §1.5).
 5. **There is no undo.** Say so next to the fire button. The mitigations are dry-run, the
