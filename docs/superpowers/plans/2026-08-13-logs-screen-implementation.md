@@ -143,10 +143,24 @@ const BOOTSTRAP_LIMIT = 200;
 const MAX_BUFFERED_LOGS = 500;
 const FLUSH_INTERVAL_MS = 150;
 
+// Module-scope, not a ref: the counter must survive LogsScreen unmounting and remounting
+// (logout->login, or a web breakpoint resize past 768px) while the query cache — a module-level
+// singleton — keeps its previously-stamped rows. A per-mount useRef(0) would restart at 0 on
+// every remount and collide with already-cached _seq values, producing duplicate FlatList keys.
+// (Fifth round, 2026-08-13 — originally a useRef; see Step 4's note below.)
+let nextLogSeq = 0;
+
 // `_seq` is a monotonic client-side sequence number stamped once per line, at the two points a
 // line ever enters the buffer (bootstrap fetch, stream push) — `keyExtractor` keys on this rather
 // than array index, since index shifts every flush once the cap starts dropping old lines.
 export type SequencedLogLine = LogLine & { _seq: number };
+
+// Module-level, not an inline arrow, so `select` below keeps the same function reference across
+// every render, letting TanStack's own `select` memoization apply. (Fifth round, 2026-08-13 —
+// originally an inline arrow; see Step 4's note below.)
+function capBufferedLogs(rows: SequencedLogLine[]): SequencedLogLine[] {
+  return rows.slice(-MAX_BUFFERED_LOGS);
+}
 
 export function useLogsQuery() {
   const api = useApi();
@@ -158,10 +172,6 @@ export function useLogsQuery() {
   // fixed during Task 1's own review.
   const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
-  // Single shared counter for both writers (bootstrap + stream) so `_seq` is unique across the
-  // whole buffer and bootstrap rows always sort before stream-pushed ones.
-  const seqRef = useRef(0);
-
   const query = useQuery({
     queryKey,
     // Stamped in queryFn (runs once per actual fetch), not in `select` — `select` re-runs on
@@ -170,11 +180,11 @@ export function useLogsQuery() {
     // exists to fix.
     queryFn: async () => {
       const rows = await api.read.getLogs(BOOTSTRAP_LIMIT);
-      return rows.map((row): SequencedLogLine => ({ ...row, _seq: seqRef.current++ }));
+      return rows.map((row): SequencedLogLine => ({ ...row, _seq: nextLogSeq++ }));
     },
     // Shared cap-enforcement chokepoint for both writers — the flush path below keeps its own
     // slice too, so the raw cache stays bounded, not just this derived view.
-    select: (rows) => rows.slice(-MAX_BUFFERED_LOGS),
+    select: capBufferedLogs,
     // This cache entry is stream-owned after its initial fetch — an incidental window-focus or
     // remount refetch must not silently replace an accumulated buffer with the 200-line snapshot.
     // Scoped to this query only, not the global QueryClient defaults.
@@ -191,7 +201,7 @@ export function useLogsQuery() {
   const pendingLines = useRef<SequencedLogLine[]>([]);
 
   useStreamEvent('log', (line) => {
-    pendingLines.current.push({ ...line, _seq: seqRef.current++ });
+    pendingLines.current.push({ ...line, _seq: nextLogSeq++ });
   });
 
   useEffect(() => {
@@ -237,6 +247,13 @@ bootstrap path (fixed via `select`), no refetch suppression (fixed via
 `invalidateQueries` above), and — the critical one, in `LogsScreen.tsx` — a scroll-disengage guard
 that made follow-tail impossible to turn off during a sustained flood (see that file's own updated
 code block below).
+
+**Two more found by a fifth, human-authorized round (2026-08-13):** `_seq`'s counter
+(`seqRef`, a per-hook-instance `useRef(0)`) restarted at 0 on every `LogsScreen` remount while the
+module-level query cache kept its previously-stamped values, colliding with new stream-pushed
+`_seq`s — fixed by hoisting the counter to module scope (`nextLogSeq`, above). And the inline
+`select` arrow was a fresh function every render, defeating TanStack's `select` memoization — fixed
+via the module-level `capBufferedLogs` function above.
 
 - [ ] **Step 5: Typecheck, lint, and format**
 
@@ -486,16 +503,19 @@ export function LogsScreen() {
   // (or leaves it unchanged once at the bottom), while a user dragging the list up decreases it.
   // Direction, not elapsed time — see the two superseded timing-based attempts described below.
   const lastOffsetYRef = useRef(0);
-  // Tracks the `lines` reference the auto-scroll effect last saw, so it can tell "new data
-  // arrived" apart from "the filter changed, same data" (see the effect below).
-  const prevLinesRef = useRef(query.data);
-  // Armed only around a filter- or toggle-driven re-scroll (a discrete, user-triggered event,
+  // Tracks the `selectedLevels` value the effect last saw, so the guard below can be armed
+  // specifically and only when a filter selection genuinely changed — not inferred indirectly
+  // from whether `lines` changed (fifth round, 2026-08-13; see the note below the code block).
+  const prevSelectedLevelsRef = useRef(selectedLevels);
+  // Armed only when a filter selection genuinely changes (a discrete, user-triggered event,
   // never a 150ms-cadence one), cleared once a scroll event shows the list has genuinely settled
   // back near the bottom. A level-filter toggle swaps FlatList's `data` array wholesale, which can
   // make RN Web's scroll container transiently report an offset near the top before settling —
   // read as `movedUp` and spuriously disengaging follow-tail without this guard. Scoping it to
-  // filter/toggle changes only (never a plain stream append) keeps it from reopening the
-  // "permanently on during flood" failure the direction-based rewrite above exists to close.
+  // genuine filter changes only (never a plain stream append, and — since toggling `followTail`
+  // doesn't swap FlatList's `data` array — never a re-engage toggle either) keeps it from
+  // reopening the "permanently on during flood" failure the direction-based rewrite above exists
+  // to close.
   const suppressScrollCheckRef = useRef(false);
 
   const lines = query.data;
@@ -512,17 +532,17 @@ export function LogsScreen() {
   }
 
   useEffect(() => {
-    const linesChanged = prevLinesRef.current !== lines;
-    prevLinesRef.current = lines;
+    const filterChanged = prevSelectedLevelsRef.current !== selectedLevels;
+    prevSelectedLevelsRef.current = selectedLevels;
     if (followTail && lines && lines.length > 0) {
-      if (!linesChanged) {
+      if (filterChanged) {
         suppressScrollCheckRef.current = true;
       }
       scrollToEndAuto();
     }
     // filteredLines is included (not just lines): toggling a level filter while followTail is
     // true must re-snap to the new bottom immediately, not wait for the next stream flush.
-  }, [lines, filteredLines, followTail]);
+  }, [lines, filteredLines, followTail, selectedLevels]);
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -626,6 +646,21 @@ scroll direction instead — no timer, no elapsed-time assumption, so no equival
 fourth, related bug — a level-filter toggle's `data`-array swap spuriously disengaging follow-tail via
 a transient RN Web scroll artifact — was caught only by combining the `filteredLines` dependency with
 this rewrite and then actually toggling a filter mid-flood; fixed via `suppressScrollCheckRef` above.
+
+**Fifth round (2026-08-13, human-authorized): `suppressScrollCheckRef`'s arming condition was
+redesigned, not just patched.** It originally armed by inferring "was this a filter change" from
+whether the `lines` reference changed across the effect re-run (`prevLinesRef`) — which had two
+gaps: it wrongly armed on the very first mount (the ref's initial value is the same reference the
+first render already sees, reading as "unchanged"), and it could fail to arm when a stream flush
+landed in the same tick as a filter toggle (both change `lines`, so "unchanged" reads `false` even
+though a filter change also genuinely happened). Both stemmed from inferring the cause indirectly
+instead of tracking it directly. Fixed by tracking `selectedLevels` itself via
+`prevSelectedLevelsRef` (above) — simpler than what it replaced (one fewer ref, no mount-inference
+special-casing), and both gaps disappear by construction: the ref's initial value already equals
+`selectedLevels` on first render (correctly reads "unchanged"), and arming no longer depends on
+`lines` at all. One correct side effect: the guard no longer arms on the follow-tail re-engage
+toggle, which is right — toggling `followTail` doesn't swap `FlatList`'s `data` array, so it was
+never actually the source of a transient dip.
 
 Note `filteredLines` (not `lines`) is what's passed to `FlatList` and what the empty-check compares
 against for `ListEmptyComponent` — a filter that hides everything is a legitimate empty state

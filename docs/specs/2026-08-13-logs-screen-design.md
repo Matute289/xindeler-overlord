@@ -54,6 +54,14 @@ composes patterns OC-18–19 already established.
 > refetch suppression, no reconnect recovery. That version shipped, then a whole-branch review
 > found four real gaps in it (detailed inline below) before merge. What's shown now is the code
 > that actually ships. See `docs/backlog.md`'s OC-20 row for the full fix-wave narrative.
+>
+> **A fifth round (2026-08-13, human-authorized extra pass)** found and fixed two more residual
+> issues in this file: the `_seq` counter (`seqRef`) was a per-hook-instance `useRef`, which
+> restarted at 0 on every `LogsScreen` remount while the module-level query cache kept its
+> previously-stamped values — collided on the next remount within the cache's `gcTime`. Fixed by
+> hoisting it to a module-level `let nextLogSeq = 0`. And the inline `select` arrow was replaced
+> with a module-level named function (`capBufferedLogs`) so TanStack's own `select` memoization
+> — which requires a stable function reference across renders — actually applies. Both shown below.
 
 ```ts
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -69,12 +77,29 @@ const BOOTSTRAP_LIMIT = 200;
 const MAX_BUFFERED_LOGS = 500;
 const FLUSH_INTERVAL_MS = 150;
 
+// Module-scope, not a ref: the counter must survive LogsScreen unmounting and remounting
+// (logout->login, or a web breakpoint resize past 768px swapping SidebarLayout<->Tabs) while
+// the query cache — a module-level singleton — keeps its previously-stamped rows. A per-mount
+// useRef(0) would restart at 0 on every remount and collide with already-cached _seq values,
+// producing duplicate FlatList keys. A module-level counter just keeps incrementing regardless
+// of mount lifecycle, which is all uniqueness actually requires. (Fifth round, 2026-08-13 — see
+// the post-launch note above.)
+let nextLogSeq = 0;
+
 // `FlatList`'s `keyExtractor` needs a per-line id that never changes once assigned — an
 // index-based key shifts for every surviving line the moment `.slice(-MAX_BUFFERED_LOGS)` starts
 // dropping the oldest entries, remounting every row on every flush and defeating `LogRow`'s
 // memoization. `_seq` is a monotonic client-side sequence number stamped once per line, at the two
 // points a line ever enters the buffer (bootstrap fetch, stream push) — never reassigned after.
 export type SequencedLogLine = LogLine & { _seq: number };
+
+// Module-level, not an inline arrow, so `select` below keeps the same function reference across
+// every render — TanStack's own `select` memoization requires that to skip re-running it (fifth
+// round, 2026-08-13: a fresh arrow every render defeated that memoization, re-walking up to 500
+// objects on every render, not just on real data changes).
+function capBufferedLogs(rows: SequencedLogLine[]): SequencedLogLine[] {
+  return rows.slice(-MAX_BUFFERED_LOGS);
+}
 
 export function useLogsQuery() {
   const api = useApi();
@@ -86,10 +111,6 @@ export function useLogsQuery() {
   // for. Found and fixed during Task 1's own review, not part of the original design pass.
   const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
-  // Single shared counter for both writers (bootstrap + stream), so `_seq` values are unique
-  // across the whole buffer and bootstrap rows always sort before stream-pushed ones.
-  const seqRef = useRef(0);
-
   const query = useQuery({
     queryKey,
     // Stamped here — once per actual fetch, since queryFn only runs on mount/invalidate, never on
@@ -99,7 +120,7 @@ export function useLogsQuery() {
     // exists to fix.
     queryFn: async () => {
       const rows = await api.read.getLogs(BOOTSTRAP_LIMIT);
-      return rows.map((row): SequencedLogLine => ({ ...row, _seq: seqRef.current++ }));
+      return rows.map((row): SequencedLogLine => ({ ...row, _seq: nextLogSeq++ }));
     },
     // Cap enforcement lives here so both writers (this bootstrap fetch and the flush effect's
     // setQueryData below) share one chokepoint. Originally only the flush path capped at
@@ -107,7 +128,7 @@ export function useLogsQuery() {
     // enforced on only one of two writers is exactly the kind of thing that breaks later. The
     // flush path keeps its own slice too, so the raw cache itself stays bounded during a long
     // flood, not just this derived view.
-    select: (rows) => rows.slice(-MAX_BUFFERED_LOGS),
+    select: capBufferedLogs,
     // This cache entry is stream-owned after its initial fetch: the REST call is a one-time
     // bootstrap, not a data source worth re-consulting. Without this, an incidental window-focus
     // or remount refetch would silently replace up to 500 accumulated stream-appended lines with
@@ -129,7 +150,7 @@ export function useLogsQuery() {
   const pendingLines = useRef<SequencedLogLine[]>([]);
 
   useStreamEvent('log', (line) => {
-    pendingLines.current.push({ ...line, _seq: seqRef.current++ });
+    pendingLines.current.push({ ...line, _seq: nextLogSeq++ });
   });
 
   useEffect(() => {
@@ -191,6 +212,16 @@ above. (3) the query had no refetch suppression, so an incidental window-focus/r
 silently truncate the accumulated buffer back to 200 lines — fixed via the per-query
 `refetchOnWindowFocus`/`refetchOnMount: false` above. (4) no recovery from a stream-outage gap in log
 history — fixed via the reconnect-triggered `invalidateQueries` above.
+
+**Two more found by a fifth, human-authorized round (2026-08-13):** (5) `_seq`'s counter was a
+per-hook-instance `useRef(0)`, which restarted at 0 on every `LogsScreen` remount while the
+module-level query cache kept its previously-stamped values from before the remount — with
+`refetchOnMount: false` in effect, nothing reseeds the counter on remount, so the next stream-pushed
+line could collide with an already-cached `_seq`, reproducing the exact duplicate-key bug `_seq`
+exists to prevent. Fixed by hoisting the counter to module scope (`nextLogSeq`, above), tied to the
+JS module's lifetime rather than any component mount. (6) the inline `select: (rows) => ...` arrow
+was a fresh function every render, defeating TanStack's own reference-based `select` memoization;
+fixed via the module-level `capBufferedLogs` function above.
 
 ## The Logs screen
 
@@ -361,6 +392,23 @@ action, never the 150ms flush cadence) and cleared once a scroll event shows the
 settled back near the bottom. Scoping the guard to filter/toggle changes only, and never arming it on
 a plain stream-driven append, is what keeps it from reopening attempt 2's "permanently on during
 flood" failure.
+
+**Fifth round (2026-08-13, human-authorized): the guard's arming condition was redesigned to be
+precise, not just patched.** Inferring "was this a filter change" from whether the `lines` reference
+changed had two gaps: it wrongly armed on the very first mount (`prevLinesRef`'s initial value is the
+same reference the first render already sees, reading as "unchanged"), and it could fail to arm when
+a stream flush landed in the same tick as a filter toggle (both change `lines`, so the "unchanged"
+check reads `false` even though a filter change genuinely happened too). Both stemmed from inferring
+the cause indirectly from an unrelated signal instead of tracking the actual thing that matters.
+Fixed by tracking `selectedLevels` directly: a `prevSelectedLevelsRef` holds the value the effect
+last saw, and the guard arms exactly when `prevSelectedLevelsRef.current !== selectedLevels`. This is
+simpler than the code it replaced (one fewer ref, no mount-inference special-casing needed) precisely
+because it tracks the real cause — the mount-arming bug disappears by construction (the ref's initial
+value already equals `selectedLevels` on first render, so the guard correctly reads "unchanged"), and
+arming no longer depends on `lines` at all, so a coincident flush can't suppress it. One correct
+side effect: the guard no longer arms on the follow-tail re-engage toggle either, which is right —
+toggling `followTail` doesn't swap `FlatList`'s `data` array, so it was never actually the source of
+a transient dip.
 
 ### `FlatList` performance props
 
