@@ -26,10 +26,14 @@ export function LogsScreen() {
   // impossible to turn off by scrolling during a flood. Direction has no timing dependency at
   // all, so it has no equivalent failure mode.
   const lastOffsetYRef = useRef(0);
-  // Tracks the `lines` reference the auto-scroll effect last saw, so it can tell "new data
-  // arrived" apart from "the filter changed, same data" (see the effect below).
-  const prevLinesRef = useRef(query.data);
-  // Armed only around a filter- or toggle-driven re-scroll (a discrete, user-triggered event,
+  // Tracks the `selectedLevels` value the effect last saw, so the guard below can be armed
+  // specifically and only when a filter selection genuinely changed — not inferred indirectly
+  // from whether `lines` changed (which can coincidentally align or misalign with a filter
+  // change depending on stream-flush timing, and which also incorrectly reads as "unchanged" —
+  // and therefore wrongly arms the guard — on the very first mount, since the ref's initial
+  // value is the same reference the first render already sees).
+  const prevSelectedLevelsRef = useRef(selectedLevels);
+  // Armed only when a filter selection genuinely changes (a discrete, user-triggered event,
   // never a 150ms-cadence one — see below for why that scoping matters), and cleared once a
   // scroll event shows the list has actually settled back near the bottom. Swapping `FlatList`'s
   // `data` array wholesale (what a level-filter toggle does, as opposed to a stream flush's plain
@@ -45,8 +49,10 @@ export function LogsScreen() {
   // number of stacked dips from a single burst of filter changes. Still not time-based (no
   // `setTimeout`/watermark), so it has none of the "guard never goes stale under sustained-cadence
   // calls" failure mode the direction-based rewrite above exists to close — it clears on an actual
-  // reached condition, not an elapsed duration, and is armed only on discrete filter/toggle
-  // changes (never every 150ms flush), so it isn't re-armed in a tight loop either.
+  // reached condition, not an elapsed duration, and is armed only on genuine filter changes (never
+  // every 150ms flush, and — since toggling `followTail` doesn't swap FlatList's `data` array, so
+  // it was never actually the source of a transient dip — not on re-engaging follow-tail either),
+  // so it isn't re-armed in a tight loop either.
   const suppressScrollCheckRef = useRef(false);
 
   const lines = query.data;
@@ -65,12 +71,17 @@ export function LogsScreen() {
   }
 
   useEffect(() => {
-    const linesChanged = prevLinesRef.current !== lines;
-    prevLinesRef.current = lines;
+    const filterChanged = prevSelectedLevelsRef.current !== selectedLevels;
+    prevSelectedLevelsRef.current = selectedLevels;
     if (followTail && lines && lines.length > 0) {
-      if (!linesChanged) {
-        // This effect fired without `lines` itself changing — a filter toggle or the
-        // re-engage toggle, not a stream flush. Arm the guard described above.
+      if (filterChanged) {
+        // A filter selection just changed while already following the tail — FlatList's `data`
+        // array gets swapped wholesale (as opposed to a stream flush's plain append), which can
+        // make RN Web's scroll container transiently report an offset near the top before
+        // settling back down. Without this guard, that transient dip reads as a user scroll-up
+        // and disengages follow-tail even though the view is (and stays) pinned to the live
+        // bottom. See handleScroll below for why it clears on "back near the bottom" rather than
+        // the first non-up tick.
         suppressScrollCheckRef.current = true;
       }
       scrollToEndAuto();
@@ -79,7 +90,7 @@ export function LogsScreen() {
     // true must re-snap to the new bottom immediately — otherwise the scroll position goes
     // stale until the next stream flush (up to FLUSH_INTERVAL_MS, or indefinitely under
     // `normal`'s slow trickle).
-  }, [lines, filteredLines, followTail]);
+  }, [lines, filteredLines, followTail, selectedLevels]);
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
