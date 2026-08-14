@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Post-launch note (final whole-branch review fix wave, 2026-08-13):** the code blocks below have
+> been updated in place to match what actually ships — a whole-branch review found six real gaps in
+> this plan's originally-executed code (unstable `keyExtractor`, the bootstrap path's cap never
+> enforced, no refetch suppression, an unrecognized level silently hidden by the filter, no
+> stream-outage recovery, and — the critical one — a scroll-disengage guard that made follow-tail
+> impossible to turn off during a sustained flood) before merge. This is the second time this plan's
+> code blocks drifted from shipped code in this branch; see `docs/backlog.md`'s OC-20 row for the
+> full fix-wave narrative, and `docs/specs/2026-08-13-logs-screen-design.md` for the same code with
+> more design-rationale prose around it.
+
 **Goal:** Build the Logs screen — a virtualized, level-filterable, follow-tail log viewer with
 copy-to-clipboard, the third real consumer of the TanStack Query data layer, and the first screen
 that must stay smooth under a 20-events/second stream flood.
@@ -18,13 +28,24 @@ per-line render + long-press copy), `LevelFilter` (client-side filter chips), an
 ## Global Constraints
 
 - `src/features/logs/useLogsQuery.ts` bootstraps via `GET /api/v1/logs?limit=200`
-  (`BOOTSTRAP_LIMIT = 200`) and buffers incoming `log` stream events in a `useRef<LogLine[]>([])`,
+  (`BOOTSTRAP_LIMIT = 200`) and buffers incoming `log` stream events in a `useRef<SequencedLogLine[]>([])`,
   flushed into the query cache every `FLUSH_INTERVAL_MS = 150` via a plain `setInterval` (not
-  `requestAnimationFrame` — must keep flushing while backgrounded/tab-hidden). Each flush is exactly
+  `requestAnimationFrame` — must keep flushing while backgrounded/tab-hidden), plus a flush-on-unmount
+  so the last (up to) 150ms of buffered lines aren't dropped on unmount. Each flush is exactly
   one `setQueryData` call appending the whole buffered batch, capped at `MAX_BUFFERED_LOGS = 500`
-  entries (`.slice(-500)`), matching the mock's own `state.logBuffer` cap. **No screen-level code
+  entries (`.slice(-500)`), matching the mock's own `state.logBuffer` cap — enforced identically on
+  the bootstrap path via a `select` on the `useQuery` call, not just here. **No screen-level code
   anywhere calls `setQueryData` per individual stream event** — that's the one thing this plan
   exists to prevent regressing to.
+- Every line (bootstrap and stream alike) is stamped with a monotonic client-side `_seq`
+  (`SequencedLogLine = LogLine & { _seq: number }`) the moment it enters the buffer — a single shared
+  `useRef` counter, bootstrap stamped once in `queryFn`, stream stamped once at push time. `_seq` is
+  what `keyExtractor` keys on (not array index — see below).
+- This query disables `refetchOnWindowFocus`/`refetchOnMount` for itself specifically (not the global
+  `QueryClient` defaults): the cache entry is stream-owned after its initial fetch, so an incidental
+  refetch must not silently replace an accumulated buffer with just the 200-line REST snapshot. The
+  one deliberate refetch this hook fires: `queryClient.invalidateQueries` on `useStreamStatus()`'s
+  `!== 'open' -> 'open'` transition (a stream reconnect), to backfill history across an outage gap.
 - `queryKeys.logs(BOOTSTRAP_LIMIT)` is used identically for both the `useQuery`'s `queryKey` and the
   interval flush's `setQueryData` target — same reference shape, `queryKeys.logs: (limit?: number) =>
   ['logs', limit] as const` (pre-existing, OC-18).
@@ -34,19 +55,23 @@ per-line render + long-press copy), `LevelFilter` (client-side filter chips), an
 - Level → color mapping in `LogRow.tsx`: `error` → `danger`, `warn` → the new `warning` token,
   `debug` → `steel-muted`, anything else (including `info`) → `steel-light` (the neutral default) —
   `level` is a bare string in the schema, not an enum, so an unrecognized value must render with the
-  default color, never throw or hide the row.
+  default color, never throw or hide the row. `LogsScreen.tsx`'s level *filter* honors the same
+  principle via `LevelFilter.tsx`'s exported `KNOWN_LEVELS`: an unrecognized level is always shown
+  regardless of which known-level chips are toggled off.
 - `LogRow`'s long-press copies `` `${line.ts} ${line.level} ${line.target}: ${line.message}` `` via
   `expo-clipboard`'s `Clipboard.setStringAsync` — no visible copy icon, no toast/confirmation (this
   repo has no toast primitive yet; out of scope to add one for a single call site).
 - Follow-tail: a `followTail` boolean (`useState(true)`), auto-scrolls to the bottom
-  (`flatListRef.current?.scrollToEnd({animated: true})`) whenever `query.data`'s length changes while
-  `followTail` is true, auto-disables on manual scroll away from the bottom (detected via
-  `onScroll`'s `contentOffset`/`contentSize`/`layoutMeasurement`, ~50px threshold), and has an
-  explicit toggle button that re-enables it (scrolling to the current bottom once when re-enabled).
+  (`flatListRef.current?.scrollToEnd({animated: true})`) whenever the (filtered) data changes while
+  `followTail` is true, auto-disables on a genuine manual scroll away from the bottom — detected by
+  **direction** (`contentOffset.y` decreasing versus the previous event, tracked in a `useRef`), not
+  by timing. Has an explicit toggle button that just sets state; the same auto-scroll effect re-scrolls
+  once `followTail` flips back to `true`.
 - `FlatList` performance props: `maxToRenderPerBatch={20}`, `windowSize={10}`,
-  `removeClippedSubviews={Platform.OS !== 'web'}`. `keyExtractor` is `` `${line.ts}-${index}` ``
-  (index from `renderItem`'s own callback signature) — `ts` alone isn't guaranteed unique under a
-  flood.
+  `removeClippedSubviews={Platform.OS !== 'web'}`. `keyExtractor` is `String(line._seq)` — the
+  monotonic sequence number from `useLogsQuery`, not array index (index shifts every flush once the
+  500-entry cap starts dropping old lines, remounting every row instead of `LogRow`'s `memo` bailing
+  out).
 - Level filter is entirely client-side (`useMemo` over already-fetched/buffered data) — the gateway
   contract has no server-side level query param.
 - No test runner in this repo — verification is `npx tsc --noEmit` + `npm run lint` + `npm run
@@ -112,11 +137,16 @@ import { useApi } from '@/api/ApiContext';
 import type { LogLine } from '@/api/schemas';
 import { queryKeys } from '@/api/queryClient';
 import { useAuthErrorRouting } from '@/auth/useAuthErrorRouting';
-import { useStreamEvent } from '@/stream/StreamContext';
+import { useStreamEvent, useStreamStatus } from '@/stream/StreamContext';
 
 const BOOTSTRAP_LIMIT = 200;
 const MAX_BUFFERED_LOGS = 500;
 const FLUSH_INTERVAL_MS = 150;
+
+// `_seq` is a monotonic client-side sequence number stamped once per line, at the two points a
+// line ever enters the buffer (bootstrap fetch, stream push) — `keyExtractor` keys on this rather
+// than array index, since index shifts every flush once the cap starts dropping old lines.
+export type SequencedLogLine = LogLine & { _seq: number };
 
 export function useLogsQuery() {
   const api = useApi();
@@ -128,9 +158,28 @@ export function useLogsQuery() {
   // fixed during Task 1's own review.
   const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
+  // Single shared counter for both writers (bootstrap + stream) so `_seq` is unique across the
+  // whole buffer and bootstrap rows always sort before stream-pushed ones.
+  const seqRef = useRef(0);
+
   const query = useQuery({
     queryKey,
-    queryFn: () => api.read.getLogs(BOOTSTRAP_LIMIT),
+    // Stamped in queryFn (runs once per actual fetch), not in `select` — `select` re-runs on
+    // every raw-data change, including every flush, so a counter read there would hand a new
+    // `_seq` to the same bootstrap row every 150ms, reintroducing the unstable-key bug this field
+    // exists to fix.
+    queryFn: async () => {
+      const rows = await api.read.getLogs(BOOTSTRAP_LIMIT);
+      return rows.map((row): SequencedLogLine => ({ ...row, _seq: seqRef.current++ }));
+    },
+    // Shared cap-enforcement chokepoint for both writers — the flush path below keeps its own
+    // slice too, so the raw cache stays bounded, not just this derived view.
+    select: (rows) => rows.slice(-MAX_BUFFERED_LOGS),
+    // This cache entry is stream-owned after its initial fetch — an incidental window-focus or
+    // remount refetch must not silently replace an accumulated buffer with the 200-line snapshot.
+    // Scoped to this query only, not the global QueryClient defaults.
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   useAuthErrorRouting(query.error);
@@ -139,10 +188,10 @@ export function useLogsQuery() {
   // handler (the pattern status/players use) would mean 20 array replacements/sec — exactly the
   // "not smooth under a flood" failure this screen's own backlog line calls out. Collect incoming
   // lines in a ref (mutating a ref triggers no re-render) and flush them on a fixed interval.
-  const pendingLines = useRef<LogLine[]>([]);
+  const pendingLines = useRef<SequencedLogLine[]>([]);
 
   useStreamEvent('log', (line) => {
-    pendingLines.current.push(line);
+    pendingLines.current.push({ ...line, _seq: seqRef.current++ });
   });
 
   useEffect(() => {
@@ -150,17 +199,44 @@ export function useLogsQuery() {
       if (pendingLines.current.length === 0) return;
       const toAppend = pendingLines.current;
       pendingLines.current = [];
-      queryClient.setQueryData(queryKey, (old: LogLine[] | undefined) =>
+      queryClient.setQueryData(queryKey, (old: SequencedLogLine[] | undefined) =>
         [...(old ?? []), ...toAppend].slice(-MAX_BUFFERED_LOGS),
       );
     };
     const interval = setInterval(flush, FLUSH_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Flush once more on unmount so the last (up to) 150ms of buffered lines aren't dropped.
+      flush();
+    };
   }, [queryClient, queryKey]);
+
+  // Reconnect gap recovery: on the specific `!== 'open' -> 'open'` transition, invalidate the
+  // query to trigger a fresh bootstrap fetch that backfills history missed during an outage.
+  const streamStatus = useStreamStatus();
+  const prevStreamStatusRef = useRef(streamStatus);
+
+  useEffect(() => {
+    const prevStatus = prevStreamStatusRef.current;
+    prevStreamStatusRef.current = streamStatus;
+    if (prevStatus !== 'open' && streamStatus === 'open') {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  }, [streamStatus, queryClient, queryKey]);
 
   return query;
 }
 ```
+
+**Six gaps found by the final whole-branch review, all fixed above** (this code block originally
+matched the design spec's own pre-fix-wave version — see `docs/backlog.md`'s OC-20 row for the full
+narrative): unstable index-based `keyExtractor` (fixed via `_seq`), the cap never enforced on the
+bootstrap path (fixed via `select`), no refetch suppression (fixed via
+`refetchOnWindowFocus`/`refetchOnMount: false`), an unrecognized level hidden by the filter (fixed in
+`LogsScreen.tsx`/`LevelFilter.tsx`, not this file), no stream-outage recovery (fixed via
+`invalidateQueries` above), and — the critical one, in `LogsScreen.tsx` — a scroll-disengage guard
+that made follow-tail impossible to turn off during a sustained flood (see that file's own updated
+code block below).
 
 - [ ] **Step 5: Typecheck, lint, and format**
 
@@ -390,12 +466,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Platform, Pressable, Text, View } from 'react-native';
 
-import type { LogLine } from '@/api/schemas';
 import { Empty } from '@/ui/Empty';
 import { fonts } from '@/ui/theme';
 
-import { LevelFilter } from './LevelFilter';
+import { KNOWN_LEVELS, LevelFilter } from './LevelFilter';
 import { LogRow } from './LogRow';
+import type { SequencedLogLine } from './useLogsQuery';
 import { useLogsQuery } from './useLogsQuery';
 
 const SCROLL_BOTTOM_THRESHOLD_PX = 50;
@@ -404,38 +480,68 @@ export function LogsScreen() {
   const query = useLogsQuery();
   const [selectedLevels, setSelectedLevels] = useState<Set<string> | null>(null);
   const [followTail, setFollowTail] = useState(true);
-  const flatListRef = useRef<FlatList<LogLine>>(null);
+  const flatListRef = useRef<FlatList<SequencedLogLine>>(null);
+  // Tracks the previous onScroll's contentOffset.y so handleScroll can tell a genuine user
+  // scroll-up from a programmatic scrollToEnd: a scrollToEnd only ever increases contentOffset.y
+  // (or leaves it unchanged once at the bottom), while a user dragging the list up decreases it.
+  // Direction, not elapsed time — see the two superseded timing-based attempts described below.
+  const lastOffsetYRef = useRef(0);
+  // Tracks the `lines` reference the auto-scroll effect last saw, so it can tell "new data
+  // arrived" apart from "the filter changed, same data" (see the effect below).
+  const prevLinesRef = useRef(query.data);
+  // Armed only around a filter- or toggle-driven re-scroll (a discrete, user-triggered event,
+  // never a 150ms-cadence one), cleared once a scroll event shows the list has genuinely settled
+  // back near the bottom. A level-filter toggle swaps FlatList's `data` array wholesale, which can
+  // make RN Web's scroll container transiently report an offset near the top before settling —
+  // read as `movedUp` and spuriously disengaging follow-tail without this guard. Scoping it to
+  // filter/toggle changes only (never a plain stream append) keeps it from reopening the
+  // "permanently on during flood" failure the direction-based rewrite above exists to close.
+  const suppressScrollCheckRef = useRef(false);
 
   const lines = query.data;
   const filteredLines = useMemo(() => {
     if (!lines) return undefined;
     if (selectedLevels === null) return lines;
-    return lines.filter((line) => selectedLevels.has(line.level));
+    // `level` is a bare string, not an enum — an unrecognized level must always display, since
+    // there's no chip an operator could use to bring it back.
+    return lines.filter((line) => !KNOWN_LEVELS.has(line.level) || selectedLevels.has(line.level));
   }, [lines, selectedLevels]);
 
+  function scrollToEndAuto() {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }
+
   useEffect(() => {
+    const linesChanged = prevLinesRef.current !== lines;
+    prevLinesRef.current = lines;
     if (followTail && lines && lines.length > 0) {
-      flatListRef.current?.scrollToEnd({ animated: true });
+      if (!linesChanged) {
+        suppressScrollCheckRef.current = true;
+      }
+      scrollToEndAuto();
     }
-  }, [lines, followTail]);
+    // filteredLines is included (not just lines): toggling a level filter while followTail is
+    // true must re-snap to the new bottom immediately, not wait for the next stream flush.
+  }, [lines, filteredLines, followTail]);
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom =
-      contentSize.height - layoutMeasurement.height - contentOffset.y;
-    if (distanceFromBottom > SCROLL_BOTTOM_THRESHOLD_PX && followTail) {
+    const movedUp = contentOffset.y < lastOffsetYRef.current - 1;
+    lastOffsetYRef.current = contentOffset.y;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    if (suppressScrollCheckRef.current) {
+      if (distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD_PX) {
+        suppressScrollCheckRef.current = false;
+      }
+      return;
+    }
+    if (movedUp && distanceFromBottom > SCROLL_BOTTOM_THRESHOLD_PX && followTail) {
       setFollowTail(false);
     }
   }
 
   function toggleFollowTail() {
-    setFollowTail((prev) => {
-      const next = !prev;
-      if (next) {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }
-      return next;
-    });
+    setFollowTail((prev) => !prev);
   }
 
   if (query.data === undefined) {
@@ -480,7 +586,7 @@ export function LogsScreen() {
       <FlatList
         ref={flatListRef}
         data={filteredLines}
-        keyExtractor={(line, index) => `${line.ts}-${index}`}
+        keyExtractor={(line) => String(line._seq)}
         renderItem={({ item }) => <LogRow line={item} />}
         onScroll={handleScroll}
         scrollEventThrottle={100}
@@ -502,6 +608,24 @@ export function LogsScreen() {
   );
 }
 ```
+
+**The critical fix, and why it took three attempts (final whole-branch review, 2026-08-13):** this
+step originally shipped a plain `scrollToEnd`/`handleScroll` with no guard at all, which raced with
+its own disengage check (every intermediate `onScroll` event during the ~300-400ms scroll-to-bottom
+animation reported `distanceFromBottom` past the threshold, disengaging follow-tail within about a
+second of every programmatic scroll). Attempt 1 (same task) added a boolean `isAutoScrollingRef`
+cleared by an independent 400ms `setTimeout` per call — broke under sustained flood, since
+overlapping un-cleared timers could flip the ref back to `false` mid-flood. Attempt 2 (a same-day fix
+round) replaced it with a timestamp watermark (`Date.now() - lastAutoScrollAtRef.current < 400`) —
+closed attempt 1's race, but the 150ms flush interval is faster than the 400ms settle window, so the
+watermark never went stale under sustained flood: the guard was permanently "on," and a real user
+scrolling up during a flood could not disengage follow-tail *at all* — only caught because this pass's
+live re-verification specifically scrolled *during* an active flood, the one interaction the prior
+pass's "~40 seconds, zero user interaction" test had never covered. Attempt 3 (ships, above) compares
+scroll direction instead — no timer, no elapsed-time assumption, so no equivalent failure mode. A
+fourth, related bug — a level-filter toggle's `data`-array swap spuriously disengaging follow-tail via
+a transient RN Web scroll artifact — was caught only by combining the `filteredLines` dependency with
+this rewrite and then actually toggling a filter mid-flood; fixed via `suppressScrollCheckRef` above.
 
 Note `filteredLines` (not `lines`) is what's passed to `FlatList` and what the empty-check compares
 against for `ListEmptyComponent` — a filter that hides everything is a legitimate empty state

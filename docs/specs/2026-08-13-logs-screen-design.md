@@ -49,19 +49,32 @@ composes patterns OC-18–19 already established.
 
 ## `src/features/logs/useLogsQuery.ts`
 
+> **Post-launch note (final whole-branch review fix wave, 2026-08-13):** this section originally
+> showed a simpler version — no `_seq` stamping, no cap enforcement on the bootstrap path, no
+> refetch suppression, no reconnect recovery. That version shipped, then a whole-branch review
+> found four real gaps in it (detailed inline below) before merge. What's shown now is the code
+> that actually ships. See `docs/backlog.md`'s OC-20 row for the full fix-wave narrative.
+
 ```ts
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 
-import type { LogLine } from '@/api/schemas';
 import { useApi } from '@/api/ApiContext';
+import type { LogLine } from '@/api/schemas';
 import { queryKeys } from '@/api/queryClient';
 import { useAuthErrorRouting } from '@/auth/useAuthErrorRouting';
-import { useStreamEvent } from '@/stream/StreamContext';
+import { useStreamEvent, useStreamStatus } from '@/stream/StreamContext';
 
 const BOOTSTRAP_LIMIT = 200;
 const MAX_BUFFERED_LOGS = 500;
 const FLUSH_INTERVAL_MS = 150;
+
+// `FlatList`'s `keyExtractor` needs a per-line id that never changes once assigned — an
+// index-based key shifts for every surviving line the moment `.slice(-MAX_BUFFERED_LOGS)` starts
+// dropping the oldest entries, remounting every row on every flush and defeating `LogRow`'s
+// memoization. `_seq` is a monotonic client-side sequence number stamped once per line, at the two
+// points a line ever enters the buffer (bootstrap fetch, stream push) — never reassigned after.
+export type SequencedLogLine = LogLine & { _seq: number };
 
 export function useLogsQuery() {
   const api = useApi();
@@ -73,9 +86,37 @@ export function useLogsQuery() {
   // for. Found and fixed during Task 1's own review, not part of the original design pass.
   const queryKey = useMemo(() => queryKeys.logs(BOOTSTRAP_LIMIT), []);
 
+  // Single shared counter for both writers (bootstrap + stream), so `_seq` values are unique
+  // across the whole buffer and bootstrap rows always sort before stream-pushed ones.
+  const seqRef = useRef(0);
+
   const query = useQuery({
     queryKey,
-    queryFn: () => api.read.getLogs(BOOTSTRAP_LIMIT),
+    // Stamped here — once per actual fetch, since queryFn only runs on mount/invalidate, never on
+    // a flush or a re-render — rather than in `select`: `select` re-runs on every raw-data change,
+    // including every 150ms flush, so a counter read inside `select` would hand a *new* `_seq` to
+    // the same bootstrap row on every flush, silently reintroducing the unstable-key bug `_seq`
+    // exists to fix.
+    queryFn: async () => {
+      const rows = await api.read.getLogs(BOOTSTRAP_LIMIT);
+      return rows.map((row): SequencedLogLine => ({ ...row, _seq: seqRef.current++ }));
+    },
+    // Cap enforcement lives here so both writers (this bootstrap fetch and the flush effect's
+    // setQueryData below) share one chokepoint. Originally only the flush path capped at
+    // MAX_BUFFERED_LOGS — latent while BOOTSTRAP_LIMIT stayed under the cap, but an invariant
+    // enforced on only one of two writers is exactly the kind of thing that breaks later. The
+    // flush path keeps its own slice too, so the raw cache itself stays bounded during a long
+    // flood, not just this derived view.
+    select: (rows) => rows.slice(-MAX_BUFFERED_LOGS),
+    // This cache entry is stream-owned after its initial fetch: the REST call is a one-time
+    // bootstrap, not a data source worth re-consulting. Without this, an incidental window-focus
+    // or remount refetch would silently replace up to 500 accumulated stream-appended lines with
+    // just the 200-line REST snapshot — a visible, silent truncation of log history. Scoped to
+    // this query only, not the global QueryClient defaults. (Contrast the *other* refetch trigger
+    // below — a stream reconnect — which fires `invalidateQueries` on purpose: that one is a rare,
+    // deliberate gap-recovery event, the right time to replace the buffer wholesale.)
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   useAuthErrorRouting(query.error);
@@ -85,10 +126,10 @@ export function useLogsQuery() {
   // replacements/sec — exactly the "not smooth under a flood" failure this screen's own backlog
   // line calls out. Collect incoming lines in a ref (mutating a ref triggers no re-render) and
   // flush them into the cache on a fixed interval instead.
-  const pendingLines = useRef<LogLine[]>([]);
+  const pendingLines = useRef<SequencedLogLine[]>([]);
 
   useStreamEvent('log', (line) => {
-    pendingLines.current.push(line);
+    pendingLines.current.push({ ...line, _seq: seqRef.current++ });
   });
 
   useEffect(() => {
@@ -96,13 +137,34 @@ export function useLogsQuery() {
       if (pendingLines.current.length === 0) return;
       const toAppend = pendingLines.current;
       pendingLines.current = [];
-      queryClient.setQueryData(queryKey, (old: LogLine[] | undefined) =>
+      queryClient.setQueryData(queryKey, (old: SequencedLogLine[] | undefined) =>
         [...(old ?? []), ...toAppend].slice(-MAX_BUFFERED_LOGS),
       );
     };
     const interval = setInterval(flush, FLUSH_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Flush once more on unmount so the last (up to) 150ms of buffered lines aren't silently
+      // dropped when the screen goes away.
+      flush();
+    };
   }, [queryClient, queryKey]);
+
+  // Reconnect gap recovery: if the SSE stream drops and later reconnects, lines emitted during
+  // the outage are otherwise permanently missing, with no gap marker and no backfill. On the
+  // specific `!== 'open' -> 'open'` transition (not merely "status is open," which would fire on
+  // every render), invalidate the query to trigger a fresh bootstrap fetch that backfills recent
+  // history.
+  const streamStatus = useStreamStatus();
+  const prevStreamStatusRef = useRef(streamStatus);
+
+  useEffect(() => {
+    const prevStatus = prevStreamStatusRef.current;
+    prevStreamStatusRef.current = streamStatus;
+    if (prevStatus !== 'open' && streamStatus === 'open') {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  }, [streamStatus, queryClient, queryKey]);
 
   return query;
 }
@@ -119,6 +181,16 @@ doesn't grow unbounded while invisible — `requestAnimationFrame` pauses in bot
 `setInterval` doesn't (React Native's timers keep running unless the JS engine itself is suspended,
 which is the same condition under which the SSE connection itself would already be dead — see
 `StreamContext`'s foreground-resume handling, OC-17).
+
+**Four gaps found by the final whole-branch review, all fixed above:** (1) `keyExtractor` originally
+keyed on `` `${ts}-${index}` `` (index from `FlatList`'s own callback) — unstable the moment the
+500-entry cap started dropping old lines, since every surviving line's index shifts on every flush,
+defeating `LogRow`'s `memo`. Fixed via the `_seq` stamping above. (2) the 500-entry cap was only ever
+enforced in the flush path, never on the bootstrap fetch — fixed via the `select`-based chokepoint
+above. (3) the query had no refetch suppression, so an incidental window-focus/remount refetch could
+silently truncate the accumulated buffer back to 200 lines — fixed via the per-query
+`refetchOnWindowFocus`/`refetchOnMount: false` above. (4) no recovery from a stream-outage gap in log
+history — fixed via the reconnect-triggered `invalidateQueries` above.
 
 ## The Logs screen
 
@@ -227,13 +299,25 @@ control. Filtering happens client-side over the already-fetched/buffered log lis
 param, so this is necessarily a client-side view over data already held in the cache, not a re-fetch
 per filter change.
 
+`LevelFilter.tsx` also exports `KNOWN_LEVELS` (`new Set(LEVELS)`), consumed by `LogsScreen.tsx`'s own
+filter logic — **found missing by the final whole-branch review**: the naive filter,
+`lines.filter((line) => selectedLevels.has(line.level))`, hid *any* level outside the four known ones
+the moment even one chip was deselected, contradicting `LogLineSchema`'s deliberate bare-string design
+(see `LogRow.tsx`'s own level-color fallback, above — the same principle, previously only honored for
+color, not for filtering). Fixed to
+`lines.filter((line) => !KNOWN_LEVELS.has(line.level) || selectedLevels.has(line.level))` — an
+unrecognized level is always shown, since there's no chip an operator could use to bring it back.
+
 ### Follow-tail
 
 `src/features/logs/LogsScreen.tsx` owns a `followTail` boolean (`useState`, default `true`) and a
 `FlatList` ref. Two ways it changes:
 
 - **A toggle button** (top-right, alongside the count/header) — explicit operator control, matching
-  the backlog line's literal "follow-tail **toggle**."
+  the backlog line's literal "follow-tail **toggle**." Sets state only; the auto-scroll effect below
+  (not the toggle handler itself) is what actually re-scrolls once `followTail` flips back to `true` —
+  an earlier version had the toggle handler *also* call `scrollToEnd` directly, issuing two
+  overlapping scrolls per re-engage tap, fixed during Task 3's own review.
 - **Auto-disabled on manual scroll away from the bottom** — `onScroll`'s `contentOffset`/
   `contentSize`/`layoutMeasurement` compared to detect "not at the bottom" (a small threshold, ~50px,
   to avoid false negatives from minor rubber-banding) flips `followTail` to `false`. This is the
@@ -241,9 +325,42 @@ per filter change.
   operator who scrolls up to read backlog during a flood must not be fought back to the bottom on the
   next line.
 
-When `followTail` is `true`, a new batch landing in the query cache (detected via a `useEffect` on
-`query.data`'s length) calls `flatListRef.current?.scrollToEnd({ animated: true })`. Turning the
-toggle back on immediately scrolls to the current bottom once, then resumes auto-follow.
+When `followTail` is `true`, a new batch landing in the query cache (or the level filter changing —
+see below) calls `flatListRef.current?.scrollToEnd({ animated: true })` via a `useEffect` on
+`[lines, filteredLines, followTail]`.
+
+**Distinguishing a programmatic `scrollToEnd` from a real user scroll-up — three attempts, only the
+third holds under a live flood (final whole-branch review, 2026-08-13):**
+
+1. **Boolean + `setTimeout` (shipped originally):** an `isAutoScrollingRef` set for 400ms around each
+   programmatic `scrollToEnd`, checked by `onScroll` before evaluating the disengage condition. Broke
+   under sustained flood: `scrollToEnd` fires roughly every 150ms while `followTail` is true, and each
+   call scheduled its own independent timer without clearing the previous one, so the ref could flip
+   back to `false` mid-flood and reopen the original race intermittently.
+2. **Timestamp watermark (first fix round):** `lastAutoScrollAtRef.current = Date.now()`, checked as
+   `Date.now() - lastAutoScrollAtRef.current < 400`. Closed attempt 1's race, but introduced a worse
+   one: the 150ms flush interval is *faster* than the 400ms settle window, so under any sustained
+   flood the watermark never went stale — the guard was permanently "on," and a real user scrolling up
+   during a flood could not disengage follow-tail *at all*. Only caught by a live pass that actually
+   scrolled *during* an active flood — the original live-verification pass had deliberately (if
+   unknowingly) avoided that exact interaction.
+3. **Direction, not timing (ships):** compare each `onScroll` event's `contentOffset.y` to the
+   previous one (a `useRef`); only disengage when the list moved *up* past the threshold. A
+   programmatic `scrollToEnd` only ever increases `contentOffset.y` (or holds steady once at the
+   bottom); a user dragging the list up decreases it. No timer, no elapsed-time assumption, so it has
+   no "settle window shorter than the event cadence" failure mode at all.
+
+**A fourth, related bug** surfaced only by combining the `filteredLines` dependency above with attempt
+3's direction check and then actually toggling a filter mid-flood in a browser: a level-filter toggle
+swaps `FlatList`'s `data` array wholesale (not a plain append), and RN Web's scroll container can
+transiently report an offset near the top before settling back down — read by the direction check as a
+user scroll-up, spuriously disengaging `followTail` even though the view is (and stays) pinned to the
+live bottom. Fixed with a second guard (`suppressScrollCheckRef`), armed only when the auto-scroll
+effect fires *without* `lines` itself changing (a filter or re-engage toggle — once per discrete user
+action, never the 150ms flush cadence) and cleared once a scroll event shows the list has genuinely
+settled back near the bottom. Scoping the guard to filter/toggle changes only, and never arming it on
+a plain stream-driven append, is what keeps it from reopening attempt 2's "permanently on during
+flood" failure.
 
 ### `FlatList` performance props
 
@@ -251,10 +368,12 @@ Beyond virtualization being FlatList's default behavior (unchanged from OC-19), 
 flood benefits from tuning: `maxToRenderPerBatch={20}` (matches the flood's own per-second event
 count — no reason to render faster than data can possibly arrive), `windowSize={10}`,
 `removeClippedSubviews` (native only — matches this repo's existing `Platform.OS` conditionals
-elsewhere, e.g. `QueryProvider.tsx`'s `focusManager` guard). `keyExtractor` needs something stable and
-unique per line; `LogLineSchema` has no id field, so `` `${ts}-${index}` `` (index from `FlatList`'s
-own `renderItem` callback) — timestamps alone aren't guaranteed unique at 20 events/sec if the mock's
-clock resolution or two lines share a millisecond.
+elsewhere, e.g. `QueryProvider.tsx`'s `focusManager` guard). `keyExtractor` keys on `line._seq`
+(`String(line._seq)`) — a monotonic client-side sequence number stamped once per line by
+`useLogsQuery` (see that section above). **Originally `` `${ts}-${index}` ``** (index from
+`FlatList`'s own `renderItem` callback): unstable the moment the 500-entry cap started dropping old
+lines, since every surviving line's index shifts on every flush, remounting every row instead of
+`LogRow`'s `memo` bailing out — found by the final whole-branch review, fixed via `_seq`.
 
 ## `app/(tabs)/logs.tsx`
 
