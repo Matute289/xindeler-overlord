@@ -10,7 +10,10 @@ export function useDestructiveAction<T>(call: (stepUpCode: string) => Promise<T>
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  async function run() {
+  // Returns whether the call actually succeeded — callers that need to react to success (e.g. a
+  // transient confirmation) can't reliably read the `error` state right after `await run()`
+  // resolves, since a closure captured before the call still sees the pre-call render's value.
+  async function run(): Promise<boolean> {
     setPending(true);
     setError(null);
     try {
@@ -25,12 +28,14 @@ export function useDestructiveAction<T>(call: (stepUpCode: string) => Promise<T>
           throw err;
         }
       }
+      return true;
     } catch (err) {
       if (err instanceof Error && !isStepUpCancelled(err)) {
         setError(err);
       }
       // A cancelled step-up prompt is a deliberate operator choice, not a failure — no error
       // state, the action button just goes back to idle.
+      return false;
     } finally {
       setPending(false);
     }
