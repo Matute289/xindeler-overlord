@@ -129,3 +129,4 @@ export const StageOracleEventResponseSchema = z.object({
   sanitized: DmEventSchema,
   diff: z.array(DmEventDiffEntrySchema),
 });
+export type StageOracleEventResponse = z.infer<typeof StageOracleEventResponseSchema>;

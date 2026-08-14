@@ -10,8 +10,9 @@ together. Confirmed with Matías before starting, given Phase 3's stated risk le
 
 ## The concrete `DmEvent` shape — the mock's, not the full engine schema
 
-The private NH-75 design doc describes the REAL engine's `DmEvent` as four nested structs
-(`dimension_config`, `atmosphere`, `spawning_rules`, `narrative`). **This app's mock gateway
+The private NH-75 design doc describes the REAL engine's `DmEvent` as several nested structs —
+`dimension_config` and `atmosphere` (both already public via the gateway API contract) plus
+additional nested structs this ticket does not scope in. **This app's mock gateway
 implements a much simpler, flat shape** (`tools/mock-gateway/src/fixtures.js`'s `oraclePresets`,
 `tools/mock-gateway/src/oracleSanitizer.js`):
 
@@ -40,10 +41,11 @@ atmosphere?: { weather_effect?: string };
 ```
 
 This is enough to honestly exercise the "stored, not applied" badge requirement without inventing a
-faithful reproduction of a Rust schema this repo has no way to validate against. `narrative`
-(`world_rumor`/`on_enter_message`) is NOT in scope for this ticket — OC-31's backlog text only calls
-out `atmosphere`/`dimension_config` specifically; narrative fields are a reasonable future addition,
-not an omission worth blocking on.
+faithful reproduction of a Rust schema this repo has no way to validate against. The real `DmEvent`'s
+other nested structs are NOT in scope for this ticket — OC-31's backlog text only calls out
+`atmosphere`/`dimension_config` specifically; the rest are a reasonable future addition, not an
+omission worth blocking on. (This repo is public and the NH-75 design doc is not: refer to it by
+path, don't restate its internal field names here.)
 
 ## Staging is not the dangerous action — it needs step-up, not confirm-by-typing
 
@@ -122,7 +124,8 @@ mock's pass-through spread works as expected — this is the concrete proof the 
 
 ## Out of scope
 
-- `narrative` fields (`world_rumor`/`on_enter_message`) — not named in OC-31's backlog text.
+- The real `DmEvent`'s other nested structs beyond `dimension_config`/`atmosphere` — not named in
+  OC-31's backlog text.
 - Un-staging / retiring (`DELETE /oracle/stage/{id}`) — not asked for by either backlog row; a
   reasonable future addition to OC-29's events browser once there's a concrete need.
 - Confirm-by-typing on staging — see "Staging is not the dangerous action" above; reserved for

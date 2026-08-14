@@ -21,7 +21,15 @@ router.post('/', (req, res) => {
   setTimeout(() => {
     const entry = state.oracleEvents.get(id);
     if (entry) entry.status = 'loaded';
-    recordAudit({ operator: req.operator, action: 'oracle.stage', payload: { id }, outcome: 'ok' });
+    // The sanitized `dm_event` goes into the row, not just the id: staging is what defines what
+    // will later spawn, so an audit reader has to be able to reconstruct it from the row alone
+    // (NH-75's "who, when, exact sanitized payload, resolved position, outcome").
+    recordAudit({
+      operator: req.operator,
+      action: 'oracle.stage',
+      payload: { id, dm_event: sanitized },
+      outcome: 'ok',
+    });
     res.json({ loaded: true, sanitized, diff });
   }, STAGE_DELAY_MS);
 });

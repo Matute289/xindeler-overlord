@@ -13,10 +13,13 @@ export function useDestructiveAction<T>(
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // Returns whether the call actually succeeded — callers that need to react to success (e.g. a
-  // transient confirmation) can't reliably read the `error` state right after `await run()`
-  // resolves, since a closure captured before the call still sees the pre-call render's value.
-  async function run(): Promise<boolean> {
+  // Returns the call's resolved value on success, `null` on failure or a cancelled step-up —
+  // callers that need to react to success (e.g. a transient confirmation) can't reliably read the
+  // `error` state right after `await run()` resolves, since a closure captured before the call
+  // still sees the pre-call render's value. Returning `T` rather than a bare `true` also keeps the
+  // response body reachable: ORACLE staging's `{ loaded, sanitized, diff }` is the operator's only
+  // signal that a staged event failed to parse server-side, or that the gateway clamped a value.
+  async function run(): Promise<T | null> {
     setPending(true);
     setError(null);
     // One idempotency key per logical operator intent, generated once here and reused across
@@ -29,24 +32,25 @@ export function useDestructiveAction<T>(
     const idempotencyKey = Crypto.randomUUID();
     try {
       const code = await requestStepUp();
+      let result: T;
       try {
-        await call(code, idempotencyKey);
+        result = await call(code, idempotencyKey);
       } catch (err) {
         if (isApiError(err) && STEP_UP_ERROR_CODES.has(err.code)) {
           const freshCode = await requestStepUp({ forceFresh: true });
-          await call(freshCode, idempotencyKey);
+          result = await call(freshCode, idempotencyKey);
         } else {
           throw err;
         }
       }
-      return true;
+      return result;
     } catch (err) {
       if (err instanceof Error && !isStepUpCancelled(err)) {
         setError(err);
       }
       // A cancelled step-up prompt is a deliberate operator choice, not a failure — no error
       // state, the action button just goes back to idle.
-      return false;
+      return null;
     } finally {
       setPending(false);
     }
