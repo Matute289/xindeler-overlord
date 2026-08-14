@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 
+import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
@@ -26,7 +27,7 @@ export default function LoginScreen() {
       const { challengeId } = await login(username, password);
       router.push({ pathname: '/totp', params: { challengeId } });
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('No se pudo conectar con el gateway'));
+      setError(isApiError(err) ? err : new Error('No se pudo conectar con el gateway'));
     } finally {
       setLoading(false);
     }
