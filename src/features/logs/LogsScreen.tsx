@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { FlatList, Platform, Pressable, Text, View } from 'react-native';
+import { FlatList, Platform, Text, View } from 'react-native';
 
 import { Empty } from '@/ui/Empty';
+import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { fonts } from '@/ui/theme';
 
 import { KNOWN_LEVELS, LevelFilter } from './LevelFilter';
@@ -130,27 +131,7 @@ export function LogsScreen() {
         >
           Logs
         </Text>
-        <Pressable
-          onPress={toggleFollowTail}
-          accessibilityRole="button"
-          accessibilityState={{ selected: followTail }}
-          className={`rounded-full border px-3 py-1 ${
-            followTail
-              ? 'border-accent-cyan dark:border-night-accent-cyan'
-              : 'border-steel-dark dark:border-night-steel-dark'
-          }`}
-        >
-          <Text
-            className={
-              followTail
-                ? 'text-accent-cyan dark:text-night-accent-cyan'
-                : 'text-steel-muted dark:text-night-steel-muted'
-            }
-            style={{ fontFamily: fonts.regular }}
-          >
-            {followTail ? 'Siguiendo' : 'Seguir'}
-          </Text>
-        </Pressable>
+        <FollowTailToggle followTail={followTail} onToggle={toggleFollowTail} />
       </View>
       <LevelFilter selected={selectedLevels} onChange={setSelectedLevels} />
       <FlatList
