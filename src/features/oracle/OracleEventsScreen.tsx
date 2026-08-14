@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
@@ -13,10 +13,12 @@ function Section({
   title,
   items,
   emptyText,
+  onItemPress,
 }: {
   title: string;
   items: string[];
   emptyText: string;
+  onItemPress?: (item: string) => void;
 }) {
   return (
     <View className="mt-6 px-6">
@@ -34,15 +36,37 @@ function Section({
           {emptyText}
         </Text>
       ) : (
-        items.map((item) => (
-          <Text
-            key={item}
-            className="mt-2 text-steel-light dark:text-night-steel-light"
-            style={{ fontFamily: fonts.regular }}
-          >
-            {item}
-          </Text>
-        ))
+        items.map((item) =>
+          onItemPress ? (
+            <Pressable
+              key={item}
+              onPress={() => onItemPress(item)}
+              accessibilityRole="button"
+              className="mt-2 flex-row items-center justify-between"
+            >
+              <Text
+                className="text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.regular }}
+              >
+                {item}
+              </Text>
+              <Text
+                className="text-accent-cyan dark:text-night-accent-cyan"
+                style={{ fontFamily: fonts.semibold }}
+              >
+                Probar disparo
+              </Text>
+            </Pressable>
+          ) : (
+            <Text
+              key={item}
+              className="mt-2 text-steel-light dark:text-night-steel-light"
+              style={{ fontFamily: fonts.regular }}
+            >
+              {item}
+            </Text>
+          ),
+        )
       )}
     </View>
   );
@@ -104,7 +128,12 @@ export function OracleEventsScreen() {
           <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
         </Pressable>
       </Link>
-      <Section title="Cargados" items={loaded} emptyText="Sin eventos cargados." />
+      <Section
+        title="Cargados"
+        items={loaded}
+        emptyText="Sin eventos cargados."
+        onItemPress={(id) => router.push({ pathname: '/oracle-trigger', params: { id } })}
+      />
       <Section title="En etapa" items={staged} emptyText="Nada en etapa." />
       {staged.length > 0 && (
         <View className="mt-2 px-6">

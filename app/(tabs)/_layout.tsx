@@ -62,12 +62,14 @@ export default function TabsLayout() {
               {/* `<Tabs>` sources its screens from the filesystem, not only from the declared
                   `<Tabs.Screen>` children above — every file under `app/(tabs)/` gets a tab-bar
                   item unless it opts out. `href: null` suppresses the item while leaving the
-                  route mounted and reachable, which is what these two need: `audit` is reached
-                  from `more.tsx`'s "Auditoría" row and `oracle-composer` from
-                  `OracleEventsScreen.tsx`'s "Componer evento" row, never from the tab bar.
+                  route mounted and reachable, which is what these three need: `audit` is reached
+                  from `more.tsx`'s "Auditoría" row, `oracle-composer` from
+                  `OracleEventsScreen.tsx`'s "Componer evento" row, and `oracle-trigger` from that
+                  same screen's per-row "Probar disparo" action — none of them from the tab bar.
                   Without this they render as unlabeled icon tabs at phone width. */}
               <Tabs.Screen name="audit" options={{ href: null }} />
               <Tabs.Screen name="oracle-composer" options={{ href: null }} />
+              <Tabs.Screen name="oracle-trigger" options={{ href: null }} />
             </Tabs>
           )}
         </View>
