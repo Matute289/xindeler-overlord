@@ -90,6 +90,7 @@ export const OracleEventsResponseSchema = z.object({
   staged: z.array(z.string()),
   loaded: z.array(z.string()),
   entity_templates: z.array(EntityTemplateSchema),
+  oracle_enabled: z.boolean(),
 });
 export type OracleEventsResponse = z.infer<typeof OracleEventsResponseSchema>;
 
@@ -132,6 +133,9 @@ export const OracleTriggerResponseSchema = z.object({
   nearest_player_dist: z.number(),
 });
 export type OracleTriggerResponse = z.infer<typeof OracleTriggerResponseSchema>;
+
+export const OracleEnabledResponseSchema = z.object({ enabled: z.boolean() });
+export type OracleEnabledResponse = z.infer<typeof OracleEnabledResponseSchema>;
 
 export const DmEventDiffEntrySchema = z.object({
   field: z.string(),

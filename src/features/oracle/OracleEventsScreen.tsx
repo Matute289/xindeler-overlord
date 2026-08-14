@@ -3,7 +3,12 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
+import { useApi } from '@/api/ApiContext';
+import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { useDestructiveAction } from '@/features/status/useDestructiveAction';
+import { Button } from '@/ui/Button';
+import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
 import { fonts, useTheme } from '@/ui/theme';
 
@@ -76,6 +81,38 @@ export function OracleEventsScreen() {
   const query = useOracleEventsQuery();
   const { colors } = useTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const api = useApi();
+  const [confirmEnable, setConfirmEnable] = useState(false);
+
+  const disableAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.setOracleEnabled(false, code, idempotencyKey),
+  );
+  const enableAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.setOracleEnabled(true, code, idempotencyKey),
+  );
+
+  // The two actions render their errors side by side, above the same status label, and each one's
+  // success flips the state the OTHER one's error was complaining about — so a successful enable
+  // leaves a stale "no se pudo desactivar" sitting under an "ORACLE: Activo" box that is now
+  // exactly what the operator asked for, and vice versa. `useDestructiveAction`'s `error` only
+  // clears at the start of its own next `run()`, so the sibling action has to clear it explicitly
+  // (final-review finding 4 — this was deferred once, before `reset()` existed).
+  async function handleConfirmEnable() {
+    setConfirmEnable(false);
+    const response = await enableAction.run();
+    if (response) {
+      disableAction.reset();
+      query.refetch();
+    }
+  }
+
+  async function handleDisable() {
+    const response = await disableAction.run();
+    if (response) {
+      enableAction.reset();
+      query.refetch();
+    }
+  }
 
   async function handleRefresh() {
     setIsRefreshing(true);
@@ -93,7 +130,12 @@ export function OracleEventsScreen() {
     return <Empty title="ORACLE" message="Cargando…" />;
   }
 
-  const { staged, loaded, entity_templates: entityTemplates } = query.data;
+  const {
+    staged,
+    loaded,
+    entity_templates: entityTemplates,
+    oracle_enabled: oracleEnabled,
+  } = query.data;
 
   return (
     <ScrollView
@@ -113,6 +155,29 @@ export function OracleEventsScreen() {
         >
           ORACLE
         </Text>
+      </View>
+      <View className="mx-6 mt-4 rounded-lg border border-steel-dark p-4 dark:border-night-steel-dark">
+        <Text
+          className="text-steel-light dark:text-night-steel-light"
+          style={{ fontFamily: fonts.semibold }}
+        >
+          {oracleEnabled ? 'ORACLE: Activo' : 'ORACLE: Desactivado'}
+        </Text>
+        <View className="mt-2">
+          <Button
+            label={oracleEnabled ? 'Desactivar' : 'Activar'}
+            onPress={oracleEnabled ? handleDisable : () => setConfirmEnable(true)}
+            loading={disableAction.pending || enableAction.pending}
+            disabled={disableAction.pending || enableAction.pending}
+          />
+        </View>
+        {!oracleEnabled && (
+          <Text className="mt-2 text-xs text-danger dark:text-night-danger">
+            ORACLE está deshabilitado — el staging y el disparo van a fallar hasta reactivarlo.
+          </Text>
+        )}
+        {disableAction.error && <ActionError error={disableAction.error} />}
+        {enableAction.error && <ActionError error={enableAction.error} />}
       </View>
       <Link href="/oracle-composer" asChild>
         <Pressable
@@ -152,6 +217,13 @@ export function OracleEventsScreen() {
         emptyText="Sin templates."
       />
       <View className="h-8" />
+      <ConfirmByTypingSheet
+        visible={confirmEnable}
+        word="ENABLE"
+        description="Esto va a reactivar ORACLE — staging y disparo van a volver a funcionar."
+        onConfirm={handleConfirmEnable}
+        onCancel={() => setConfirmEnable(false)}
+      />
     </ScrollView>
   );
 }
