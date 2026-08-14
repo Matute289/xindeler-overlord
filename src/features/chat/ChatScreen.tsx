@@ -10,6 +10,7 @@ import { Empty } from '@/ui/Empty';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { fonts } from '@/ui/theme';
 
+import { BroadcastComposer } from './BroadcastComposer';
 import { ChatMessageRow } from './ChatMessageRow';
 import { useChatQuery } from './useChatQuery';
 
@@ -100,6 +101,7 @@ export function ChatScreen() {
           </View>
         }
       />
+      <BroadcastComposer />
     </View>
   );
 }

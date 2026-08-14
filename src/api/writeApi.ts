@@ -63,5 +63,13 @@ export function createWriteApi(http: HttpClient) {
         OkResponseSchema,
       );
     },
+
+    broadcastMessage(message: string) {
+      return http.request(
+        '/api/v1/broadcast',
+        { method: 'POST', body: { message } },
+        OkResponseSchema,
+      );
+    },
   };
 }
