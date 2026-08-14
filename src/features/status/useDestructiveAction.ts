@@ -8,10 +8,19 @@ const STEP_UP_ERROR_CODES = new Set(['invalid_totp', 'step_up_required']);
 
 export function useDestructiveAction<T>(
   call: (stepUpCode: string, idempotencyKey: string) => Promise<T>,
+  // Additive, opt-in — every existing call site omits this and keeps behaving exactly as before
+  // (cached step-up code reused when still fresh). `forceFreshStepUp` exists for actions
+  // consequential enough that they must never silently ride a step-up obtained for a DIFFERENT,
+  // earlier action — OC-34's Fire is the first such action: it's typically invoked seconds after
+  // a dry-run that just populated the step-up cache, and without this option Fire would almost
+  // always skip a fresh TOTP prompt, collapsing its intended "step-up AND typing FIRE" double
+  // gate down to just the typing.
+  options?: { forceFreshStepUp?: boolean },
 ) {
   const { requestStepUp } = useStepUpAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const forceFreshStepUp = options?.forceFreshStepUp ?? false;
 
   // Returns the call's resolved value on success, `null` on failure or a cancelled step-up —
   // callers that need to react to success (e.g. a transient confirmation) can't reliably read the
@@ -31,7 +40,7 @@ export function useDestructiveAction<T>(
     // `start` sent while the gateway is mid-orchestration from the first attempt is a real risk.
     const idempotencyKey = Crypto.randomUUID();
     try {
-      const code = await requestStepUp();
+      const code = await requestStepUp(forceFreshStepUp ? { forceFresh: true } : undefined);
       let result: T;
       try {
         result = await call(code, idempotencyKey);
@@ -56,5 +65,15 @@ export function useDestructiveAction<T>(
     }
   }
 
-  return { run, pending, error };
+  // Additive, opt-in — existing callers never call this and are unaffected. Exists for consumers
+  // whose success/failure state can outlive the action itself in a way the operator can act on
+  // independently of `run()`: OC-34's Fire error otherwise survives a `clearResult()` and renders
+  // underneath a brand-new, unrelated dry-run card, asserting something untrue about the current
+  // preview (the exact class of bug OC-32/33's final review fixed once already for the dry-run's
+  // own `triggerAction`).
+  function reset() {
+    setError(null);
+  }
+
+  return { run, pending, error, reset };
 }

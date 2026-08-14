@@ -69,9 +69,15 @@ export function OracleDryRunScreen() {
   // is no longer set to, so every one of those paths clears it. `OracleComposerScreen` sets the
   // same precedent with `setStageResult(null)`. This matters most for OC-34: the moment a Fire
   // button hangs off this card, "card says target X, form says target Y" is a firing hazard, not
-  // just a confusing read.
+  // just a confusing read. `fireAction.reset()` clears any stale fire-failure error alongside the
+  // result itself — `useDestructiveAction`'s own `error` state otherwise only resets at the start
+  // of its next `run()`, so without this, a failed fire against the OLD target (e.g. an offline
+  // refusal) would keep rendering underneath a brand-new, unrelated dry-run card after the
+  // operator picks a different target and previews again — final-review finding, see also
+  // OC-32/33's identical fix for `triggerAction`'s own error/result staleness.
   function clearResult() {
     setResult(null);
+    fireAction.reset();
   }
 
   function buildTarget(onlinePlayers: Player[]): OracleTarget | null {
@@ -123,18 +129,39 @@ export function OracleDryRunScreen() {
   // Fires exactly what the operator previewed: `result.target` (frozen at the moment the dry-run
   // succeeded), never a fresh `buildTarget()` read — Fire must never silently target something
   // other than what the card currently shows. The one thing that CAN drift invisibly between the
-  // dry-run and this confirmation is the target player's online status, so the exact same
-  // `playersRef`-based re-check the dry-run path uses runs again here, immediately before sending
-  // — the more consequential the action, the more this must actually hold, not just usually hold.
-  const fireAction = useDestructiveAction((code, idempotencyKey) => {
-    if (!result) {
-      throw new Error('No hay una vista previa vigente.');
-    }
-    if (result.target.type === 'player' && !isOnline(playersRef.current, result.target.alias)) {
-      throw new Error('Este jugador ya no está conectado.');
-    }
-    return api.write.fireOracleEvent(eventId, result.target, code, idempotencyKey);
-  });
+  // dry-run and this confirmation is the target player's online status, so a re-check runs again
+  // here, immediately before sending. This re-check now `await`s `playersQuery.refetch()` and
+  // reads ITS resolved `data` directly, rather than trusting `playersRef.current` to already be
+  // fresh: on a screen the operator is actively looking at (no backgrounding, no
+  // window-blur/refocus cycle), `usePlayersQuery` may never refetch between the dry-run and this
+  // tap, so the ref alone could be checking a roster that's stale by however long the screen has
+  // been open. Using `refetch()`'s own return value also sidesteps a timing race — `playersRef`
+  // only updates via the `useEffect` below, which reacts to a SUBSequent render committing, and
+  // this callback has no guarantee that render has landed by the time it resumes. `??
+  // playersRef.current` is a defensive fallback for the (untested, refetch-failure) case where
+  // `refetch()` resolves without `data`, not the primary source of truth. This makes the "should
+  // hold in fact, not just usually" claim actually true — the server's Task 1
+  // `target_player_offline` check remains the authoritative backstop regardless.
+  const fireAction = useDestructiveAction(
+    async (code, idempotencyKey) => {
+      if (!result) {
+        throw new Error('No hay una vista previa vigente.');
+      }
+      if (result.target.type === 'player') {
+        const freshPlayers = (await playersQuery.refetch()).data ?? playersRef.current;
+        if (!isOnline(freshPlayers, result.target.alias)) {
+          throw new Error('Este jugador ya no está conectado.');
+        }
+      }
+      return api.write.fireOracleEvent(eventId, result.target, code, idempotencyKey);
+    },
+    // Fire must never silently ride a step-up obtained for a different, earlier action — a
+    // dry-run immediately precedes almost every fire in the intended flow, and that dry-run just
+    // populated the 90s step-up cache, so without this Fire would almost always skip a fresh TOTP
+    // prompt entirely, collapsing the ticket's intended "step-up AND typing FIRE" double gate on
+    // the app's single most consequential action down to just the typing.
+    { forceFreshStepUp: true },
+  );
 
   async function handleFire() {
     const response = await fireAction.run();
