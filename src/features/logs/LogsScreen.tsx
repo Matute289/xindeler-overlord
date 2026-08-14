@@ -17,6 +17,14 @@ const SCROLL_BOTTOM_THRESHOLD_PX = 50;
 // followTail is still true at that point — so without this guard, handleScroll disengages
 // follow-tail almost immediately after every programmatic scroll-to-end, including the one
 // that just re-enabled it. 400ms comfortably outlasts the animation.
+//
+// This is timestamp-based (not a boolean flag cleared by a single setTimeout) because
+// scrollToEndAuto() can be called repeatedly in quick succession (e.g. every ~150ms under a
+// sustained log flood while followTail is true) — a boolean cleared by an independent timer
+// per call would flip back to "not scrolling" between calls even while auto-scrolls are still
+// arriving back-to-back, reopening the disengage race intermittently under sustained activity.
+// Recording only the last auto-scroll's timestamp means the guard stays open as long as calls
+// keep arriving faster than the settle window, and only closes once scrolling genuinely stops.
 const AUTO_SCROLL_SETTLE_MS = 400;
 
 export function LogsScreen() {
@@ -24,7 +32,7 @@ export function LogsScreen() {
   const [selectedLevels, setSelectedLevels] = useState<Set<string> | null>(null);
   const [followTail, setFollowTail] = useState(true);
   const flatListRef = useRef<FlatList<LogLine>>(null);
-  const isAutoScrollingRef = useRef(false);
+  const lastAutoScrollAtRef = useRef(0);
 
   const lines = query.data;
   const filteredLines = useMemo(() => {
@@ -34,11 +42,8 @@ export function LogsScreen() {
   }, [lines, selectedLevels]);
 
   function scrollToEndAuto() {
-    isAutoScrollingRef.current = true;
+    lastAutoScrollAtRef.current = Date.now();
     flatListRef.current?.scrollToEnd({ animated: true });
-    setTimeout(() => {
-      isAutoScrollingRef.current = false;
-    }, AUTO_SCROLL_SETTLE_MS);
   }
 
   useEffect(() => {
@@ -48,7 +53,9 @@ export function LogsScreen() {
   }, [lines, followTail]);
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (isAutoScrollingRef.current) return;
+    const withinAutoScrollSettleWindow =
+      Date.now() - lastAutoScrollAtRef.current < AUTO_SCROLL_SETTLE_MS;
+    if (withinAutoScrollSettleWindow) return;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
     if (distanceFromBottom > SCROLL_BOTTOM_THRESHOLD_PX && followTail) {
@@ -57,13 +64,7 @@ export function LogsScreen() {
   }
 
   function toggleFollowTail() {
-    setFollowTail((prev) => {
-      const next = !prev;
-      if (next) {
-        scrollToEndAuto();
-      }
-      return next;
-    });
+    setFollowTail((prev) => !prev);
   }
 
   if (query.data === undefined) {
