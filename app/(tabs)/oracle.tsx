@@ -1,10 +1,10 @@
-import { Empty } from '@/ui/Empty';
+import { OracleEventsScreen } from '@/features/oracle/OracleEventsScreen';
 import { Screen } from '@/ui/Screen';
 
-export default function OracleScreen() {
+export default function OracleRoute() {
   return (
     <Screen>
-      <Empty title="ORACLE" message="El control manual de ORACLE llega en la Fase 3." />
+      <OracleEventsScreen />
     </Screen>
   );
 }

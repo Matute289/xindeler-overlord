@@ -4,6 +4,7 @@ import {
   ChatResponseSchema,
   ChronicleResponseSchema,
   LogsResponseSchema,
+  OracleEventsResponseSchema,
   PlayersResponseSchema,
   StatusSchema,
 } from './schemas';
@@ -42,6 +43,14 @@ export function createReadApi(http: HttpClient) {
     getAudit(limit?: number) {
       const query = limit !== undefined ? `?limit=${limit}` : '';
       return http.requestWithRetry(`/api/v1/audit${query}`, { method: 'GET' }, AuditResponseSchema);
+    },
+
+    getOracleEvents() {
+      return http.requestWithRetry(
+        '/api/v1/oracle/events',
+        { method: 'GET' },
+        OracleEventsResponseSchema,
+      );
     },
   };
 }
