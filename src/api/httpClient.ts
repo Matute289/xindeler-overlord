@@ -16,6 +16,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   timeoutMs?: number;
+  stepUpCode?: string;
 };
 
 export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
@@ -34,6 +35,7 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(authHeader ?? {}),
         ...(method !== 'GET' ? { 'Idempotency-Key': deps.generateIdempotencyKey() } : {}),
+        ...(options.stepUpCode !== undefined ? { 'X-Ops-Totp': options.stepUpCode } : {}),
       };
 
       let response: Response;
