@@ -28,4 +28,5 @@ export const queryKeys = {
   chat: (since?: string) => ['chat', since] as const,
   chronicle: (limit?: number) => ['chronicle', limit] as const,
   audit: (limit?: number) => ['audit', limit] as const,
+  oracleEvents: ['oracleEvents'] as const,
 };

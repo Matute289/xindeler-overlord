@@ -80,6 +80,19 @@ export const AuditRowSchema = z.object({
 export type AuditRow = z.infer<typeof AuditRowSchema>;
 export const AuditResponseSchema = z.array(AuditRowSchema);
 
+export const EntityTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type EntityTemplate = z.infer<typeof EntityTemplateSchema>;
+
+export const OracleEventsResponseSchema = z.object({
+  staged: z.array(z.string()),
+  loaded: z.array(z.string()),
+  entity_templates: z.array(EntityTemplateSchema),
+});
+export type OracleEventsResponse = z.infer<typeof OracleEventsResponseSchema>;
+
 // Stream-only — the `lifecycle` SSE event has no equivalent REST response to
 // already own its schema, unlike `status`/`log`/`chat`/`audit`.
 export const LifecycleEventSchema = z.object({
