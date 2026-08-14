@@ -3,6 +3,7 @@ import { Link, Slot, Tabs, usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { StepUpProvider } from '@/auth/StepUpContext';
 import { StreamStatusBanner } from '@/features/connectivity/StreamStatusBanner';
 import { EnvironmentBadge } from '@/features/environment/EnvironmentBadge';
 import { useBreakpoint } from '@/ui/useBreakpoint';
@@ -29,38 +30,40 @@ export default function TabsLayout() {
   const { colors } = useTheme();
 
   return (
-    <View className="flex-1">
-      <EnvironmentBadge />
-      <StreamStatusBanner />
+    <StepUpProvider>
       <View className="flex-1">
-        {breakpoint === 'wide' ? (
-          <SidebarLayout />
-        ) : (
-          <Tabs
-            screenOptions={{
-              headerShown: false,
-              tabBarLabelStyle: { fontFamily: fonts.regular },
-              tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-              tabBarActiveTintColor: colors.accent,
-              tabBarInactiveTintColor: colors.textMuted,
-            }}
-          >
-            {DESTINATIONS.map((dest) => (
-              <Tabs.Screen
-                key={dest.routeName}
-                name={dest.routeName}
-                options={{
-                  title: dest.label,
-                  tabBarIcon: ({ color, size }) => (
-                    <Ionicons name={dest.icon} color={color} size={size} />
-                  ),
-                }}
-              />
-            ))}
-          </Tabs>
-        )}
+        <EnvironmentBadge />
+        <StreamStatusBanner />
+        <View className="flex-1">
+          {breakpoint === 'wide' ? (
+            <SidebarLayout />
+          ) : (
+            <Tabs
+              screenOptions={{
+                headerShown: false,
+                tabBarLabelStyle: { fontFamily: fonts.regular },
+                tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+                tabBarActiveTintColor: colors.accent,
+                tabBarInactiveTintColor: colors.textMuted,
+              }}
+            >
+              {DESTINATIONS.map((dest) => (
+                <Tabs.Screen
+                  key={dest.routeName}
+                  name={dest.routeName}
+                  options={{
+                    title: dest.label,
+                    tabBarIcon: ({ color, size }) => (
+                      <Ionicons name={dest.icon} color={color} size={size} />
+                    ),
+                  }}
+                />
+              ))}
+            </Tabs>
+          )}
+        </View>
       </View>
-    </View>
+    </StepUpProvider>
   );
 }
 
