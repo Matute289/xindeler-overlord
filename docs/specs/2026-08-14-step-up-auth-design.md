@@ -162,11 +162,13 @@ and, on a `403 invalid_totp` / `403 step_up_required` response, catches the `Api
 build that retry loop (there's no real mutation to attach it to yet), but the interface is shaped so
 that ticket doesn't need to touch this file to do it.
 
-A cancelled prompt rejects with a plain `Error('step_up_cancelled')`, not an `ApiError` — it's a user
-decision, not a gateway failure. A future caller distinguishes it with
-`err.message === 'step_up_cancelled'` (or, more robustly, `err instanceof Error &&
-!isApiError(err)`) to abort silently rather than showing an error toast for someone choosing not to
-proceed.
+A cancelled prompt rejects with a plain `Error(STEP_UP_CANCELLED)`, not an `ApiError` — it's a user
+decision, not a gateway failure. `StepUpContext.tsx` exports `isStepUpCancelled(err: unknown):
+boolean` for exactly this check — a future caller uses that helper rather than hand-rolling a
+string comparison or an `instanceof` check (an `instanceof Error && !isApiError(err)` test,
+considered and rejected here, would misclassify any non-`ApiError` bug — a `TypeError`, an
+unrelated thrown error — as a user cancellation) — to abort silently rather than showing an error
+toast for someone choosing not to proceed.
 
 **3. `src/auth/StepUpPrompt.tsx` — the modal itself.** Visually mirrors `app/(auth)/totp.tsx`'s
 existing 6-digit-code screen (same `TextField`, same `Button`, same copy conventions) since operators
