@@ -63,7 +63,18 @@ export function ConfirmByTypingSheet({
             autoCorrect={false}
             autoFocus
           />
-          <Button label="Confirmar" onPress={handleConfirm} disabled={typed !== word} />
+          {/* `word === ''` is checked explicitly (not just `typed !== word`) — safety-review
+              finding 5, 2026-08-14: `'' !== ''` is `false`, so an empty `word` prop would leave
+              Confirmar enabled from the moment the sheet opens, before the operator typed
+              anything. Not reachable via any current `StatusScreen.tsx` call site, but invariant 9
+              (no destructive action fires from a single tap) rests entirely on this one
+              component's `disabled` logic, so it's hardened directly rather than trusted to every
+              future caller passing a non-empty `word`. */}
+          <Button
+            label="Confirmar"
+            onPress={handleConfirm}
+            disabled={word === '' || typed !== word}
+          />
           <Pressable onPress={handleCancel} accessibilityRole="button">
             <Text
               className="text-center text-sm text-steel-muted dark:text-night-steel-muted"

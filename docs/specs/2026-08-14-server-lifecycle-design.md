@@ -59,27 +59,47 @@ completes), the display self-corrects immediately.
 
 `src/features/status/useLifecycleState.ts` holds a `live` value (set only by a real `lifecycle`
 event) that wins over the `deriveFromStatus` guess above — but not unconditionally forever.
-**Reconciliation (added in the OC-25/26 final-review fix wave, finding 2):** `status` is pushed on
-every change plus a 5-second heartbeat (gateway contract §3.1), so it's fresher truth than a `live`
-value that can go stale forever if a `lifecycle` event is dropped mid-transition — e.g. during a
-stream reconnect, which can strand `live` at `'starting'` (hiding every action button, since none of
-the button-visibility rules match `'starting'` except Detener) or at `'draining'` after the drain
+**Reconciliation (added in the OC-25/26 final-review fix wave, finding 2; revised in the
+second-round safety review, 2026-08-14, finding 1):** `status` is pushed on every change plus a
+5-second heartbeat (gateway contract §3.1), so it's fresher truth than a `live` value that can go
+stale forever if a `lifecycle` event is dropped mid-transition — e.g. during a stream reconnect,
+which can strand `live` at `'starting'` (hiding every action button, since none of the
+button-visibility rules match `'starting'` except Detener) or at `'draining'` after the drain
 actually finished (leaving only a Cancelar the server would reject with `400 no_pending_shutdown`).
-The hook now clears `live` (falling back to `deriveFromStatus`) whenever the two sources actively
-contradict each other:
+The hook clears `live` (falling back to `deriveFromStatus`) when the two sources actively
+contradict each other — but **the two reconciliation directions are deliberately NOT symmetric.**
 
-- `live.state === 'draining'` but the latest `status.pending_shutdown` is `null` (the drain the client
-  thinks is running has, per `status`, already ended or never really started).
 - `live.state` is `'stopped'` or `'starting'` but `status.service === 'active'` with nothing pending
-  (the service is demonstrably running per `status`).
+  (the service is demonstrably running per `status`): clearing `live` here is eager and safe by
+  construction — it only ever ADDS available actions back, it never removes an abort path.
+- `live.state === 'draining'` but the latest `status.pending_shutdown` is `null`: **this direction
+  is deliberately NOT implemented, as of the second-round safety review.** It originally was (the
+  same rule as above, mirrored for `'draining'`), but that reasoning didn't survive review: `status`
+  and `lifecycle` are two independently-timed data paths — per gateway contract §3.1, "the gateway
+  polls the game server on **one** internal timer" and fans that single poll out as `status`, while
+  `lifecycle` is pushed by the gateway's own state machine as it drives a transition. Against a real
+  gateway, `status`'s view of `pending_shutdown` can lag a genuine `'draining'` `live` state by up to
+  one poll cycle, or a gateway-orchestrated drain might never populate `pending_shutdown` on the game
+  server's own status at all. The mock cannot reproduce this — it broadcasts `lifecycle` and `status`
+  atomically on the same tick (`tools/mock-gateway/src/scenarios.js`), so the two sources can never
+  actually disagree there, which is exactly why this bug shipped once and had to be caught by review
+  rather than by driving the mock. Clearing a genuinely-still-draining `live` on one lagging `status`
+  snapshot would delete the Cancelar button — the one abort path invariant 11 requires stay reachable
+  for the *entire* draining window — based on a data source that was never authoritative for
+  entering/leaving `'draining'` in the first place; `lifecycle` is the state-machine source of truth
+  for both directions of that transition. A stuck `'draining'` `live` (worst case: Cancelar still
+  shown after the drain already ended, and a stray tap gets back a `400 no_pending_shutdown` the
+  operator can see and dismiss) is a far safer failure mode than an incorrectly-hidden Cancel button,
+  so `status` is never allowed to clear `'draining'` on its own.
 
-This is deliberately narrow: a *non*-contradicting `live` (e.g. `'starting'` while `status` still
-reads inactive, which is expected — `status` can't distinguish `'stopped'` from `'starting'` at all)
-is left alone, preserving "a real lifecycle event wins over a derived guess" for every case that
-isn't an active disagreement. The clear happens by adjusting state during render (React's own
-sanctioned pattern for this — see `useLifecycleState.ts`'s inline comment — not a `useEffect`, since
-an effect that calls `setState` unconditionally on every render where a condition holds is itself
-one of this fix wave's other findings).
+This is deliberately narrow even on the direction that IS implemented: a *non*-contradicting `live`
+(e.g. `'starting'` while `status` still reads inactive, which is expected — `status` can't
+distinguish `'stopped'` from `'starting'` at all) is left alone, preserving "a real lifecycle event
+wins over a derived guess" for every case that isn't an active disagreement. The clear happens by
+adjusting state during render (React's own sanctioned pattern for this — see
+`useLifecycleState.ts`'s inline comment — not a `useEffect`, since an effect that calls `setState`
+unconditionally on every render where a condition holds is itself one of the OC-25/26 fix wave's
+other findings).
 
 A full remount (logout/login, a breakpoint crossing that swaps `Tabs`⇄`SidebarLayout`) still resets
 `live` to `null` and re-derives fresh from whatever `status` shows at that point.
@@ -124,6 +144,18 @@ export function createWriteApi(http: HttpClient) {
 
 Added to `src/api/apiClient.ts` as a third namespace alongside `auth`/`read`: `write:
 createWriteApi(http)`.
+
+**Second-round safety review, 2026-08-14 — two changes not reflected in the snapshot above:**
+
+- **Finding 3:** `OkResponseSchema` is now `z.object({ ok: z.literal(true) })`, not
+  `z.object({ ok: z.boolean() })`. The bare-`boolean` version validated `{ ok: false }` just as
+  happily as `{ ok: true }` — a `200 { ok: false }` response would pass schema validation, and
+  `useDestructiveAction.run()` treats any non-throwing resolution as success, so a real gateway
+  rejection could have been silently reported as success (the "Desconectados" confirmation message
+  is exactly the kind of surface this would have shown incorrectly).
+- **Finding 6:** every method now accepts an optional trailing `idempotencyKey?: string`, threaded
+  straight to `http.request`'s new `idempotencyKey` option — see the "Idempotency key" note below
+  the `useDestructiveAction` snapshot.
 
 ## The confirm → step-up → call → retry orchestration
 
@@ -181,6 +213,19 @@ a correctness guarantee. One retry only — if the SECOND attempt (with a defini
 403s, that's surfaced as a real error, not retried again (an operator who mistypes the fresh code
 twice in a row taps the button again rather than the hook silently looping).
 
+**Idempotency key (second-round safety review, 2026-08-14, finding 6) — not reflected in the
+snapshot above:** `call`'s signature is now `(stepUpCode: string, idempotencyKey: string) =>
+Promise<T>`. `httpClient.ts` previously generated a fresh `Idempotency-Key` header inside every
+`request()` call, including both attempts of the retry-on-403 sequence above — so a step-up retry
+for a single logical operator action produced two distinct idempotency keys, and the gateway would
+see two distinct operations rather than a retry of one. Mostly harmless for
+stop/restart/cancel_shutdown/disconnect_all (idempotent-ish by nature), but a duplicate `start`
+landing while the gateway is mid-orchestration from the first attempt is a real risk. `run()` now
+generates ONE `Crypto.randomUUID()` per invocation and passes it to both `call()` attempts;
+`httpClient.ts`'s `RequestOptions` gained an optional `idempotencyKey` that, when present, is used
+instead of minting a fresh one. Every `StatusScreen.tsx` call site was updated to accept and thread
+the key through to the matching `api.write.*` method.
+
 ## The UI
 
 Added to `StatusScreen.tsx`, below the existing `StatRow` block:
@@ -209,14 +254,46 @@ Added to `StatusScreen.tsx`, below the existing `StatRow` block:
     the whole drain"*, so it is never obscured by a confirm sheet or disabled while the countdown
     runs.
   - `'stopped'`: only **Iniciar** (Start) visible.
-  - **Desconectar a todos** (Disconnect all) — visible whenever `'running'` or `'draining'`
-    (disconnecting players is meaningful any time the server has players connected, independent of
-    whether a shutdown is also in progress). Shows a brief "Desconectados" confirmation under the
-    button for ~4s after a successful call (finding 4) — unlike every other action, disconnect-all
-    produces no lifecycle change, so a confirmed tap otherwise leaves zero visible feedback.
+  - **Desconectar a todos** (Disconnect all) — visible only while `'running'`. **Changed by the
+    second-round safety review, 2026-08-14, finding 4** — it previously also showed during
+    `'draining'`; that's been removed. Confirming this action opens a full-screen `Modal`
+    (`ConfirmByTypingSheet`) that covers the whole screen, Cancelar included, for as long as the
+    operator is typing "DISCONNECT". Cancelar is technically still "rendered" underneath, but not
+    reachable, during that window — which violates invariant 11 just as surely as removing the
+    button outright would. Disconnecting all players is lower-priority than keeping the abort path
+    unobstructed during an active drain; an operator who wants it can wait the ~30s for the drain to
+    complete or be cancelled. Still shows a brief "Desconectados" confirmation under the button for
+    ~4s after a successful call (finding 4 from the *prior* fix wave — same finding number, different
+    review round, see the button-visibility change above for the current-round finding 4) — unlike
+    every other action, disconnect-all produces no lifecycle change, so a confirmed tap otherwise
+    leaves zero visible feedback.
+  - `'starting'` Detener sends a different body than `'running'` Detener (**bonus fix, second-round
+    safety review, 2026-08-14**): `{ mode: 'immediate' }` instead of `{ mode: 'graceful', seconds:
+    30 }`. A graceful 30-second drain aborting a start that never finished starting up may itself
+    just hang, which isn't a useful abort for that specific case. `StatusScreen.tsx` captures which
+    mode a given Detener press means (`stopMode` state, set at press time from the current
+    `LifecycleState`) so the confirm sheet's copy and the eventual request body always agree, even
+    if `state` itself changes while the sheet is open.
 - **Confirm-by-typing gate**: see the dedicated section immediately below — the scope shipped
   originally (Restart/Stop only) under-covered invariant 5/9 and was revised in the OC-25/26
   final-review fix wave.
+- **Stream-staleness gating (second-round safety review, 2026-08-14, finding 2)**: after the
+  bootstrap fetch, `status`/`lifecycle` only ever update via the SSE stream — nothing on this screen
+  refetches on its own. `StatusScreen.tsx` now reads `useStreamStatus()` (`@/stream/StreamContext`,
+  already existed) and, whenever it reads `'reconnecting'`, disables Reiniciar/Detener/Iniciar/
+  Desconectar a todos (`Button`'s existing `disabled` prop) and shows a small inline note near the
+  lifecycle indicator ("Datos posiblemente desactualizados — reconectando…"), on top of the existing
+  global one-line `StreamStatusBanner`. **Deliberately NOT applied to Cancelar** — disabling the one
+  abort path during a stream reconnect would be a worse regression than the staleness this flag warns
+  about, especially since a stream drop is exactly the scenario finding 1 (above) already flags as
+  able to leave the client's own view of a drain lagging reality. A stray Cancel tap after a drain
+  already ended just gets back a `400 no_pending_shutdown` the operator can see and dismiss — the
+  same "fail safe by over-showing the abort path" asymmetry as finding 1, applied to this finding's
+  fix instead. Live-verified against `npm run mock-gateway`'s `stream_drop` scenario (armed before
+  the page's stream connection opened, per OC-17's own note on how that scenario's drop timer
+  attaches): the reconnect banner, the inline staleness note, and all three gated buttons visibly
+  dimmed all appeared together, and cleared together once the scenario reset and the stream
+  reconnected.
 
 ### Confirm-by-typing gate
 
@@ -255,10 +332,20 @@ with zero typed confirmation and no confirm modal at all. The gate now applies a
 
 Every gated action's confirm-time `onConfirm` also re-checks that the lifecycle state it was
 predicated on (`'running'` for Restart, `'running'`/`'starting'` for Stop, `'stopped'` for Start,
-`'running'`/`'draining'` for Disconnect-all) still holds before firing — finding 8, closing a race
-where state changes underneath an open sheet (e.g. a second operator already stopped the server while
-this one was mid-typing "STOP"). If the precondition no longer holds, the sheet closes silently with
-no mutation sent, since the operator did nothing wrong.
+`'running'` for Disconnect-all — narrowed from `'running'`/`'draining'`, see finding 4 above) still
+holds before firing — finding 8, closing a race where state changes underneath an open sheet (e.g. a
+second operator already stopped the server while this one was mid-typing "STOP"). If the
+precondition no longer holds, the sheet closes silently with no mutation sent, since the operator did
+nothing wrong.
+
+**`ConfirmByTypingSheet` hardening (second-round safety review, 2026-08-14, finding 5,
+defense-in-depth):** `src/ui/ConfirmByTypingSheet.tsx`'s Confirmar button was `disabled={typed !==
+word}` — an empty `word` prop evaluates that as `false` (enabled) the instant the sheet opens,
+before the operator has typed anything, since `'' !== ''` is `false`. Not reachable today given how
+`StatusScreen.tsx` drives `word` (every call site supplies a real word), but the entire guarantee
+behind invariant 9 (no destructive action fires from a single tap) rests on this one component's
+`disabled` logic, so it's now `disabled={word === '' || typed !== word}` — hardened directly rather
+than trusted to every future caller.
 
 - **Stop's parameters**: always `mode: 'graceful'`, `seconds: 30` (matching the mock's own
   `draining.seconds` default), `reason: undefined`. No immediate-mode toggle, no seconds picker, no
@@ -293,6 +380,24 @@ out from under an open sheet — e.g. via a second client — and confirm the sh
 instead of firing a stale mutation, per finding 8), a wrong-step-up-code path (confirm the
 `forceFresh` retry prompts a second time and succeeds with the correct code), and a cancelled step-up
 prompt (confirm the button just returns to idle, no error shown).
+
+**Second-round safety review, 2026-08-14 — additional live verification:** Desconectar a todos no
+longer shown once a Stop drops the state to `'draining'` (finding 4, confirmed by starting a drain
+and observing only Cancelar remain); Confirmar disabled with an empty typed field on sheet-open
+(finding 5, observed directly in the same pass); stream-staleness gating (finding 2) — driven via
+`npm run mock-gateway`'s `POST /mock/scenario` set to `stream_drop` **before** opening the page's
+stream connection (per OC-17's own note: the mock's drop timer only attaches to connections
+established while the scenario is already active, so arming it after the page is already connected
+has no effect) — confirmed the reconnect banner, the new inline "Datos posiblemente desactualizados"
+note, and Reiniciar/Detener/Desconectar a todos all visibly disabled together during the drop, then
+all clearing together once the scenario was reset to `normal` and the stream reconnected. **Finding
+1 (the draining→status reconciliation asymmetry) could not be live-verified** — the mock broadcasts
+`lifecycle` and `status` atomically on the same tick (`tools/mock-gateway/src/scenarios.js`), so the
+two data paths can never actually disagree in any mock-driven scenario; this one was verified by
+code tracing only (confirming `contradicts()` no longer has a `'draining'`-clearing branch and that
+nothing else in `useLifecycleState.ts` calls `setLive(null)`), not by observing the failure mode
+live. `npx tsc --noEmit` / `npm run lint` / `npm run format:check` all pass clean after this round's
+changes.
 
 ## Out of scope
 

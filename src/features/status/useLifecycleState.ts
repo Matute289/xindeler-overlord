@@ -23,17 +23,35 @@ function deriveFromStatus(status: Status): { state: LifecycleState; secondsLeft?
 // A real `lifecycle` event wins over a derived guess — but only while the two sources actually
 // agree. `status` is pushed on every change plus a 5-second heartbeat (gateway contract §3.1), so
 // it's fresher truth than a `live` value that can go stale forever if a `lifecycle` event is
-// dropped mid-transition (e.g. during a stream reconnect). Contradiction cases handled here:
-// `live` says 'draining' but the latest status has no `pending_shutdown` (drain already ended, or
-// never really started), or `live` says 'stopped'/'starting' but status shows an active service
-// with nothing pending (the service is demonstrably running). Only these specific disagreements
-// clear `live` — a non-contradicting `live` (e.g. 'starting' while status is still inactive, which
-// is expected and not distinguishable from `status` alone) is left alone.
+// dropped mid-transition (e.g. during a stream reconnect).
+//
+// **The two reconciliation directions are deliberately NOT symmetric — safety-review finding 1,
+// 2026-08-14.** `status` and `lifecycle` are two independently-timed data paths: per gateway
+// contract §3.1, "the gateway polls the game server on one internal timer" and fans that poll out
+// as `status`, while `lifecycle` is pushed by the gateway's own state machine as it drives a
+// transition. A real gateway can have `status`'s view of `pending_shutdown` lag a genuine
+// `'draining'` `live` state by up to a poll cycle (or never populate `pending_shutdown` on the
+// game server's own status at all for a gateway-orchestrated drain) — the mock can't reproduce
+// this because it broadcasts `lifecycle` and `status` atomically on the same tick
+// (`tools/mock-gateway/src/scenarios.js`), so the two sources can never actually disagree there.
+//
+// - `live.state` is `'stopped'`/`'starting'` while `status.service === 'active'` with nothing
+//   pending: clearing `live` here only ever ADDS available actions back (a stuck `'starting'`
+//   hides every action button; a stuck `'stopped'` just under-shows Iniciar a beat longer than
+//   necessary) — it never removes an abort path, so it's safe to be eager about.
+// - `live.state === 'draining'`: this reconciliation direction is intentionally NOT implemented.
+//   Clearing a genuinely-still-draining `live` on a single lagging `status` snapshot would delete
+//   the Cancelar button — the one abort path invariant 11 requires stay reachable for the ENTIRE
+//   draining window — based on a data source that is not authoritative for entering/leaving
+//   `'draining'` in the first place. `lifecycle` is the state-machine source of truth for both
+//   entering AND leaving `'draining'`; a stuck `'draining'` `live` (worst case: Cancelar shown
+//   after the drain already ended, and the operator's tap gets back a `400 no_pending_shutdown`
+//   they can see and dismiss) is a far safer failure mode than an incorrectly-hidden Cancel
+//   button, so `status` is deliberately never allowed to clear `'draining'` on its own.
 function contradicts(
   live: { state: LifecycleState; secondsLeft?: number },
   status: Status,
 ): boolean {
-  if (live.state === 'draining' && status.pending_shutdown === null) return true;
   if (
     (live.state === 'stopped' || live.state === 'starting') &&
     status.service === 'active' &&

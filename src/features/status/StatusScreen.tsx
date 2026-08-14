@@ -6,6 +6,7 @@ import { useEnvironment } from '@/config/EnvironmentContext';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
+import { useStreamStatus } from '@/stream/StreamContext';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
@@ -74,24 +75,31 @@ function ActionError({ error }: { error: Error }) {
 // section of docs/specs/2026-08-14-server-lifecycle-design.md for the reasoning on each.
 type ConfirmAction = 'restart' | 'stop' | 'start' | 'disconnectAll';
 
-const CONFIRM_COPY: Record<ConfirmAction, { word: string; description: string }> = {
-  restart: {
-    word: 'RESTART',
-    description: 'El servidor se reiniciará: detención con drenado, luego arranque automático.',
-  },
-  stop: {
-    word: 'STOP',
-    description: 'El servidor se detendrá con un drenado de 30 segundos.',
-  },
-  start: {
-    word: 'START',
-    description: 'El servidor se iniciará.',
-  },
-  disconnectAll: {
-    word: 'DISCONNECT',
-    description: 'Se desconectará a todos los jugadores conectados.',
-  },
+const CONFIRM_WORDS: Record<ConfirmAction, string> = {
+  restart: 'RESTART',
+  stop: 'STOP',
+  start: 'START',
+  disconnectAll: 'DISCONNECT',
 };
+
+const CONFIRM_DESCRIPTIONS: Record<Exclude<ConfirmAction, 'stop'>, string> = {
+  restart: 'El servidor se reiniciará: detención con drenado, luego arranque automático.',
+  start: 'El servidor se iniciará.',
+  disconnectAll: 'Se desconectará a todos los jugadores conectados.',
+};
+
+// Detener's own copy depends on which mode it's about to send — bonus fix, safety review
+// 2026-08-14: Detener issued while 'starting' sends `mode: 'immediate'` (see `stopAction` below),
+// not the `graceful`/30s drain used from 'running', so the sheet must say which one is actually
+// about to happen rather than always describing the graceful drain.
+const STOP_DESCRIPTIONS: Record<'graceful' | 'immediate', string> = {
+  graceful: 'El servidor se detendrá con un drenado de 30 segundos.',
+  immediate: 'El servidor se detendrá de inmediato — el arranque en curso no llegó a completarse.',
+};
+
+function confirmDescription(action: ConfirmAction, stopMode: 'graceful' | 'immediate'): string {
+  return action === 'stop' ? STOP_DESCRIPTIONS[stopMode] : CONFIRM_DESCRIPTIONS[action];
+}
 
 // The precondition each gated action requires, mirrored from the button-visibility rules below —
 // used to re-check at confirm-time that the state the operator saw when they tapped the button
@@ -106,7 +114,9 @@ function preconditionHolds(action: ConfirmAction, state: LifecycleState | undefi
     case 'start':
       return state === 'stopped';
     case 'disconnectAll':
-      return state === 'running' || state === 'draining';
+      // Safety-review finding 4, 2026-08-14: no longer reachable from 'draining' — see the
+      // matching change to this action's button-visibility condition below for the reasoning.
+      return state === 'running';
   }
 }
 
@@ -114,8 +124,28 @@ export function StatusScreen() {
   const query = useStatusQuery();
   const api = useApi();
   const lifecycle = useLifecycleState(query.data);
+  // Moved up (was previously derived after the bootstrap-loading early return below) so the
+  // destructive-action hooks constructed just below can close over it — needed for `stopAction`'s
+  // mode selection. Depends only on `lifecycle`, never on `status`, so this is safe to compute
+  // before the bootstrap fetch has landed.
+  const state: LifecycleState = lifecycle?.state ?? 'stopped';
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [disconnectedAt, setDisconnectedAt] = useState<number | null>(null);
+  // Which body Detener should send — set at the moment the button is pressed (see the two
+  // `onPress` handlers below), not read live from `state` inside the sheet/action closures, so it
+  // can't flip mid-confirm if `state` itself changes while the sheet is open. Bonus fix, safety
+  // review 2026-08-14 — see `STOP_DESCRIPTIONS`/`stopAction` for why this exists.
+  const [stopMode, setStopMode] = useState<'graceful' | 'immediate'>('graceful');
+
+  // Safety-review finding 2, 2026-08-14: after the bootstrap fetch, `status`/`lifecycle` only ever
+  // update via the SSE stream — nothing here refetches on its own. While the stream is
+  // 'reconnecting', every value on this screen is a snapshot of unknown age, but the destructive
+  // buttons below were previously always fully armed regardless. `dataMaybeStale` disables them
+  // (see each `Button`'s `disabled` prop) and drives the inline note near the lifecycle indicator.
+  // Deliberately NOT applied to Cancelar — see the comment on that button for why disabling it here
+  // would itself be a safety regression (invariant 11).
+  const streamStatus = useStreamStatus();
+  const dataMaybeStale = streamStatus === 'reconnecting';
 
   // Finding 7: the sheet's `word`/`description` must not flip to the wrong action's copy while
   // it's sliding away mid-close-animation, which happens if they're derived straight from
@@ -128,15 +158,35 @@ export function StatusScreen() {
     setDisplayedConfirmAction(confirmAction);
   }
 
-  const startAction = useDestructiveAction((code) => api.write.startServer(code));
-  const stopAction = useDestructiveAction((code) =>
-    api.write.stopServer(code, { mode: 'graceful', seconds: 30 }),
+  // Safety-review finding 6, 2026-08-14: `call` now takes `(stepUpCode, idempotencyKey)` — the
+  // idempotency key is generated ONCE per `run()` invocation (inside `useDestructiveAction`) and
+  // reused across both the initial attempt and the retry-once-on-403 attempt, so the gateway sees
+  // one logical operation, not two, if a step-up code needs to be retried.
+  const startAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.startServer(code, idempotencyKey),
   );
-  const restartAction = useDestructiveAction((code) =>
-    api.write.restartServer(code, { seconds: 30 }),
+  // Bonus fix, safety review 2026-08-14: Detener issued while 'starting' (the escape hatch for a
+  // stalled start, finding 3 from the prior round) now sends `mode: 'immediate'` instead of the
+  // `graceful`/30s drain used from 'running' — a graceful drain of a server that never finished
+  // starting up may itself just hang, which isn't a useful abort for this specific case.
+  // `stopMode` is captured at button-press time (see the two Detener `onPress` handlers below),
+  // not read live from `state`, so the body sent matches exactly what the sheet described.
+  const stopAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.stopServer(
+      code,
+      stopMode === 'immediate' ? { mode: 'immediate' } : { mode: 'graceful', seconds: 30 },
+      idempotencyKey,
+    ),
   );
-  const cancelAction = useDestructiveAction((code) => api.write.cancelShutdown(code));
-  const disconnectAllAction = useDestructiveAction((code) => api.write.disconnectAll(code));
+  const restartAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.restartServer(code, { seconds: 30 }, idempotencyKey),
+  );
+  const cancelAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.cancelShutdown(code, idempotencyKey),
+  );
+  const disconnectAllAction = useDestructiveAction((code, idempotencyKey) =>
+    api.write.disconnectAll(code, idempotencyKey),
+  );
 
   // Finding 5: `cancelAction.error` is only cleared at the start of the NEXT `cancelAction.run()`
   // — so a cancel failure during one drain can reappear, stale, under the Cancelar button of a
@@ -187,7 +237,6 @@ export function StatusScreen() {
 
   const status = query.data;
   const isUp = status.service === 'active' && status.health;
-  const state: LifecycleState = lifecycle?.state ?? 'stopped';
 
   function handleSheetConfirm() {
     // Finding 8: re-check the precondition the operator saw when they tapped the button is still
@@ -216,6 +265,12 @@ export function StatusScreen() {
           {lifecycleLabel(state, lifecycle?.secondsLeft)}
         </Text>
       </View>
+
+      {dataMaybeStale && (
+        <Text className="mt-1 text-xs text-steel-muted dark:text-night-steel-muted">
+          Datos posiblemente desactualizados — reconectando…
+        </Text>
+      )}
 
       {state === 'draining' && (
         <View className="mt-4 items-center rounded-lg bg-danger px-4 py-3 dark:bg-night-danger">
@@ -254,6 +309,7 @@ export function StatusScreen() {
               label="Reiniciar"
               onPress={() => setConfirmAction('restart')}
               loading={restartAction.pending}
+              disabled={dataMaybeStale}
             />
             {restartAction.error && <ActionError error={restartAction.error} />}
           </>
@@ -265,8 +321,16 @@ export function StatusScreen() {
           <>
             <Button
               label="Detener"
-              onPress={() => setConfirmAction('stop')}
+              onPress={() => {
+                // Bonus fix, safety review 2026-08-14 — see `stopAction`'s comment above: capture
+                // which mode this press means (graceful drain from 'running', immediate abort from
+                // 'starting') before opening the sheet, so the sheet's copy and the eventual call
+                // body agree.
+                setStopMode(state === 'starting' ? 'immediate' : 'graceful');
+                setConfirmAction('stop');
+              }}
               loading={stopAction.pending}
+              disabled={dataMaybeStale}
             />
             {stopAction.error && <ActionError error={stopAction.error} />}
           </>
@@ -276,7 +340,14 @@ export function StatusScreen() {
           <>
             {/* Deliberately NOT confirm-by-typing gated — invariant 11/9 requires Cancel stay
                 reachable for the entire draining window; adding typing friction to the one abort
-                path would work against that. See the spec's "Confirm-by-typing gate" section. */}
+                path would work against that. See the spec's "Confirm-by-typing gate" section.
+                Also deliberately NOT gated on `dataMaybeStale` (finding 2, 2026-08-14) — disabling
+                the one abort path during a stream reconnect would be a worse regression than the
+                staleness this flag exists to warn about, especially since a stream drop is exactly
+                the scenario finding 1 already flags as able to leave the client's view of a drain
+                lagging reality. A stray Cancel tap after a drain already ended just gets back a
+                `400 no_pending_shutdown` the operator can see and dismiss — a far safer failure
+                mode than an unreachable Cancel. */}
             <Button label="Cancelar" onPress={cancelAction.run} loading={cancelAction.pending} />
             {cancelAction.error && !suppressStaleCancelError && (
               <ActionError error={cancelAction.error} />
@@ -290,16 +361,25 @@ export function StatusScreen() {
               label="Iniciar"
               onPress={() => setConfirmAction('start')}
               loading={startAction.pending}
+              disabled={dataMaybeStale}
             />
             {startAction.error && <ActionError error={startAction.error} />}
           </>
         )}
 
-        {(state === 'running' || state === 'draining') && (
+        {/* Safety-review finding 4, 2026-08-14: no longer visible during 'draining'. Confirming
+            this action opens a full-screen Modal (`ConfirmByTypingSheet`) that covers Cancelar for
+            as long as the operator is typing "DISCONNECT" — during that window Cancel is rendered
+            but not reachable, which contradicts invariant 11 just as surely as removing the button
+            outright would. Disconnecting all players is lower-priority than keeping the abort path
+            unobstructed during an active drain; an operator who wants it can wait the ~30s for the
+            drain to complete or be cancelled. */}
+        {state === 'running' && (
           <>
             <Button
               label="Desconectar a todos"
               onPress={() => setConfirmAction('disconnectAll')}
+              disabled={dataMaybeStale}
               loading={disconnectAllAction.pending}
             />
             {disconnectAllAction.error && <ActionError error={disconnectAllAction.error} />}
@@ -314,8 +394,10 @@ export function StatusScreen() {
 
       <ConfirmByTypingSheet
         visible={confirmAction !== null}
-        word={displayedConfirmAction ? CONFIRM_COPY[displayedConfirmAction].word : ''}
-        description={displayedConfirmAction ? CONFIRM_COPY[displayedConfirmAction].description : ''}
+        word={displayedConfirmAction ? CONFIRM_WORDS[displayedConfirmAction] : ''}
+        description={
+          displayedConfirmAction ? confirmDescription(displayedConfirmAction, stopMode) : ''
+        }
         onConfirm={handleSheetConfirm}
         onCancel={() => setConfirmAction(null)}
       />
