@@ -91,15 +91,27 @@ export function OracleEventsScreen() {
     api.write.setOracleEnabled(true, code, idempotencyKey),
   );
 
+  // The two actions render their errors side by side, above the same status label, and each one's
+  // success flips the state the OTHER one's error was complaining about — so a successful enable
+  // leaves a stale "no se pudo desactivar" sitting under an "ORACLE: Activo" box that is now
+  // exactly what the operator asked for, and vice versa. `useDestructiveAction`'s `error` only
+  // clears at the start of its own next `run()`, so the sibling action has to clear it explicitly
+  // (final-review finding 4 — this was deferred once, before `reset()` existed).
   async function handleConfirmEnable() {
     setConfirmEnable(false);
     const response = await enableAction.run();
-    if (response) query.refetch();
+    if (response) {
+      disableAction.reset();
+      query.refetch();
+    }
   }
 
   async function handleDisable() {
     const response = await disableAction.run();
-    if (response) query.refetch();
+    if (response) {
+      enableAction.reset();
+      query.refetch();
+    }
   }
 
   async function handleRefresh() {

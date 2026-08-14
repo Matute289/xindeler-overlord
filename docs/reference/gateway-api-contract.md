@@ -203,7 +203,10 @@ NH-75 §4.3 (private repo, path above) is the design source for it.
 4. `atmosphere` and `dimension_config` render with a "stored, not applied to the live world"
    badge — the engine ignores them today (NH-75 §1.5).
 5. **There is no undo.** Say so next to the fire button. The mitigations are dry-run, the
-   per-event cap, and the kill switch.
+   per-event cap (**not implemented** — the mock enforces no cap, and OC-34 deliberately scoped one
+   out rather than inventing client-side rate limiting the server doesn't enforce; a real-gateway
+   concern), and the kill switch. Dry-run and the kill switch are both real today (OC-32/33 and
+   OC-34 respectively).
 
 ---
 

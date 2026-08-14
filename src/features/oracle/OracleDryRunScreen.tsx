@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
 import type { OracleTarget, OracleTriggerResponse, Player } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
@@ -14,6 +15,43 @@ import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
 import { TextField } from '@/ui/TextField';
 import { fonts } from '@/ui/theme';
+
+// Gateway error codes that PROVE the fire never reached the spawn path, so nothing can have been
+// generated in the world. Sourced by reading the actual request path end to end, not guessed:
+// `tools/mock-gateway/src/middleware/auth.js` (`unauthorized`, `session_expired`),
+// `middleware/stepUp.js` (`step_up_required`, `invalid_totp`) — both run before the route handler is
+// entered at all — and `routes/oracleTrigger.js`, whose every remaining code (`oracle_disabled`,
+// `invalid_body`, `missing_target`, `target_player_offline`, `event_not_found`) is a synchronous
+// validation/lookup `return sendError(...)` that happens strictly BEFORE the `would_spawn`
+// computation and the `!dryRun` log-push/`recordAudit` block. Anything NOT on this list — a
+// `network_error`/`timeout` (the request may have been fully processed and only the response lost),
+// an `invalid_response` (the gateway answered, possibly after spawning, in a shape we can't parse),
+// an `unknown_error` (a non-envelope error body we can't classify), a 5xx, or any future gateway
+// code this client has never seen — is treated as INDETERMINATE. The allowlist direction is the
+// safety-critical part: unrecognized failures must fail toward "we don't know", never toward
+// "nothing happened", on the one action in this app with no undo.
+const DEFINITE_NO_SPAWN_ERROR_CODES = new Set([
+  'unauthorized',
+  'session_expired',
+  'step_up_required',
+  'invalid_totp',
+  'oracle_disabled',
+  'invalid_body',
+  'missing_target',
+  'target_player_offline',
+  'event_not_found',
+]);
+
+function isIndeterminateFireFailure(err: unknown): boolean {
+  // Not an `ApiError` — i.e. one of `fireAction`'s own pre-flight throws ('No hay una vista previa
+  // vigente.', 'Este jugador ya no está conectado.'), raised before `fireOracleEvent` is ever
+  // called. Nothing was sent, so nothing was spawned.
+  if (!isApiError(err)) return false;
+  // A 5xx means the gateway did accept the request and got far enough to fail while handling it —
+  // never assume that failure happened before the spawn, whatever code came back with it.
+  if (err.status >= 500) return true;
+  return !DEFINITE_NO_SPAWN_ERROR_CODES.has(err.code);
+}
 
 function parseNumeric(text: string): number | null {
   if (text.trim() === '') return null;
@@ -60,6 +98,13 @@ export function OracleDryRunScreen() {
     response: OracleTriggerResponse;
     target: OracleTarget;
     fired: boolean;
+    // Third state, distinct from both `fired: false` (a preview — nothing happened, provably) and
+    // `fired: true` (it happened, confirmed): a fire attempt whose outcome the client genuinely
+    // cannot determine — see `isIndeterminateFireFailure`. The card must not claim "no se generó
+    // nada" here, and must not re-offer Fire: `useDestructiveAction` mints a fresh idempotency key
+    // per `run()`, so a retry is a NEW operation to the gateway, not a dedupable retry of the same
+    // intent — re-offering it under a false "nothing happened yet" claim is a double-spawn path.
+    fireOutcomeUnknown: boolean;
   } | null>(null);
   const [confirmFire, setConfirmFire] = useState(false);
 
@@ -74,10 +119,14 @@ export function OracleDryRunScreen() {
   // of its next `run()`, so without this, a failed fire against the OLD target (e.g. an offline
   // refusal) would keep rendering underneath a brand-new, unrelated dry-run card after the
   // operator picks a different target and previews again — final-review finding, see also
-  // OC-32/33's identical fix for `triggerAction`'s own error/result staleness.
+  // OC-32/33's identical fix for `triggerAction`'s own error/result staleness. `triggerAction`
+  // gets the same treatment for the same reason (final-review finding 4): a failed dry-run's error
+  // must not survive switching to a different target either — it would render underneath a form
+  // that no longer describes what failed.
   function clearResult() {
     setResult(null);
     fireAction.reset();
+    triggerAction.reset();
   }
 
   function buildTarget(onlinePlayers: Player[]): OracleTarget | null {
@@ -153,7 +202,20 @@ export function OracleDryRunScreen() {
           throw new Error('Este jugador ya no está conectado.');
         }
       }
-      return api.write.fireOracleEvent(eventId, result.target, code, idempotencyKey);
+      try {
+        return await api.write.fireOracleEvent(eventId, result.target, code, idempotencyKey);
+      } catch (err) {
+        // Classified here rather than after `run()` resolves, because `run()` collapses every
+        // failure mode into a `null` return (a cancelled step-up included) and its `error` state
+        // isn't readable from the closure that awaited it. Rethrown untouched so the hook's
+        // step-up retry branch and its `error` state behave exactly as before — this catch only
+        // records WHICH kind of failure it was. Functional `setResult` so it can't clobber a
+        // concurrent update with a stale `result` capture.
+        if (isIndeterminateFireFailure(err)) {
+          setResult((prev) => (prev ? { ...prev, fireOutcomeUnknown: true } : prev));
+        }
+        throw err;
+      }
     },
     // Fire must never silently ride a step-up obtained for a different, earlier action — a
     // dry-run immediately precedes almost every fire in the intended flow, and that dry-run just
@@ -166,7 +228,7 @@ export function OracleDryRunScreen() {
   async function handleFire() {
     const response = await fireAction.run();
     if (response && result) {
-      setResult({ ...result, response, fired: true });
+      setResult({ ...result, response, fired: true, fireOutcomeUnknown: false });
     }
   }
 
@@ -186,7 +248,7 @@ export function OracleDryRunScreen() {
     if (!target) return;
     clearResult();
     const response = await triggerAction.run();
-    if (response) setResult({ response, target, fired: false });
+    if (response) setResult({ response, target, fired: false, fireOutcomeUnknown: false });
   }
 
   if (!eventId) {
@@ -318,18 +380,31 @@ export function OracleDryRunScreen() {
               Resultado
             </Text>
             <Text
-              className="mt-2 text-xs text-steel-muted dark:text-night-steel-muted"
+              className={
+                result.fireOutcomeUnknown
+                  ? 'mt-2 text-xs text-danger dark:text-night-danger'
+                  : 'mt-2 text-xs text-steel-muted dark:text-night-steel-muted'
+              }
               style={{ fontFamily: fonts.regular }}
             >
               {result.fired
                 ? '¡Disparado! Esto ya ocurrió en el mundo en vivo.'
-                : 'Simulación: no se generó nada en el mundo todavía.'}
+                : result.fireOutcomeUnknown
+                  ? 'No pudimos confirmar el resultado — puede que el evento se haya disparado igual. Revisá la auditoría antes de reintentar.'
+                  : 'Simulación: no se generó nada en el mundo todavía.'}
             </Text>
             <Text
               className="mt-2 text-steel-light dark:text-night-steel-light"
               style={{ fontFamily: fonts.regular }}
             >
-              {`Se generarían: ${result.response.would_spawn}`}
+              {/* Conditional mood ONLY for the un-fired preview. OC-33's final review named this
+                  exact phrasing as the thing distinguishing a preview from a real outcome, so a
+                  completed fire must not reuse it. The unknown-outcome state keeps "generarían":
+                  these numbers are still the DRY-RUN's projection — the fire's own response never
+                  came back — and the status line above says outright that we couldn't confirm. */}
+              {result.fired
+                ? `Se generaron: ${result.response.would_spawn}`
+                : `Se generarían: ${result.response.would_spawn}`}
             </Text>
             <Text
               className="mt-1 text-steel-light dark:text-night-steel-light"
@@ -351,17 +426,27 @@ export function OracleDryRunScreen() {
             </Text>
             {!result.fired && (
               <View className="mt-4">
-                <Text className="text-xs text-danger dark:text-night-danger">
-                  No hay forma de deshacer esto.
-                </Text>
-                <View className="mt-2">
-                  <Button
-                    label="Disparar"
-                    onPress={() => setConfirmFire(true)}
-                    loading={fireAction.pending}
-                    disabled={fireAction.pending}
-                  />
-                </View>
+                {/* Fire is withdrawn once the outcome is unknown: the operator must go read the
+                    audit log and find out whether it already spawned before firing anything else.
+                    The way back is the ordinary one — pick a target / re-run "Probar disparo",
+                    both of which go through `clearResult()` and start a fresh, honest preview.
+                    The underlying `ActionError` still renders here so the actual failure ("No se
+                    pudo conectar con el gateway", a 5xx, …) stays visible as context. */}
+                {!result.fireOutcomeUnknown && (
+                  <>
+                    <Text className="text-xs text-danger dark:text-night-danger">
+                      No hay forma de deshacer esto.
+                    </Text>
+                    <View className="mt-2">
+                      <Button
+                        label="Disparar"
+                        onPress={() => setConfirmFire(true)}
+                        loading={fireAction.pending}
+                        disabled={fireAction.pending}
+                      />
+                    </View>
+                  </>
+                )}
                 {fireAction.error && <ActionError error={fireAction.error} />}
               </View>
             )}
