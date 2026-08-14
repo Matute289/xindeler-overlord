@@ -10,6 +10,7 @@ import { usePlayersQuery } from '@/features/players/usePlayersQuery';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
+import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
 import { TextField } from '@/ui/TextField';
 import { fonts } from '@/ui/theme';
@@ -55,7 +56,12 @@ export function OracleDryRunScreen() {
   const [xText, setXText] = useState('');
   const [yText, setYText] = useState('');
   const [zText, setZText] = useState('');
-  const [result, setResult] = useState<OracleTriggerResponse | null>(null);
+  const [result, setResult] = useState<{
+    response: OracleTriggerResponse;
+    target: OracleTarget;
+    fired: boolean;
+  } | null>(null);
+  const [confirmFire, setConfirmFire] = useState(false);
 
   // The result card describes the target that produced it, and nothing else on screen says which
   // target that was. Any edit to what would be submitted next — switching mode, picking a
@@ -114,6 +120,34 @@ export function OracleDryRunScreen() {
     return api.write.triggerOracleEvent(eventId, target, true, code, idempotencyKey);
   });
 
+  // Fires exactly what the operator previewed: `result.target` (frozen at the moment the dry-run
+  // succeeded), never a fresh `buildTarget()` read — Fire must never silently target something
+  // other than what the card currently shows. The one thing that CAN drift invisibly between the
+  // dry-run and this confirmation is the target player's online status, so the exact same
+  // `playersRef`-based re-check the dry-run path uses runs again here, immediately before sending
+  // — the more consequential the action, the more this must actually hold, not just usually hold.
+  const fireAction = useDestructiveAction((code, idempotencyKey) => {
+    if (!result) {
+      throw new Error('No hay una vista previa vigente.');
+    }
+    if (result.target.type === 'player' && !isOnline(playersRef.current, result.target.alias)) {
+      throw new Error('Este jugador ya no está conectado.');
+    }
+    return api.write.fireOracleEvent(eventId, result.target, code, idempotencyKey);
+  });
+
+  async function handleFire() {
+    const response = await fireAction.run();
+    if (response && result) {
+      setResult({ ...result, response, fired: true });
+    }
+  }
+
+  function handleConfirmFire() {
+    setConfirmFire(false);
+    void handleFire();
+  }
+
   const onlinePlayers = playersQuery.data ?? [];
   const selectedPlayerOffline =
     mode === 'player' && alias !== null && !isOnline(onlinePlayers, alias);
@@ -121,9 +155,11 @@ export function OracleDryRunScreen() {
 
   async function handleTrigger() {
     if (!canTrigger) return;
+    const target = buildTarget(onlinePlayers);
+    if (!target) return;
     clearResult();
     const response = await triggerAction.run();
-    if (response) setResult(response);
+    if (response) setResult({ response, target, fired: false });
   }
 
   if (!eventId) {
@@ -254,43 +290,63 @@ export function OracleDryRunScreen() {
             >
               Resultado
             </Text>
-            {/* The conditional mood of "Se generarían" was carrying the whole "nothing actually
-                happened" message on its own, straight after the same TOTP step-up modal used for
-                genuinely destructive lifecycle actions. Say it outright instead — and pre-position
-                the card for OC-34, where "this was a preview" vs "this actually happened" stops
-                being cosmetic. */}
             <Text
               className="mt-2 text-xs text-steel-muted dark:text-night-steel-muted"
               style={{ fontFamily: fonts.regular }}
             >
-              Simulación: no se generó nada en el mundo todavía.
+              {result.fired
+                ? '¡Disparado! Esto ya ocurrió en el mundo en vivo.'
+                : 'Simulación: no se generó nada en el mundo todavía.'}
             </Text>
             <Text
               className="mt-2 text-steel-light dark:text-night-steel-light"
               style={{ fontFamily: fonts.regular }}
             >
-              {`Se generarían: ${result.would_spawn}`}
+              {`Se generarían: ${result.response.would_spawn}`}
             </Text>
             <Text
               className="mt-1 text-steel-light dark:text-night-steel-light"
               style={{ fontFamily: fonts.regular }}
             >
-              {`Criaturas: ${result.bodies.join(', ')}`}
+              {`Criaturas: ${result.response.bodies.join(', ')}`}
             </Text>
             <Text
               className="mt-1 text-steel-light dark:text-night-steel-light"
               style={{ fontFamily: fonts.regular }}
             >
-              {`Posición resuelta: ${formatResolvedPos(result.resolved_pos)}`}
+              {`Posición resuelta: ${formatResolvedPos(result.response.resolved_pos)}`}
             </Text>
             <Text
               className="mt-1 text-steel-light dark:text-night-steel-light"
               style={{ fontFamily: fonts.regular }}
             >
-              {`Distancia al jugador más cercano: ${result.nearest_player_dist}`}
+              {`Distancia al jugador más cercano: ${result.response.nearest_player_dist}`}
             </Text>
+            {!result.fired && (
+              <View className="mt-4">
+                <Text className="text-xs text-danger dark:text-night-danger">
+                  No hay forma de deshacer esto.
+                </Text>
+                <View className="mt-2">
+                  <Button
+                    label="Disparar"
+                    onPress={() => setConfirmFire(true)}
+                    loading={fireAction.pending}
+                    disabled={fireAction.pending}
+                  />
+                </View>
+                {fireAction.error && <ActionError error={fireAction.error} />}
+              </View>
+            )}
           </View>
         )}
+        <ConfirmByTypingSheet
+          visible={confirmFire}
+          word="FIRE"
+          description="No hay forma de deshacer esto. Se va a generar el evento en el mundo en vivo, ahora."
+          onConfirm={handleConfirmFire}
+          onCancel={() => setConfirmFire(false)}
+        />
         <View className="h-12" />
       </ScrollView>
     </KeyboardAvoidingView>
