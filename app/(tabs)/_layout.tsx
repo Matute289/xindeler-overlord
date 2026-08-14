@@ -9,8 +9,8 @@ import { useBreakpoint } from '@/ui/useBreakpoint';
 import { fonts, useTheme } from '@/ui/theme';
 
 type Destination = {
-  href: '/' | '/players' | '/logs' | '/oracle' | '/more';
-  routeName: 'index' | 'players' | 'logs' | 'oracle' | 'more';
+  href: '/' | '/players' | '/logs' | '/chat' | '/oracle' | '/more';
+  routeName: 'index' | 'players' | 'logs' | 'chat' | 'oracle' | 'more';
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 };
@@ -19,6 +19,7 @@ const DESTINATIONS: Destination[] = [
   { href: '/', routeName: 'index', label: 'Status', icon: 'pulse-outline' },
   { href: '/players', routeName: 'players', label: 'Jugadores', icon: 'people-outline' },
   { href: '/logs', routeName: 'logs', label: 'Logs', icon: 'list-outline' },
+  { href: '/chat', routeName: 'chat', label: 'Chat', icon: 'chatbubbles-outline' },
   { href: '/oracle', routeName: 'oracle', label: 'ORACLE', icon: 'sparkles-outline' },
   { href: '/more', routeName: 'more', label: 'Más', icon: 'ellipsis-horizontal-outline' },
 ];
