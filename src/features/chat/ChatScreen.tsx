@@ -3,6 +3,9 @@ import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Text, View } from 'react-native';
 
 import type { ChatMessage } from '@/api/schemas';
+import { useEnvironment } from '@/config/EnvironmentContext';
+import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { gatewayErrorMessage } from '@/features/connectivity/gatewayErrorMessage';
 import { Empty } from '@/ui/Empty';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { fonts } from '@/ui/theme';
@@ -14,6 +17,7 @@ const SCROLL_BOTTOM_THRESHOLD_PX = 50;
 
 export function ChatScreen() {
   const query = useChatQuery();
+  const { environment } = useEnvironment();
   const [followTail, setFollowTail] = useState(true);
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   // Direction, not timing — the same fix OC-20 landed on after its own timing-based guard proved
@@ -55,7 +59,7 @@ export function ChatScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <Empty title="Chat" message={query.error.message} />;
+      return <GatewayErrorEmpty title="Chat" error={query.error} />;
     }
     return <Empty title="Chat" message="Cargando…" />;
   }
@@ -73,7 +77,9 @@ export function ChatScreen() {
       </View>
       {query.error && (
         <View className="items-center bg-danger px-4 py-1 dark:bg-night-danger">
-          <Text className="text-xs text-white">{query.error.message}</Text>
+          <Text className="text-xs text-white">
+            {gatewayErrorMessage(environment.id, query.error)}
+          </Text>
         </View>
       )}
       <FlatList

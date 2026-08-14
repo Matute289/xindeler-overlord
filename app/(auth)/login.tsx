@@ -2,8 +2,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 
-import { ApiError } from '@/api';
+import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { useEnvironment } from '@/config/EnvironmentContext';
+import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
+import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
 import { Screen } from '@/ui/Screen';
@@ -11,9 +14,10 @@ import { TextField } from '@/ui/TextField';
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const { environment } = useEnvironment();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
@@ -23,7 +27,7 @@ export default function LoginScreen() {
       const { challengeId } = await login(username, password);
       router.push({ pathname: '/totp', params: { challengeId } });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo conectar con el gateway');
+      setError(isApiError(err) ? err : new Error('No se pudo conectar con el gateway'));
     } finally {
       setLoading(false);
     }
@@ -61,7 +65,12 @@ export default function LoginScreen() {
             />
           </View>
           {error && (
-            <Text className="text-center text-sm text-danger dark:text-night-danger">{error}</Text>
+            <>
+              <Text className="text-center text-sm text-danger dark:text-night-danger">
+                {gatewayErrorMessage(environment.id, error)}
+              </Text>
+              {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
+            </>
           )}
           <Button
             label="Ingresar"

@@ -1,9 +1,18 @@
 // src/ui/Empty.tsx
+import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 
 import { fonts } from './theme';
 
-export function Empty({ title, message }: { title: string; message: string }) {
+export function Empty({
+  title,
+  message,
+  children,
+}: {
+  title: string;
+  message: string;
+  children?: ReactNode;
+}) {
   return (
     <View className="flex-1 items-center justify-center px-8">
       <Text
@@ -18,6 +27,7 @@ export function Empty({ title, message }: { title: string; message: string }) {
       >
         {message}
       </Text>
+      {children}
     </View>
   );
 }

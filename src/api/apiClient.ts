@@ -4,6 +4,7 @@ import { sessionStorage } from '../auth/sessionStorage';
 import { createAuthApi } from './authApi';
 import { createHttpClient } from './httpClient';
 import { createReadApi } from './readApi';
+import { createWriteApi } from './writeApi';
 
 export function createApiClient(baseUrl: string) {
   const http = createHttpClient(baseUrl, {
@@ -14,6 +15,7 @@ export function createApiClient(baseUrl: string) {
   return {
     auth: createAuthApi(http),
     read: createReadApi(http),
+    write: createWriteApi(http),
   };
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
 import type { Player } from '@/api/schemas';
+import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Empty } from '@/ui/Empty';
 import { fonts, useTheme } from '@/ui/theme';
 
@@ -26,7 +27,7 @@ export function PlayersScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <Empty title="Jugadores" message={query.error.message} />;
+      return <GatewayErrorEmpty title="Jugadores" error={query.error} />;
     }
     return <Empty title="Jugadores" message="Cargando…" />;
   }
