@@ -2,11 +2,8 @@ import { memo } from 'react';
 import { Text, View } from 'react-native';
 
 import type { ChatMessage } from '@/api/schemas';
+import { formatTime } from '@/ui/formatTime';
 import { fonts } from '@/ui/theme';
-
-function formatTime(ts: string): string {
-  return new Date(ts).toLocaleTimeString('es-AR', { hour12: false });
-}
 
 export const ChatMessageRow = memo(function ChatMessageRow({ message }: { message: ChatMessage }) {
   return (

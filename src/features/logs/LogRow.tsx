@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { LogLine } from '@/api/schemas';
+import { formatTime } from '@/ui/formatTime';
 import { fonts } from '@/ui/theme';
 
 const LEVEL_COLOR_CLASSNAME: Record<string, string> = {
@@ -11,10 +12,6 @@ const LEVEL_COLOR_CLASSNAME: Record<string, string> = {
   debug: 'text-steel-muted dark:text-night-steel-muted',
 };
 const DEFAULT_LEVEL_CLASSNAME = 'text-steel-light dark:text-night-steel-light';
-
-function formatTime(ts: string): string {
-  return new Date(ts).toLocaleTimeString('es-AR', { hour12: false });
-}
 
 export const LogRow = memo(function LogRow({ line }: { line: LogLine }) {
   const levelClassName = LEVEL_COLOR_CLASSNAME[line.level] ?? DEFAULT_LEVEL_CLASSNAME;
