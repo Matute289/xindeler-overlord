@@ -338,6 +338,17 @@ second operator already stopped the server while this one was mid-typing "STOP")
 precondition no longer holds, the sheet closes silently with no mutation sent, since the operator did
 nothing wrong.
 
+**Re-review fix, 2026-08-14:** for Stop specifically, the state check alone wasn't sufficient —
+`stopMode` is captured at press time (see above) and stays stale if `state` transitions while the
+sheet is open. A start completing (`'starting'` → `'running'`) while the operator is mid-typing
+"STOP" after pressing Detener during `'starting'` (capturing `stopMode: 'immediate'`) used to pass
+the precondition once `state === 'running'`, since `'running'` is independently valid for Stop — but
+then fired the stale `{ mode: 'immediate' }` hard-kill body against a now-fully-running server,
+contradicting the graceful-drain copy the sheet showed for `'running'`. The precondition for Stop is
+now mode-aware: it requires `(stopMode === 'immediate' && state === 'starting') ||
+(stopMode === 'graceful' && state === 'running')`, so a stale mode fails the check and the sheet
+closes silently, same as any other precondition mismatch.
+
 **`ConfirmByTypingSheet` hardening (second-round safety review, 2026-08-14, finding 5,
 defense-in-depth):** `src/ui/ConfirmByTypingSheet.tsx`'s Confirmar button was `disabled={typed !==
 word}` — an empty `word` prop evaluates that as `false` (enabled) the instant the sheet opens,

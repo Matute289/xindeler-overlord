@@ -105,12 +105,26 @@ function confirmDescription(action: ConfirmAction, stopMode: 'graceful' | 'immed
 // used to re-check at confirm-time that the state the operator saw when they tapped the button
 // hasn't changed underneath the open sheet (e.g. another client already stopped the server while
 // this one was mid-typing "STOP").
-function preconditionHolds(action: ConfirmAction, state: LifecycleState | undefined): boolean {
+//
+// Re-review fix, 2026-08-14: 'stop' also takes the `stopMode` captured at press time and requires
+// it still match what the CURRENT state would select. `state === 'running' || state === 'starting'`
+// alone isn't enough — a stale `stopMode === 'immediate'` captured while 'starting' would otherwise
+// pass this check once `state` becomes 'running' (a valid state for 'stop' in general), firing a
+// hard-kill body against a sheet the operator read describing a graceful drain. See `stopAction`'s
+// comment above for the full race.
+function preconditionHolds(
+  action: ConfirmAction,
+  state: LifecycleState | undefined,
+  stopMode: 'graceful' | 'immediate',
+): boolean {
   switch (action) {
     case 'restart':
       return state === 'running';
     case 'stop':
-      return state === 'running' || state === 'starting';
+      return (
+        (stopMode === 'immediate' && state === 'starting') ||
+        (stopMode === 'graceful' && state === 'running')
+      );
     case 'start':
       return state === 'stopped';
     case 'disconnectAll':
@@ -243,7 +257,7 @@ export function StatusScreen() {
     // true. If lifecycle state changed underneath the open sheet (e.g. another client already
     // stopped the server while this one was mid-typing), silently close without firing — the
     // precondition changed out from under the operator through no fault of their own.
-    if (confirmAction !== null && preconditionHolds(confirmAction, state)) {
+    if (confirmAction !== null && preconditionHolds(confirmAction, state, stopMode)) {
       if (confirmAction === 'restart') restartAction.run();
       if (confirmAction === 'stop') stopAction.run();
       if (confirmAction === 'start') startAction.run();
