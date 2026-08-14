@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import type { createHttpClient } from './httpClient';
-import type { DmEvent } from './schemas';
-import { StageOracleEventResponseSchema } from './schemas';
+import type { DmEvent, OracleTarget } from './schemas';
+import { StageOracleEventResponseSchema, OracleTriggerResponseSchema } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
@@ -79,6 +79,32 @@ export function createWriteApi(http: HttpClient) {
         '/api/v1/oracle/stage',
         { method: 'POST', body: { id, dm_event: dmEvent }, stepUpCode, idempotencyKey },
         StageOracleEventResponseSchema,
+      );
+    },
+
+    // `dryRun: true` is the TypeScript literal type, not `boolean` — deliberate, final-review
+    // finding 3. The plan's constraint is "no code path constructs a trigger request without
+    // `dry_run: true` hardcoded"; a `boolean` parameter is exactly such a path, one keystroke
+    // away from flipping the most dangerous parameter in the app with the compiler silent.
+    // Narrowed to the literal, any call site passing `false` is a compile error. OC-34 (fire)
+    // will need to widen this to `boolean` — that becomes a visible, reviewable signature change
+    // instead of an invisible argument flip.
+    triggerOracleEvent(
+      eventId: string,
+      target: OracleTarget,
+      dryRun: true,
+      stepUpCode: string,
+      idempotencyKey?: string,
+    ) {
+      return http.request(
+        '/api/v1/oracle/trigger',
+        {
+          method: 'POST',
+          body: { event_id: eventId, target, dry_run: dryRun },
+          stepUpCode,
+          idempotencyKey,
+        },
+        OracleTriggerResponseSchema,
       );
     },
   };
