@@ -25,6 +25,16 @@ the contract doc itself only says *"staged + loaded `DmEvent` ids and `EntityTem
 spelling out the exact JSON, so the mock is the concrete source of truth here, same as every other
 ticket this session that had to read the mock directly).
 
+**No step-up on this read**, despite `docs/reference/gateway-api-contract.md` §5's section header
+reading *"ORACLE (Phase 3) — all step-up authenticated"* — that header groups the whole section
+(including the two `GET` reads) under one line, which reads ambiguously. The mock resolves the
+ambiguity concretely: `tools/mock-gateway/server.js` mounts `/oracle/events` and `/oracle/presets`
+with `requireAuth` only, while `/oracle/stage`, `/oracle/trigger`, and `/oracle/enabled` each add
+`requireStepUp` on top — step-up gates the mutations, not the reads, matching every other endpoint
+in this app's contract (lifecycle's own reads in §3 were never step-up either). `useOracleEventsQuery`
+correctly has no `useStepUpAuth` involvement. Future ORACLE tickets (OC-30's `GET /oracle/presets` is
+the other read in this section) can rely on this same resolution without re-deriving it from the mock.
+
 No SSE event exists for ORACLE state changes (`StreamEventMap` — `status`/`log`/`chat`/`lifecycle`/
 `audit` only, confirmed by reading `src/stream/StreamClient.ts`). This is consistent with there being
 no live-triggering action shipped yet in this ticket (no stage button exists here — that's OC-30's
