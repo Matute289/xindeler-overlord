@@ -5,6 +5,7 @@ import {
   ChronicleResponseSchema,
   LogsResponseSchema,
   OracleEventsResponseSchema,
+  OraclePresetsResponseSchema,
   PlayersResponseSchema,
   StatusSchema,
 } from './schemas';
@@ -50,6 +51,14 @@ export function createReadApi(http: HttpClient) {
         '/api/v1/oracle/events',
         { method: 'GET' },
         OracleEventsResponseSchema,
+      );
+    },
+
+    getOraclePresets() {
+      return http.requestWithRetry(
+        '/api/v1/oracle/presets',
+        { method: 'GET' },
+        OraclePresetsResponseSchema,
       );
     },
   };

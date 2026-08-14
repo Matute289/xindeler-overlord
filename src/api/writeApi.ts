@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import type { createHttpClient } from './httpClient';
+import type { DmEvent } from './schemas';
+import { StageOracleEventResponseSchema } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
@@ -69,6 +71,14 @@ export function createWriteApi(http: HttpClient) {
         '/api/v1/broadcast',
         { method: 'POST', body: { message } },
         OkResponseSchema,
+      );
+    },
+
+    stageOracleEvent(id: string, dmEvent: DmEvent, stepUpCode: string, idempotencyKey?: string) {
+      return http.request(
+        '/api/v1/oracle/stage',
+        { method: 'POST', body: { id, dm_event: dmEvent }, stepUpCode, idempotencyKey },
+        StageOracleEventResponseSchema,
       );
     },
   };
