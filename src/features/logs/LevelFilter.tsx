@@ -4,6 +4,11 @@ import { fonts } from '@/ui/theme';
 
 const LEVELS = ['info', 'warn', 'error', 'debug'] as const;
 
+// Exported so `LogsScreen.tsx` can tell a recognized level (one with a chip, therefore
+// filterable) apart from an unanticipated one (no chip exists for it, so it must always display
+// regardless of which chips are toggled — see that file's filter logic).
+export const KNOWN_LEVELS = new Set<string>(LEVELS);
+
 type LevelFilterProps = {
   selected: Set<string> | null;
   onChange: (selected: Set<string> | null) => void;
