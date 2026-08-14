@@ -100,3 +100,33 @@ export const LifecycleEventSchema = z.object({
   seconds_left: z.number().optional(),
 });
 export type LifecycleEvent = z.infer<typeof LifecycleEventSchema>;
+
+export const DmEventSchema = z.object({
+  kind: z.enum(['spawn', 'weather']),
+  template_id: z.string().optional(),
+  intensity: z.number(),
+  radius: z.number(),
+  dimension_config: z.object({ biome_profile: z.string().optional() }).optional(),
+  atmosphere: z.object({ weather_effect: z.string().optional() }).optional(),
+});
+export type DmEvent = z.infer<typeof DmEventSchema>;
+
+export const OraclePresetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  dm_event: DmEventSchema,
+});
+export type OraclePreset = z.infer<typeof OraclePresetSchema>;
+export const OraclePresetsResponseSchema = z.array(OraclePresetSchema);
+
+export const DmEventDiffEntrySchema = z.object({
+  field: z.string(),
+  from: z.unknown(),
+  to: z.unknown(),
+});
+export const StageOracleEventResponseSchema = z.object({
+  loaded: z.boolean(),
+  sanitized: DmEventSchema,
+  diff: z.array(DmEventDiffEntrySchema),
+});
+export type StageOracleEventResponse = z.infer<typeof StageOracleEventResponseSchema>;

@@ -1,5 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Link } from 'expo-router';
 import { useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Empty } from '@/ui/Empty';
@@ -88,6 +90,20 @@ export function OracleEventsScreen() {
           ORACLE
         </Text>
       </View>
+      <Link href="/oracle-composer" asChild>
+        <Pressable
+          accessibilityRole="button"
+          className="mx-6 mt-4 flex-row items-center justify-between rounded-lg border border-steel-dark px-4 py-3 dark:border-night-steel-dark"
+        >
+          <Text
+            className="text-steel-light dark:text-night-steel-light"
+            style={{ fontFamily: fonts.semibold }}
+          >
+            Componer evento
+          </Text>
+          <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
+        </Pressable>
+      </Link>
       <Section title="Cargados" items={loaded} emptyText="Sin eventos cargados." />
       <Section title="En etapa" items={staged} emptyText="Nada en etapa." />
       {staged.length > 0 && (

@@ -137,6 +137,31 @@ throughout the draining phase.
 | `POST` | `/api/v1/oracle/trigger` | `{ event_id, target, dry_run }` → `{ would_spawn, bodies, resolved_pos, nearest_player_dist }` |
 | `POST` | `/api/v1/oracle/enabled` | `{ enabled }` — the ORACLE-events kill switch |
 
+**The `dm_event` shape the client emits — MOCK-DERIVED, UNRATIFIED.** A stronger caveat than this
+doc's overall PROPOSED status: the rest of §5 comes from the NH-75 design, but the fields and bounds
+below were read off `tools/mock-gateway` (`src/fixtures.js`, `src/oracleSanitizer.js`) because
+neither this doc nor NH-75's public surface pins an inner shape. OC-30/31's composer hard-depends on
+it. Ratify against the real `xindeler-zuul` gateway before pointing any environment profile at it —
+the real engine's `DmEvent` has additional nested structs this client does not send, and per NH-75 a
+`DmEvent` the engine cannot parse fails as a server-side log line the operator never sees.
+
+```ts
+{
+  kind: 'spawn' | 'weather',      // the only two values the mock's fixtures use
+  template_id?: string,           // sent only when kind === 'spawn'
+  intensity: number,              // 0–10
+  radius: number,                 // 1–100
+  dimension_config?: { biome_profile?: string },
+  atmosphere?: { weather_effect?: string },
+}
+```
+
+Bounds: `intensity` 0–10, `radius` 1–100 — both mirroring `sanitizeDmEvent()`'s own clamps exactly,
+which is why the stage response's `diff` is empty in practice. The client enforces them up front
+rather than relying on the server clamp. `kind`/`template_id` are not validated server-side at all
+today. `dimension_config`/`atmosphere` are the two fields invariant 4 below covers; the mock does
+not implement them, it passes them through its spread untouched.
+
 **Invariants the client must uphold (they are the whole safety story — NH-75 §9):**
 
 1. `target` is **always** an operator-chosen form field (player picker or explicit coords).
