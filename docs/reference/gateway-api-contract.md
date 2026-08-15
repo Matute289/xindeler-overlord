@@ -235,10 +235,28 @@ handling.
 
 ---
 
-## 7. Open items to settle with the gateway before Phase 2
+## 7. Push notifications ("server is down")
+
+| Method | Path | Body |
+|---|---|---|
+| `POST` | `/api/v1/push/register` | `{ expo_push_token, platform: "ios"\|"android" }` → 204 No Content |
+| `POST` | `/api/v1/push/unregister` | `{ expo_push_token }` → 204 No Content |
+
+CSRF-protected, no step-up (registering a device isn't destructive — nothing fires or is delivered by
+this action alone). The gateway relays to Expo's own push service (`https://exp.host/--/api/v2/push/send`)
+using platform credentials (APNs key, FCM service account) configured at the EAS-project level, not
+held by the gateway itself — see `xindeler-zuul`'s own `ZG-44` for the server-side design. This app
+never talks to APNs/FCM directly.
+
+The real gateway returns a bare `204 No Content` on both endpoints — confirmed 2026-08-15 against the
+real `xindeler-zuul` source (`server/src/push.rs`), not just its own backlog prose. The mock returns
+`200 { ok: true }` for consistency with this app's other write endpoints — dev-only difference, does
+not affect the client, which never reads either response body.
+
+---
+
+## 8. Open items to settle with the gateway before Phase 2
 
 - Exact `status` field names (this doc guesses; `/metrics` naming may leak through).
 - Whether `Idempotency-Key` is honoured or the client must guard against double-taps alone.
-- Whether push notifications ("server down") are gateway-initiated (needs APNs/FCM keys on the
-  VPS) or polled by the app. Deferred to Phase 6 either way.
 - Session token format (opaque vs JWT) — affects whether the app can render "expires in".

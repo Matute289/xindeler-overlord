@@ -17,6 +17,7 @@ const state = {
   recoveryTimers: null,
   streamClients: new Set(), // Set<express.Response> currently open on /api/v1/stream
   auditLog: [], // { ts, operator, action, payload, outcome, detail? }
+  pushTokens: [], // { operator, expoPushToken, platform, createdAt }
   oracleEnabled: true,
   oracleEvents: new Map(), // id -> { dm_event, status: 'staging' | 'loaded', stagedAt }
   lastBroadcastAt: 0,
