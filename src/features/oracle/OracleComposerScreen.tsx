@@ -1,12 +1,17 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { queryKeys } from '@/api/queryClient';
 import { DmEventSchema } from '@/api/schemas';
-import type { DmEvent, OraclePreset, StageOracleEventResponse } from '@/api/schemas';
+import type {
+  DmEvent,
+  EntityTemplate,
+  OraclePreset,
+  StageOracleEventResponse,
+} from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
@@ -46,13 +51,37 @@ function parseDraftParam(raw: string | undefined): DmEvent | null {
   }
 }
 
+// A `DmEvent.template_id` is an unconstrained string — nothing upstream (the schema, the chat
+// model, a hand-typed preset) guarantees it names a template that actually exists. Silently
+// keeping an unrecognized id would let it ride through `buildDmEvent()` unselected-looking in the
+// `ChipPicker` (which shows no chip active) while still staging — an LLM-authored draft is the
+// first source that can plausibly invent one. `templateId` state itself always holds the RAW
+// value (from a draft, a preset, or a manually-picked chip); resolution against the live
+// `entity_templates` list happens at render time via `resolvedTemplateId` below, not baked in at
+// set-time — so a value applied before the list has finished loading isn't permanently stuck
+// rejected once it does.
+function resolveTemplateId(
+  templateId: string | undefined | null,
+  templates: EntityTemplate[],
+): string | null {
+  if (!templateId) return null;
+  return templates.some((template) => template.id === templateId) ? templateId : null;
+}
+
 export function OracleComposerScreen() {
   const api = useApi();
   const { draft: draftParam } = useLocalSearchParams<{ draft?: string }>();
-  const draft = parseDraftParam(draftParam);
+  // Memoized so the re-apply block below (Finding 1) can compare `draft`'s identity against the
+  // previously-applied one — `parseDraftParam` would otherwise return a new object every render,
+  // which would make that comparison always "changed".
+  const draft = useMemo(() => parseDraftParam(draftParam), [draftParam]);
   const queryClient = useQueryClient();
   const eventsQuery = useOracleEventsQuery();
   const presetsQuery = useOraclePresetsQuery();
+  // Needed early (before the loading guard further down, which only exists after all hooks) so
+  // `resolvedTemplateId` below can be computed on every render, including one before
+  // `entity_templates` has finished loading — see the comment on `resolveTemplateId`.
+  const availableTemplates = eventsQuery.data?.entity_templates ?? [];
 
   const [search, setSearch] = useState('');
   const [id, setId] = useState(() => (draft ? slugify(`oracle_chat_${Date.now()}`) : ''));
@@ -66,6 +95,33 @@ export function OracleComposerScreen() {
   const [weatherEffect, setWeatherEffect] = useState(() => draft?.atmosphere?.weather_effect ?? '');
   const [stageResult, setStageResult] = useState<StageOracleEventResponse | null>(null);
 
+  // Finding 1 (OC-42 fix round): at phone width, `oracle-composer` is a sibling route inside the
+  // same `<Tabs>` navigator as `oracle-chat` (see `app/(tabs)/_layout.tsx`), so `router.push` to it
+  // degrades to a NAVIGATE that reuses the already-mounted screen instance instead of remounting —
+  // the lazy `useState` initializers above only run once and would never see a second draft.
+  // Adjusted during render rather than in a `useEffect` (React's own sanctioned pattern for this —
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes,
+  // same idiom as useLifecycleState.ts and StatusScreen.tsx elsewhere in this app; an effect that
+  // calls setState unconditionally also trips this project's `react-hooks/set-state-in-effect`
+  // lint rule). Idempotent and self-terminating: once `setAppliedDraft(draft)` lands, `draft ===
+  // appliedDraft` on the next render and this block no longer fires for the same draft — it's
+  // redundant-but-harmless on a genuine fresh mount (the initializers above already set the same
+  // values). `id`'s suffix is a per-mount counter, not `Date.now()` — this block runs during
+  // render, and calling an impure function (`Date.now()`/`Math.random()`) directly in a render body
+  // trips `react-hooks/purity` (https://react.dev/reference/rules/components-and-hooks-must-be-
+  // pure); the counter is just for collision-avoidance flavor anyway, never shown to or typed by
+  // the operator before this fires, and the id-collision warning further down is the actual
+  // safety net if two suggested ids ever did coincide.
+  const [appliedDraft, setAppliedDraft] = useState<DmEvent | null>(null);
+  const [applySeq, setApplySeq] = useState(0);
+  if (draft && draft !== appliedDraft) {
+    const nextSeq = applySeq + 1;
+    setAppliedDraft(draft);
+    setApplySeq(nextSeq);
+    setId(slugify(`oracle_chat_${nextSeq}`));
+    applyDmEvent(draft);
+  }
+
   // The id field holds the on-type form (trailing separator kept, so multi-word ids stay
   // typeable); the final, filesystem-safe form is derived here and is what actually gets sent,
   // validated and collision-checked.
@@ -75,6 +131,11 @@ export function OracleComposerScreen() {
   const intensityValid =
     intensity !== null && intensity >= INTENSITY_MIN && intensity <= INTENSITY_MAX;
   const radiusValid = radius !== null && radius >= RADIUS_MIN && radius <= RADIUS_MAX;
+  // Resolved fresh every render (not baked into `templateId` state at set-time) so a draft/preset
+  // applied before `entity_templates` has finished loading self-corrects the moment it does,
+  // instead of staying permanently stuck rejected from a one-time snapshot taken while the list
+  // was still empty.
+  const resolvedTemplateId = resolveTemplateId(templateId, availableTemplates);
 
   // Single source of truth for "is this form stageable": returns the request body only when every
   // field is genuinely valid, `null` otherwise. No casts and no `??` fallbacks — a missing or
@@ -85,10 +146,12 @@ export function OracleComposerScreen() {
     if (stagedId === '' || kind === null) return null;
     if (intensity === null || !intensityValid) return null;
     if (radius === null || !radiusValid) return null;
-    if (kind === 'spawn' && templateId === null) return null;
+    if (kind === 'spawn' && resolvedTemplateId === null) return null;
     return {
       kind,
-      ...(kind === 'spawn' && templateId !== null ? { template_id: templateId } : {}),
+      ...(kind === 'spawn' && resolvedTemplateId !== null
+        ? { template_id: resolvedTemplateId }
+        : {}),
       intensity,
       radius,
       ...(biomeProfile.trim() ? { dimension_config: { biome_profile: biomeProfile.trim() } } : {}),
@@ -106,14 +169,24 @@ export function OracleComposerScreen() {
 
   const canStage = buildDmEvent() !== null && !stageAction.pending;
 
+  // Shared by `applyPreset` and the draft-apply block above — sets every field that's actually
+  // part of a `DmEvent`. `id` stays out of this on purpose: a preset's collision-avoiding id is
+  // derived from the preset's own id (`${preset.id}_${now}`), a chat draft's from a per-mount
+  // counter — two different, deliberate naming schemes, so each caller sets `id` itself before
+  // calling this. `templateId` is set to the event's RAW `template_id` (not resolved here) — see
+  // the comment on `resolveTemplateId`.
+  function applyDmEvent(event: DmEvent) {
+    setKind(event.kind);
+    setTemplateId(event.template_id ?? null);
+    setIntensityText(String(event.intensity));
+    setRadiusText(String(event.radius));
+    setBiomeProfile(event.dimension_config?.biome_profile ?? '');
+    setWeatherEffect(event.atmosphere?.weather_effect ?? '');
+  }
+
   function applyPreset(preset: OraclePreset, now: number) {
     setId(slugify(`${preset.id}_${now}`));
-    setKind(preset.dm_event.kind);
-    setTemplateId(preset.dm_event.template_id ?? null);
-    setIntensityText(String(preset.dm_event.intensity));
-    setRadiusText(String(preset.dm_event.radius));
-    setBiomeProfile(preset.dm_event.dimension_config?.biome_profile ?? '');
-    setWeatherEffect(preset.dm_event.atmosphere?.weather_effect ?? '');
+    applyDmEvent(preset.dm_event);
   }
 
   async function handleStage() {
@@ -257,7 +330,7 @@ export function OracleComposerScreen() {
             </Text>
             <ChipPicker
               options={templates.map((template) => ({ value: template.id, label: template.name }))}
-              selected={templateId}
+              selected={resolvedTemplateId}
               onSelect={setTemplateId}
             />
           </View>
