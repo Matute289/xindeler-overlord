@@ -1,7 +1,9 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ListRenderItem, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
+import type { DmEvent } from '@/api/schemas';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
@@ -113,9 +115,13 @@ export function OracleChatScreen() {
     [retryTurn, activeThread.id],
   );
 
+  const handleApply = useCallback((draft: DmEvent) => {
+    router.push({ pathname: '/oracle-composer', params: { draft: JSON.stringify(draft) } });
+  }, []);
+
   const renderItem = useCallback<ListRenderItem<ChatTurn>>(
-    ({ item }) => <ChatTurnRow turn={item} onRetry={handleRetry} />,
-    [handleRetry],
+    ({ item }) => <ChatTurnRow turn={item} onRetry={handleRetry} onApply={handleApply} />,
+    [handleRetry, handleApply],
   );
 
   return (

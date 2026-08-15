@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { queryKeys } from '@/api/queryClient';
+import { DmEventSchema } from '@/api/schemas';
 import type { DmEvent, OraclePreset, StageOracleEventResponse } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
@@ -35,20 +36,34 @@ function parseNumeric(text: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+function parseDraftParam(raw: string | undefined): DmEvent | null {
+  if (!raw) return null;
+  try {
+    const parsed = DmEventSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export function OracleComposerScreen() {
   const api = useApi();
+  const { draft: draftParam } = useLocalSearchParams<{ draft?: string }>();
+  const draft = parseDraftParam(draftParam);
   const queryClient = useQueryClient();
   const eventsQuery = useOracleEventsQuery();
   const presetsQuery = useOraclePresetsQuery();
 
   const [search, setSearch] = useState('');
-  const [id, setId] = useState('');
-  const [kind, setKind] = useState<DmEvent['kind'] | null>(null);
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [intensityText, setIntensityText] = useState('5');
-  const [radiusText, setRadiusText] = useState('10');
-  const [biomeProfile, setBiomeProfile] = useState('');
-  const [weatherEffect, setWeatherEffect] = useState('');
+  const [id, setId] = useState(() => (draft ? slugify(`oracle_chat_${Date.now()}`) : ''));
+  const [kind, setKind] = useState<DmEvent['kind'] | null>(() => draft?.kind ?? null);
+  const [templateId, setTemplateId] = useState<string | null>(() => draft?.template_id ?? null);
+  const [intensityText, setIntensityText] = useState(() => (draft ? String(draft.intensity) : '5'));
+  const [radiusText, setRadiusText] = useState(() => (draft ? String(draft.radius) : '10'));
+  const [biomeProfile, setBiomeProfile] = useState(
+    () => draft?.dimension_config?.biome_profile ?? '',
+  );
+  const [weatherEffect, setWeatherEffect] = useState(() => draft?.atmosphere?.weather_effect ?? '');
   const [stageResult, setStageResult] = useState<StageOracleEventResponse | null>(null);
 
   // The id field holds the on-type form (trailing separator kept, so multi-word ids stay
@@ -153,6 +168,14 @@ export function OracleComposerScreen() {
         >
           Componer evento
         </Text>
+        {draft && (
+          <Text
+            className="mt-2 text-xs text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.regular }}
+          >
+            Prellenado desde una propuesta de ORACLE — revisá antes de guardar.
+          </Text>
+        )}
 
         <Text
           className="mt-6 text-sm text-steel-muted dark:text-night-steel-muted"
