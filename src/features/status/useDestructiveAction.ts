@@ -48,7 +48,25 @@ export function useDestructiveAction<T>(
       // prompted) code — the client-side 90s cache and the server-side 5-minute window are two
       // different things, and re-establishing the window costs one extra request but keeps the
       // window fresh for exactly as long as the write that's about to use it needs it to be.
-      await api.auth.stepUp(code);
+      try {
+        await api.auth.stepUp(code);
+      } catch (err) {
+        // A rejected TOTP code fails THIS call with `401` (matching the real gateway's own
+        // `rejected()` status for a bad code here — see docs/reference/gateway-api-contract.md
+        // §2.1), not the `403` the write-call retry below checks for. Fix, discovered live during
+        // OC-54 Task 2: without this branch, a wrong code propagated straight to the outer catch
+        // AND stayed cached in `StepUpContext` for its full 90s window, so every subsequent tap —
+        // this run() included, had it not retried here — silently resent the same known-bad code
+        // with no re-prompt at all. `requestStepUp({ forceFresh: true })` both discards that
+        // cached value and re-prompts, so a mistyped code recovers on the very next attempt
+        // instead of going silent for up to 90 seconds.
+        if (isApiError(err) && err.status === 401) {
+          const freshCode = await requestStepUp({ forceFresh: true });
+          await api.auth.stepUp(freshCode);
+        } else {
+          throw err;
+        }
+      }
       let result: T;
       try {
         result = await call(idempotencyKey);
