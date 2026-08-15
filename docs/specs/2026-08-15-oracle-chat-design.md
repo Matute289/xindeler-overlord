@@ -12,7 +12,7 @@ against at once, and once actual visual direction exists to build toward.
 This is not "skip styling" — the screen must be usable and readable. It's "don't invent chat-app
 visual language now." Concretely: **every rendered chat turn goes through one small presentational
 component, `ChatTurnRow`**, so a later visual pass has exactly one file to restyle per message type
-and never has to touch the streaming/state logic in `useOracleChatStream` or the screen's own layout
+and never has to touch the streaming/state logic in `useOracleChatThreads` or the screen's own layout
 code. This structural separation is what makes "retrofit the visuals later" cheap instead of a
 rewrite — it's the actual mechanism behind "documentar todo para que sea más fácil integrar lo
 visual", not just a comment saying so.
@@ -72,13 +72,30 @@ No `GET /oracle/chat/threads` or per-thread history endpoint exists in the contr
 there is nothing to fetch a thread's prior turns from. Per this session's "the mock is the concrete
 build target" discipline, this ticket does not invent a persistence layer (AsyncStorage, a new
 gateway endpoint) the mock can't support and this ticket can't verify against. **Threads are
-in-memory, scoped to the current app session**: a `thread_id` (a client-generated UUID) is created on
-"Nueva conversación" and holds its turns for as long as the screen/app stays mounted; navigating away
-and back within the same session preserves them (state lives in the screen's own React state, not
-lost on route change since it's held above the `FlatList`), but a full app reload starts fresh. This
-honestly matches what the mock can prove, and is a reasonable, revisitable scope cut given a real
-persistence design (what to store, for how long, whose device) is its own product decision — noted
-as a future gap, not silently glossed over.
+in-memory and scoped to `OracleChatScreen`'s own lifetime**: a `thread_id` (a client-generated UUID)
+is created on "Nueva conversación" and holds its turns for as long as that screen stays mounted. A
+full app reload always starts fresh. This honestly matches what the mock can prove, and is a
+reasonable, revisitable scope cut given a real persistence design (what to store, for how long,
+whose device) is its own product decision — noted as a future gap, not silently glossed over.
+
+**Known limitation — navigating away does NOT reliably preserve threads.** An earlier draft of this
+section claimed threads survive "navigating away and back within the same session ... since it's
+held above the `FlatList`"; that reasoning is wrong and OC-41's final review corrected it. The state
+lives above the `FlatList` but still *inside* `OracleChatScreen`, so what actually decides survival
+is whether the navigator keeps the route mounted:
+
+- **Phone-width layout** (`app/(tabs)/_layout.tsx`'s `<Tabs>`): the route stays mounted when you
+  switch tabs, so threads do survive navigating away and back.
+- **Wide/sidebar layout** (`SidebarLayout`, which renders `<Slot />`): `expo-router`'s slot
+  navigator only keeps the currently-focused route mounted, so leaving `/oracle-chat` unmounts
+  `OracleChatScreen` and destroys every thread. On desktop web — the layout this feature is most
+  used on — thread state does not survive navigation.
+
+Hoisting `useOracleChatThreads`'s state into a provider above the navigator (mirroring
+`StepUpProvider`/`StreamProvider`) would fix this and is a reasonable future improvement. It was
+explicitly **not** done in OC-41 or its fix wave: it is an architecture change, not a bug fix, and
+nothing in this ticket's scope depends on it. Recorded here as a known limitation so no future
+reader takes the old claim at face value.
 
 ## The screen
 

@@ -2,6 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { memo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { ActionError } from '@/features/connectivity/ActionError';
 import { fonts } from '@/ui/theme';
 
 import type { ChatTurn } from './types';
@@ -11,9 +12,16 @@ export const ChatTurnRow = memo(function ChatTurnRow({
   onRetry,
 }: {
   turn: ChatTurn;
-  onRetry: () => void;
+  // Takes the turn id rather than being a pre-bound zero-arg closure: a fresh
+  // `() => retryTurn(threadId, turn.id)` arrow is rebuilt on every `renderItem` call, which made
+  // this component's `memo()` a no-op. The screen hands down one stable callback instead.
+  onRetry: (turnId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // A failed turn's partial text is not a reply — the stream never terminated, so whatever
+  // arrived is a truncated fragment. Rendering it identically to a completed reply (and letting
+  // it be copied out of the app) contradicts the hook's own failure classification.
+  const failed = turn.status === 'failed';
 
   async function handleCopy() {
     await Clipboard.setStringAsync(turn.text);
@@ -29,19 +37,29 @@ export const ChatTurnRow = memo(function ChatTurnRow({
       >
         {turn.role === 'operator' ? 'Operador' : 'ORACLE'}
       </Text>
-      <Text
-        className="mt-0.5 text-steel-light dark:text-night-steel-light"
-        style={{ fontFamily: fonts.regular, flexShrink: 1 }}
-      >
-        {turn.text}
-      </Text>
+      {!failed && (
+        <Text
+          className="mt-0.5 text-steel-light dark:text-night-steel-light"
+          style={{ fontFamily: fonts.regular, flexShrink: 1 }}
+        >
+          {turn.text}
+        </Text>
+      )}
 
-      {turn.status === 'failed' && (
+      {failed && (
         <View className="mt-2">
-          <Text className="text-xs text-danger dark:text-night-danger">
-            No se pudo completar esta respuesta.
-          </Text>
-          <Pressable onPress={onRetry} accessibilityRole="button" className="mt-1">
+          {turn.error ? (
+            <ActionError error={turn.error} />
+          ) : (
+            <Text className="text-center text-xs text-danger dark:text-night-danger">
+              No se pudo completar esta respuesta.
+            </Text>
+          )}
+          <Pressable
+            onPress={() => onRetry(turn.id)}
+            accessibilityRole="button"
+            className="mt-1 items-center"
+          >
             <Text
               className="text-accent-cyan dark:text-night-accent-cyan"
               style={{ fontFamily: fonts.semibold }}
@@ -89,7 +107,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
         </View>
       )}
 
-      {turn.status !== 'streaming' && turn.text.length > 0 && (
+      {!failed && turn.status !== 'streaming' && turn.text.length > 0 && (
         <Pressable onPress={handleCopy} accessibilityRole="button" className="mt-2">
           <Text
             className="text-xs text-steel-muted dark:text-night-steel-muted"

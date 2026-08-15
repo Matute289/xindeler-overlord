@@ -6,6 +6,10 @@ export type ChatTurn = {
   text: string;
   status: 'streaming' | 'complete' | 'failed';
   draft: DmEvent | null;
+  // The actual error that failed this turn, kept so the row can render it through the app-wide
+  // `gatewayErrorMessage`/`ActionError` pattern (VPN diagnosis included) instead of a hardcoded
+  // string that tells the operator nothing. Always `null` unless `status === 'failed'`.
+  error: Error | null;
 };
 
 export type ChatThread = {

@@ -185,7 +185,11 @@ git commit -m "feat(oc41): oracle chat token schema, streaming client, turn/thre
 - Produces: `useOracleChatThreads(): { threads: ChatThread[], activeThreadId: string,
   setActiveThreadId: (id: string) => void, createThread: () => void, send: (threadId: string, text:
   string) => Promise<void>, retryTurn: (threadId: string, assistantTurnId: string) => Promise<void>,
-  sending: boolean }`; `ChatTurnRow({turn, onCopy, onRetry}): JSX.Element` — both consumed by Task 3.
+  sending: boolean }`; `ChatTurnRow({turn, onRetry}): JSX.Element` — both consumed by Task 3.
+  (Corrected in OC-41's final fix wave: there is no `onCopy` prop — copying is `ChatTurnRow`'s own
+  local concern, written straight to `expo-clipboard`. `onRetry` takes the turn id,
+  `(turnId: string) => void`, so the screen hands down one stable callback rather than rebuilding a
+  zero-arg closure per row on every render.)
 
 - [ ] **Step 1: Write `src/features/oracleChat/useOracleChatThreads.ts`**
 
