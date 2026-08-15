@@ -85,12 +85,17 @@ is entirely a gateway-internal detail — the app must never see or store an `au
 | `POST` | `/api/v1/step-up` | `{ totp_code }` → `204` on success |
 
 Bare path, **not** nested under `/api/v1/auth/`, unlike every other endpoint in this section —
-matches the real `xindeler-zuul` router (`web.rs`) exactly. Requires an already-valid session
-(bearer or cookie) plus the `x-csrf-token` header like any other mutating request (§1); a
-successful call opens a 5-minute step-up window on that session (`STEP_UP_TTL_SECS` in the real
-gateway's `session.rs`), during which every destructive endpoint in §4/§5 accepts writes with no
-further step-up signal at all. Wrong or missing code → `401 invalid_credentials` (`rejected()` on
-the real gateway). A destructive write outside a step-up window → `403 "step-up required"`.
+matches the real `xindeler-zuul` router (`web.rs`) exactly. Requires an already-valid session —
+the real gateway's `AuthenticatedOperator` extractor reads the session **cookie only** here
+(`auth_extractor.rs`), not the bearer header the rest of this doc describes as an alternative
+(final-review correction, 2026-08-15) — plus the `x-csrf-token` header like any other mutating
+request (§1); a successful call opens a 5-minute step-up window on that session
+(`STEP_UP_TTL_SECS` in the real gateway's `session.rs`), during which every destructive endpoint
+in §4/§5 accepts writes with no further step-up signal at all. Wrong or missing code → `401`
+(mock: JSON `invalid_totp`; real gateway: plain-text "invalid credentials" via `rejected()`, no
+parseable code at all — corrected 2026-08-15, this doc previously overstated it as a JSON
+`invalid_credentials` code). A destructive write outside a step-up window → `403 "step-up
+required"`.
 
 **Client rule:** `useDestructiveAction` calls this endpoint itself, transparently, immediately
 before every destructive write — the operator only ever sees the existing TOTP prompt, never a
@@ -101,6 +106,16 @@ every destructive route are **plain text**, not this doc's own §1 JSON envelope
 client already degrades safely (`httpClient.ts`'s envelope parse falls back to a generic message
 on a non-JSON body) but not legibly. Separate, pre-existing, cross-cutting mismatch — not fixed by
 OC-54, not yet ticketed.
+
+⚠️ **Confirmed 2026-08-15 (OC-54 final review) that step-up is not actually limited to §4/§5.**
+The real gateway also step-up-gates `GET /api/v1/audit` (§3 — an aggregated view of every
+operator's destructive history, `console.rs`) and `POST /api/v1/broadcast` (§4's own table below
+— `lifecycle.rs`), neither of which this app currently routes through step-up: `/audit` is called
+as a plain unguarded `GET` (`readApi.ts`), and `/broadcast` is called directly
+(`api.write.broadcastMessage()`, `BroadcastComposer.tsx`), bypassing `useDestructiveAction`
+entirely. Both will `403` against the real gateway. Not fixed by OC-54 — *which* endpoints require
+step-up is explicitly out of this ticket's scope — flagged here so this doc stops asserting
+"reads are session-only," which is no longer true. Real follow-up work, not yet ticketed.
 
 ---
 
@@ -114,6 +129,9 @@ OC-54, not yet ticketed.
 | `GET` | `/api/v1/chat?since=<rfc3339>` | in-game chat history (from `/chat/v1/history`) |
 | `GET` | `/api/v1/chronicle?limit=N` | ORACLE chronicle tail (in-memory server-side, resets on restart) |
 | `GET` | `/api/v1/audit?limit=N` | durable gateway audit rows: who, when, action, payload, outcome |
+
+⚠️ `GET /api/v1/audit` is step-up-gated on the real gateway, unlike every other read on this page
+— see §2.1's note. This app calls it unguarded today.
 
 ### 3.1 Live stream
 
@@ -145,7 +163,7 @@ see the client spec §5.2. Do not assume the browser `EventSource` global exists
 | `POST` | `/api/v1/server/restart` | `{ seconds, reason }` — gateway orchestrates stop→wait→start |
 | `POST` | `/api/v1/server/cancel_shutdown` | `{}` |
 | `POST` | `/api/v1/server/disconnect_all` | `{}` |
-| `POST` | `/api/v1/broadcast` | `{ message }` — not step-up, but rate-limited |
+| `POST` | `/api/v1/broadcast` | `{ message }` — rate-limited; **step-up-gated on the real gateway** (corrected 2026-08-15, see §2.1) even though this app doesn't currently send one here |
 
 ⚠️ **Restart is two steps, not one.** The unit is `Restart=on-failure`, so a graceful shutdown
 exits 0 and systemd will *not* bring it back (NH-75 §1.3, §4.2). The gateway owns the

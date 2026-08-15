@@ -9,11 +9,14 @@ export function useDestructiveAction<T>(
   call: (idempotencyKey: string) => Promise<T>,
   // Additive, opt-in — every existing call site omits this and keeps behaving exactly as before
   // (cached step-up code reused when still fresh). `forceFreshStepUp` exists for actions
-  // consequential enough that they must never silently ride a step-up obtained for a DIFFERENT,
-  // earlier action — OC-34's Fire is the first such action: it's typically invoked seconds after
-  // a dry-run that just populated the step-up cache, and without this option Fire would almost
-  // always skip a fresh TOTP prompt, collapsing its intended "step-up AND typing FIRE" double
-  // gate down to just the typing.
+  // consequential enough that they must never silently skip the operator-facing TOTP PROMPT
+  // because a DIFFERENT, earlier action's code is still sitting in `StepUpContext`'s 90s client
+  // cache — OC-34's Fire is the first such action: it's typically invoked seconds after a dry-run
+  // that just populated that cache, and without this option Fire would almost always skip the
+  // prompt, collapsing its intended "step-up AND typing FIRE" double gate down to just the
+  // typing. (OC-54: the SERVER only ever sees one 5-minute window per session regardless of which
+  // action opened it — this option controls the client-side prompt/cache only, not a
+  // server-side per-action grant.)
   options?: { forceFreshStepUp?: boolean },
 ) {
   const api = useApi();
@@ -77,7 +80,12 @@ export function useDestructiveAction<T>(
         // HTTP status survives either shape. A CSRF-related 403 would also trigger one wasted
         // retry here before its real error surfaces; accepted, since the retry is capped at one
         // attempt and every write already requires a valid CSRF header to reach this point.
-        if (isApiError(err) && err.status === 403) {
+        // Excludes `oracle_disabled` explicitly — final-review finding 1, 2026-08-15: ORACLE's
+        // kill switch also returns a legitimate, unrelated-to-step-up 403
+        // (tools/mock-gateway/src/routes/oracleTrigger.js, oracleStage.js) that a step-up retry
+        // can never fix — retrying it force-prompts the operator for a TOTP code that has nothing
+        // to do with the actual failure, then resends an identical, identically-failing write.
+        if (isApiError(err) && err.status === 403 && err.code !== 'oracle_disabled') {
           const freshCode = await requestStepUp({ forceFresh: true });
           await api.auth.stepUp(freshCode);
           result = await call(idempotencyKey);

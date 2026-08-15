@@ -9,7 +9,8 @@ that: request a code, attach it as a header, retry once with a fresh header if t
 
 The real `xindeler-zuul` gateway (confirmed against its actual merged source tonight, discovered while
 reviewing OC-52) **does not read that header on any route.** It uses a different mechanism entirely:
-`POST /auth/step-up` (`login.rs:208-255`) takes `{ totp_code }`, verifies it, and — on success — calls
+`POST /step-up` (bare, not `/auth/step-up` — corrected 2026-08-15, final review; `login.rs:208-255`)
+takes `{ totp_code }`, verifies it, and — on success — calls
 `session::mark_stepped_up`, which sets a `step_up_until` timestamp **on the session itself**
 (`session.rs:186`, a 5-minute window, `STEP_UP_TTL_SECS`). Every destructive route then checks
 `session::is_stepped_up(db, token)` (`lifecycle.rs:213-221`) — a plain boolean read against session

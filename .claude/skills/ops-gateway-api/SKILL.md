@@ -32,8 +32,11 @@ the contract, add it to the mock in the same PR — an un-mocked endpoint is an 
 4. **Step-up (`POST /api/v1/step-up`, session-scoped) before every destructive call.** Lifecycle
    writes and all ORACLE writes. Call `/api/v1/step-up` with a fresh TOTP code to open a 5-minute
    window on the session, then send the write itself with no extra header — the real gateway does
-   not read a per-request step-up header on any route (confirmed 2026-08-15, OC-54). Reads are
-   session-only.
+   not read a per-request step-up header on any route (confirmed 2026-08-15, OC-54). ⚠️ NOT
+   actually limited to writes: the real gateway also step-up-gates `GET /api/v1/audit` and `POST
+   /api/v1/broadcast` (confirmed 2026-08-15, OC-54 final review) — this app doesn't route either
+   through step-up today and will `403` against the real gateway. Not yet fixed; see
+   `gateway-api-contract.md` §2.1.
 5. **Never put a token in `localStorage`/`AsyncStorage`.** `expo-secure-store` on native; an
    `HttpOnly` cookie from the gateway on web. Two backends, one interface.
 6. **Timeouts are short and explicit.** A wedged game server is exactly when the console is needed;

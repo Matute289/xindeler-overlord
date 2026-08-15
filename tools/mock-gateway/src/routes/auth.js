@@ -46,6 +46,10 @@ router.post('/totp', (req, res) => {
   res.json(issueSession(res, challenge.username));
 });
 
+// Deletes and reissues the session, dropping `steppedUpUntil` along with it (a fresh session has
+// no window yet) — immaterial in practice, since `useDestructiveAction` re-establishes the window
+// via `/api/v1/step-up` immediately before every write regardless. Noted so a future reader
+// doesn't mistake this for a bug (final-review Minor, 2026-08-15).
 router.post('/refresh', requireAuth, (req, res) => {
   state.sessions.delete(req.token);
   res.json(issueSession(res, req.operator));
