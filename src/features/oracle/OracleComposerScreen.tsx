@@ -84,7 +84,11 @@ export function OracleComposerScreen() {
   const availableTemplates = eventsQuery.data?.entity_templates ?? [];
 
   const [search, setSearch] = useState('');
-  const [id, setId] = useState(() => (draft ? slugify(`oracle_chat_${Date.now()}`) : ''));
+  // Intentionally does NOT derive from `draft` here, even on a genuine fresh mount — the
+  // render-time re-apply block below (Finding 1) always runs first when `draft` is present and
+  // sets `id` itself via the same `applySeq`-seeded counter, so a value computed in this
+  // initializer would only ever be visible for a fraction of a render before being overwritten.
+  const [id, setId] = useState('');
   const [kind, setKind] = useState<DmEvent['kind'] | null>(() => draft?.kind ?? null);
   const [templateId, setTemplateId] = useState<string | null>(() => draft?.template_id ?? null);
   const [intensityText, setIntensityText] = useState(() => (draft ? String(draft.intensity) : '5'));
@@ -106,14 +110,22 @@ export function OracleComposerScreen() {
   // lint rule). Idempotent and self-terminating: once `setAppliedDraft(draft)` lands, `draft ===
   // appliedDraft` on the next render and this block no longer fires for the same draft — it's
   // redundant-but-harmless on a genuine fresh mount (the initializers above already set the same
-  // values). `id`'s suffix is a per-mount counter, not `Date.now()` — this block runs during
-  // render, and calling an impure function (`Date.now()`/`Math.random()`) directly in a render body
-  // trips `react-hooks/purity` (https://react.dev/reference/rules/components-and-hooks-must-be-
-  // pure); the counter is just for collision-avoidance flavor anyway, never shown to or typed by
-  // the operator before this fires, and the id-collision warning further down is the actual
-  // safety net if two suggested ids ever did coincide.
+  // values). `id`'s suffix comes from `applySeq`, a counter SEEDED from `Date.now()` via a lazy
+  // `useState` initializer — a lazy initializer runs exactly once, at mount, so it's exempt from
+  // `react-hooks/purity` (https://react.dev/reference/rules/components-and-hooks-must-be-pure),
+  // same as the other lazy initializers above (`kind`, `templateId`, etc.); this render-body `if`
+  // block only ever does plain arithmetic (`applySeq + 1`) on it afterward, which stays pure.
+  // Desktop width unmounts and remounts this entire screen on every navigation (`SidebarLayout`
+  // renders `<Slot/>`), so a counter that instead started at a fixed value on every mount would
+  // suggest `oracle_chat_1` on literally every desktop apply — making a silent overwrite of the
+  // previously-staged event the DEFAULT outcome of a second apply, not an edge case. Seeding from a
+  // fresh timestamp per mount keeps the first suggestion on a new instance as unique as the old
+  // `Date.now()`-based one was, while still incrementing distinctly across repeated applies within
+  // the same still-mounted instance (the phone-width case this block exists to fix). The
+  // id-collision warning further down remains the actual safety net if two suggested ids ever did
+  // coincide.
   const [appliedDraft, setAppliedDraft] = useState<DmEvent | null>(null);
-  const [applySeq, setApplySeq] = useState(0);
+  const [applySeq, setApplySeq] = useState(() => Date.now());
   if (draft && draft !== appliedDraft) {
     const nextSeq = applySeq + 1;
     setAppliedDraft(draft);
