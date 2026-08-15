@@ -1,7 +1,9 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ListRenderItem, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
+import type { DmEvent } from '@/api/schemas';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
@@ -10,6 +12,7 @@ import { fonts } from '@/ui/theme';
 
 import { ChatTurnRow } from './ChatTurnRow';
 import type { ChatTurn } from './types';
+import { useOracleBudgetQuery } from './useOracleBudgetQuery';
 import { useOracleChatThreads } from './useOracleChatThreads';
 
 const SCROLL_BOTTOM_THRESHOLD_PX = 50;
@@ -21,6 +24,7 @@ const TAIL_PROBE_OFFSET_PX = 1_000_000;
 export function OracleChatScreen() {
   const { threads, activeThreadId, setActiveThreadId, createThread, send, retryTurn, sending } =
     useOracleChatThreads();
+  const budgetQuery = useOracleBudgetQuery();
   const [draftText, setDraftText] = useState('');
   const [followTail, setFollowTail] = useState(true);
   const flatListRef = useRef<FlatList<ChatTurn>>(null);
@@ -101,7 +105,14 @@ export function OracleChatScreen() {
     // button, which is disabled under both — but silent data loss shouldn't depend on that.)
     if (text.trim().length === 0 || sending) return;
     setDraftText('');
-    await send(activeThread.id, text);
+    await send(activeThread.id, text, 'local');
+  }
+
+  async function handleThinkHarder() {
+    const text = draftText;
+    if (text.trim().length === 0 || sending) return;
+    setDraftText('');
+    await send(activeThread.id, text, 'bedrock');
   }
 
   // Stable across streamed tokens (see `useOracleChatThreads`'s refs) so `ChatTurnRow`'s `memo()`
@@ -113,9 +124,13 @@ export function OracleChatScreen() {
     [retryTurn, activeThread.id],
   );
 
+  const handleApply = useCallback((draft: DmEvent) => {
+    router.push({ pathname: '/oracle-composer', params: { draft: JSON.stringify(draft) } });
+  }, []);
+
   const renderItem = useCallback<ListRenderItem<ChatTurn>>(
-    ({ item }) => <ChatTurnRow turn={item} onRetry={handleRetry} />,
-    [handleRetry],
+    ({ item }) => <ChatTurnRow turn={item} onRetry={handleRetry} onApply={handleApply} />,
+    [handleRetry, handleApply],
   );
 
   return (
@@ -178,6 +193,26 @@ export function OracleChatScreen() {
           loading={sending}
           disabled={draftText.trim().length === 0 || sending}
         />
+        <Pressable
+          onPress={handleThinkHarder}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: draftText.trim().length === 0 || sending }}
+          disabled={draftText.trim().length === 0 || sending}
+          className="items-center"
+        >
+          <Text
+            className={
+              draftText.trim().length === 0 || sending
+                ? 'text-steel-muted dark:text-night-steel-muted'
+                : 'text-accent-cyan dark:text-night-accent-cyan'
+            }
+            style={{ fontFamily: fonts.semibold }}
+          >
+            {budgetQuery.data
+              ? `Pensar mejor ($${budgetQuery.data.month_to_date_cost_usd.toFixed(2)} este mes)`
+              : 'Pensar mejor'}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );

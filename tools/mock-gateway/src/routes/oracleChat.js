@@ -1,7 +1,7 @@
 const express = require('express');
 const { writeEventTo } = require('../sse');
 const { sendError } = require('../errors');
-const { oracleCannedReply, oracleDraftPool } = require('../fixtures');
+const { oracleCannedReply, oracleDraftPool, nextContextSnippets } = require('../fixtures');
 
 const router = express.Router();
 let draftIndex = 0;
@@ -18,6 +18,11 @@ router.post('/', (req, res) => {
     Connection: 'keep-alive',
   });
   res.flushHeaders();
+
+  // Emitted once, before any token — models a real ORACLE grounding its reply in recent world
+  // chatter, and lets the operator see what player-authored (untrusted) content the model read
+  // before it wrote anything (NH-75 §5.4).
+  writeEventTo(res, 'context', nextContextSnippets());
 
   const words = oracleCannedReply.split(' ');
   let i = 0;

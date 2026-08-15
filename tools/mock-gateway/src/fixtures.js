@@ -13,6 +13,19 @@ const chatMessages = [
   { author: 'Doran', message: 'cuidado con los lobos cerca del bosque' },
 ];
 
+// Two messages per turn, cycling through the pool round-robin — same deterministic-not-random
+// approach `oracleDraftPool` already uses below, so a live-verification pass can assert exact
+// expected content per send rather than "some pair of messages."
+let contextIndex = 0;
+function nextContextSnippets() {
+  const snippets = [
+    chatMessages[contextIndex % chatMessages.length],
+    chatMessages[(contextIndex + 1) % chatMessages.length],
+  ];
+  contextIndex = (contextIndex + 2) % chatMessages.length;
+  return snippets.map((snippet) => ({ ...snippet, ts: new Date().toISOString() }));
+}
+
 const logLineTemplates = [
   { level: 'info', target: 'xindeler::server', message: 'Tick completado en 42ms' },
   { level: 'info', target: 'xindeler::net', message: 'Jugador conectado' },
@@ -62,4 +75,5 @@ module.exports = {
   oraclePresets,
   oracleCannedReply,
   oracleDraftPool,
+  nextContextSnippets,
 };

@@ -4,6 +4,7 @@ import {
   ChatResponseSchema,
   ChronicleResponseSchema,
   LogsResponseSchema,
+  OracleBudgetResponseSchema,
   OracleEventsResponseSchema,
   OraclePresetsResponseSchema,
   PlayersResponseSchema,
@@ -59,6 +60,14 @@ export function createReadApi(http: HttpClient) {
         '/api/v1/oracle/presets',
         { method: 'GET' },
         OraclePresetsResponseSchema,
+      );
+    },
+
+    getOracleBudget() {
+      return http.requestWithRetry(
+        '/api/v1/oracle/budget',
+        { method: 'GET' },
+        OracleBudgetResponseSchema,
       );
     },
   };

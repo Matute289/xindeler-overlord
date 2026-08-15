@@ -88,7 +88,12 @@ export function useOracleChatThreads() {
   }
 
   const runAssistantTurn = useCallback(
-    async (threadId: string, operatorText: string, assistantTurnId: string) => {
+    async (
+      threadId: string,
+      operatorText: string,
+      assistantTurnId: string,
+      tier: 'local' | 'bedrock',
+    ) => {
       // Defensive: a previous controller that is somehow still live is superseded rather than
       // left dangling on a request nobody is reading any more.
       abortRef.current?.abort();
@@ -100,7 +105,7 @@ export function useOracleChatThreads() {
       try {
         for await (const event of streamOracleChat(
           environment.baseUrl,
-          { message: operatorText, thread_id: threadId, tier: 'local' },
+          { message: operatorText, thread_id: threadId, tier },
           controller.signal,
           {
             getAuthHeader: () => sessionStorage.getAuthHeader(),
@@ -119,6 +124,11 @@ export function useOracleChatThreads() {
               draft: event.draft,
               status: 'complete',
               error: null,
+            }));
+          } else if (event.type === 'context') {
+            updateTurn(threadId, assistantTurnId, (turn) => ({
+              ...turn,
+              contextSnippets: event.snippets,
             }));
           }
         }
@@ -154,7 +164,7 @@ export function useOracleChatThreads() {
   );
 
   const send = useCallback(
-    async (threadId: string, text: string) => {
+    async (threadId: string, text: string, tier: 'local' | 'bedrock') => {
       const trimmed = text.trim();
       if (trimmed.length === 0 || sendingRef.current) return;
 
@@ -165,6 +175,8 @@ export function useOracleChatThreads() {
         status: 'complete',
         draft: null,
         error: null,
+        tier: null,
+        contextSnippets: null,
       };
       const assistantTurn: ChatTurn = {
         id: Crypto.randomUUID(),
@@ -173,6 +185,8 @@ export function useOracleChatThreads() {
         status: 'streaming',
         draft: null,
         error: null,
+        tier,
+        contextSnippets: null,
       };
       setThreads((prev) =>
         prev.map((thread) =>
@@ -182,7 +196,7 @@ export function useOracleChatThreads() {
         ),
       );
 
-      await runAssistantTurn(threadId, trimmed, assistantTurn.id);
+      await runAssistantTurn(threadId, trimmed, assistantTurn.id, tier);
     },
     [runAssistantTurn],
   );
@@ -194,7 +208,9 @@ export function useOracleChatThreads() {
       const index = thread?.turns.findIndex((t) => t.id === assistantTurnId) ?? -1;
       if (!thread || index <= 0) return;
       const operatorTurn = thread.turns[index - 1];
+      const assistantTurn = thread.turns[index];
       if (operatorTurn.role !== 'operator') return;
+      const tier = assistantTurn.tier ?? 'local';
 
       updateTurn(threadId, assistantTurnId, (turn) => ({
         ...turn,
@@ -202,8 +218,9 @@ export function useOracleChatThreads() {
         status: 'streaming',
         draft: null,
         error: null,
+        contextSnippets: null,
       }));
-      await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId);
+      await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId, tier);
     },
     [runAssistantTurn],
   );
