@@ -78,6 +78,22 @@ export function createWriteApi(http: HttpClient) {
       );
     },
 
+    registerPushToken(expoPushToken: string, platform: 'ios' | 'android') {
+      return http.request(
+        '/api/v1/push/register',
+        { method: 'POST', body: { expo_push_token: expoPushToken, platform } },
+        OkResponseSchema,
+      );
+    },
+
+    unregisterPushToken(expoPushToken: string) {
+      return http.request(
+        '/api/v1/push/unregister',
+        { method: 'POST', body: { expo_push_token: expoPushToken } },
+        OkResponseSchema,
+      );
+    },
+
     stageOracleEvent(id: string, dmEvent: DmEvent, stepUpCode: string, idempotencyKey?: string) {
       return http.request(
         '/api/v1/oracle/stage',
