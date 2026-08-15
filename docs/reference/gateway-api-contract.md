@@ -54,8 +54,11 @@ to say so in plain language rather than showing a generic spinner).
   request authenticates via the bearer header or the web cookie — confirmed 2026-08-15 against the
   real `xindeler-zuul` source, not just its own backlog prose. (One exception today: `POST
   /oracle/chat` — see §6.)
-- Destructive endpoints (§4, §5) require a step-up header `X-Ops-Totp: <6 digits>` in addition
-  to the session token.
+- Destructive endpoints (§4, §5) require an active step-up window on the session, not a
+  per-request header. Call `POST /api/v1/step-up` (§2.1) with a fresh TOTP code first; on success
+  the gateway opens a 5-minute window during which destructive writes need no extra header at
+  all. Confirmed 2026-08-15 against the real `xindeler-zuul` source (`login.rs`/`session.rs`/
+  `lifecycle.rs`) — it never reads a per-request TOTP header on any route.
 
 ---
 
@@ -74,6 +77,30 @@ spec §5.3.
 
 ⚠️ The gateway authenticates against `xindeler-auth`, whose own tokens have a ~15 s TTL. That
 is entirely a gateway-internal detail — the app must never see or store an `authc` token.
+
+### 2.1 Step-up (destructive-action re-verification)
+
+| Method | Path | Body |
+|---|---|---|
+| `POST` | `/api/v1/step-up` | `{ totp_code }` → `204` on success |
+
+Bare path, **not** nested under `/api/v1/auth/`, unlike every other endpoint in this section —
+matches the real `xindeler-zuul` router (`web.rs`) exactly. Requires an already-valid session
+(bearer or cookie) plus the `x-csrf-token` header like any other mutating request (§1); a
+successful call opens a 5-minute step-up window on that session (`STEP_UP_TTL_SECS` in the real
+gateway's `session.rs`), during which every destructive endpoint in §4/§5 accepts writes with no
+further step-up signal at all. Wrong or missing code → `401 invalid_credentials` (`rejected()` on
+the real gateway). A destructive write outside a step-up window → `403 "step-up required"`.
+
+**Client rule:** `useDestructiveAction` calls this endpoint itself, transparently, immediately
+before every destructive write — the operator only ever sees the existing TOTP prompt, never a
+second, separate step-up screen.
+
+⚠️ Confirmed 2026-08-15 (OC-54) that the real gateway's error bodies for both this endpoint and
+every destructive route are **plain text**, not this doc's own §1 JSON envelope convention. The
+client already degrades safely (`httpClient.ts`'s envelope parse falls back to a generic message
+on a non-JSON body) but not legibly. Separate, pre-existing, cross-cutting mismatch — not fixed by
+OC-54, not yet ticketed.
 
 ---
 

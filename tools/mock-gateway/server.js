@@ -22,6 +22,7 @@ const oracleTriggerRoutes = require('./src/routes/oracleTrigger');
 const oracleEnabledRoutes = require('./src/routes/oracleEnabled');
 const oracleChatRoutes = require('./src/routes/oracleChat');
 const oracleBudgetRoutes = require('./src/routes/oracleBudget');
+const stepUpRoutes = require('./src/routes/stepUp');
 const { requireStepUp } = require('./src/middleware/stepUp');
 const { requireCsrf } = require('./src/middleware/csrf');
 const { broadcast } = require('./src/sse');
@@ -35,6 +36,7 @@ app.use(require('cookie-parser')());
 app.use(express.json());
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/step-up', requireAuth, requireCsrf, stepUpRoutes);
 
 app.use('/api/v1/status', requireAuth, statusRoutes);
 app.use('/api/v1/players', requireAuth, playersRoutes);

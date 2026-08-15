@@ -29,8 +29,11 @@ the contract, add it to the mock in the same PR — an un-mocked endpoint is an 
    behaviour (retry, re-auth), never for display text.
 3. **`Idempotency-Key` on every mutation.** A UUID per user intent, not per retry. Phones drop
    connections mid-request; the server must not start twice.
-4. **Step-up (`X-Ops-Totp`) on every destructive call.** Lifecycle writes and all ORACLE writes.
-   Reads are session-only.
+4. **Step-up (`POST /api/v1/step-up`, session-scoped) before every destructive call.** Lifecycle
+   writes and all ORACLE writes. Call `/api/v1/step-up` with a fresh TOTP code to open a 5-minute
+   window on the session, then send the write itself with no extra header — the real gateway does
+   not read a per-request step-up header on any route (confirmed 2026-08-15, OC-54). Reads are
+   session-only.
 5. **Never put a token in `localStorage`/`AsyncStorage`.** `expo-secure-store` on native; an
    `HttpOnly` cookie from the gateway on web. Two backends, one interface.
 6. **Timeouts are short and explicit.** A wedged game server is exactly when the console is needed;
