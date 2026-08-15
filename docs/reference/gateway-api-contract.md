@@ -235,7 +235,22 @@ handling.
 
 ---
 
-## 7. Open items to settle with the gateway before Phase 2
+## 7. Push notifications ("server is down")
+
+| Method | Path | Body |
+|---|---|---|
+| `POST` | `/api/v1/push/register` | `{ expo_push_token, platform: "ios"\|"android" }` → `{ ok: true }` |
+| `POST` | `/api/v1/push/unregister` | `{ expo_push_token }` → `{ ok: true }` |
+
+CSRF-protected, no step-up (registering a device isn't destructive — nothing fires or is delivered by
+this action alone). The gateway relays to Expo's own push service (`https://exp.host/--/api/v2/push/send`)
+using platform credentials (APNs key, FCM service account) configured at the EAS-project level, not
+held by the gateway itself — see `xindeler-zuul`'s own `ZG-44` for the server-side design. This app
+never talks to APNs/FCM directly.
+
+---
+
+## 8. Open items to settle with the gateway before Phase 2
 
 - Exact `status` field names (this doc guesses; `/metrics` naming may leak through).
 - Whether `Idempotency-Key` is honoured or the client must guard against double-taps alone.

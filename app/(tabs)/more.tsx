@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { EnvironmentSwitcher } from '@/features/environment/EnvironmentSwitcher';
+import { PushNotificationsSettings } from '@/features/pushNotifications/PushNotificationsSettings';
 import { Button } from '@/ui/Button';
 import { Screen } from '@/ui/Screen';
 import { fonts, useTheme } from '@/ui/theme';
@@ -29,6 +30,7 @@ export default function MoreScreen() {
             <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
           </Pressable>
         </Link>
+        <PushNotificationsSettings />
       </View>
       <EnvironmentSwitcher />
       <View className="mt-8 gap-2 px-6">
