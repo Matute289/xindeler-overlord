@@ -56,7 +56,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
             <Text
               key={index}
               className="mt-0.5 text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular }}
+              style={{ fontFamily: fonts.regular, flexShrink: 1 }}
             >
               {`${snippet.author}: ${snippet.message}`}
             </Text>
