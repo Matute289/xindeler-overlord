@@ -5,6 +5,7 @@ const authRoutes = require('./src/routes/auth');
 const { requireAuth } = require('./src/middleware/auth');
 const statusRoutes = require('./src/routes/status');
 const playersRoutes = require('./src/routes/players');
+const playerUnlockRoutes = require('./src/routes/playerUnlock');
 const logsRoutes = require('./src/routes/logs');
 const chatRoutes = require('./src/routes/chat');
 const chronicleRoutes = require('./src/routes/chronicle');
@@ -37,6 +38,7 @@ app.use('/api/v1/auth', authRoutes);
 
 app.use('/api/v1/status', requireAuth, statusRoutes);
 app.use('/api/v1/players', requireAuth, playersRoutes);
+app.use('/api/v1/players/2fa/unlock', requireAuth, requireCsrf, requireStepUp, playerUnlockRoutes);
 app.use('/api/v1/logs', requireAuth, logsRoutes);
 app.use('/api/v1/chat', requireAuth, chatRoutes);
 app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);

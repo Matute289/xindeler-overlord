@@ -260,3 +260,23 @@ not affect the client, which never reads either response body.
 - Exact `status` field names (this doc guesses; `/metrics` naming may leak through).
 - Whether `Idempotency-Key` is honoured or the client must guard against double-taps alone.
 - Session token format (opaque vs JWT) — affects whether the app can render "expires in".
+
+---
+
+## 9. Player account administration
+
+**Confirmed 2026-08-15 against the real `xindeler-zuul` source (`server/src/players.rs`), not just
+speculated — this section describes what was actually verified, not a guess.**
+
+| Method | Path | Body |
+|---|---|---|
+| `POST` | `/api/v1/players/2fa/unlock` | `{ username }` → `204` on success |
+
+Every non-`204` response is a single generic failure — the real gateway collapses "username not
+found," "account exists but isn't locked," and "the auth service is unreachable" into the same `502`
+with a hardcoded message (`players.rs`'s own `Unlock2faError::Failed` branch). There is no `code`
+field or other distinguishing detail; the client cannot and must not pretend to tell these cases
+apart.
+
+**Client rule:** this endpoint needs a confirm sheet that requires typing `UNLOCK`, plus the standard
+step-up TOTP prompt — same bar as `/server/restart`/immediate `/server/stop`.

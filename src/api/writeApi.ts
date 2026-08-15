@@ -70,6 +70,15 @@ export function createWriteApi(http: HttpClient) {
       );
     },
 
+    unlockPlayer2fa(username: string, stepUpCode: string, idempotencyKey?: string) {
+      return http.request<void>('/api/v1/players/2fa/unlock', {
+        method: 'POST',
+        body: { username },
+        stepUpCode,
+        idempotencyKey,
+      });
+    },
+
     broadcastMessage(message: string) {
       return http.request(
         '/api/v1/broadcast',

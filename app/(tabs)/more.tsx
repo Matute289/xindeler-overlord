@@ -30,6 +30,20 @@ export default function MoreScreen() {
             <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
           </Pressable>
         </Link>
+        <Link href="/player-accounts" asChild>
+          <Pressable
+            accessibilityRole="button"
+            className="mt-2 flex-row items-center justify-between rounded-lg border border-steel-dark px-4 py-3 dark:border-night-steel-dark"
+          >
+            <Text
+              className="text-steel-light dark:text-night-steel-light"
+              style={{ fontFamily: fonts.semibold }}
+            >
+              Cuentas de jugador
+            </Text>
+            <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
+          </Pressable>
+        </Link>
         <PushNotificationsSettings />
       </View>
       <EnvironmentSwitcher />

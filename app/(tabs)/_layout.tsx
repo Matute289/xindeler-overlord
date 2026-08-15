@@ -69,6 +69,7 @@ export default function TabsLayout() {
                   screen's "Chat con ORACLE" row — none of them from the tab bar. Without this
                   they render as unlabeled icon tabs at phone width. */}
               <Tabs.Screen name="audit" options={{ href: null }} />
+              <Tabs.Screen name="player-accounts" options={{ href: null }} />
               <Tabs.Screen name="oracle-composer" options={{ href: null }} />
               <Tabs.Screen name="oracle-trigger" options={{ href: null }} />
               <Tabs.Screen name="oracle-chat" options={{ href: null }} />
