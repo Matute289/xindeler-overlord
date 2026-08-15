@@ -13,12 +13,20 @@ export function usePushRegistration() {
 
   useEffect(() => {
     let cancelled = false;
-    pushTokenService.getStatus().then((s) => {
-      if (!cancelled) {
-        setStatus(s);
-        setLoading(false);
-      }
-    });
+    pushTokenService
+      .getStatus()
+      .then((s) => {
+        if (!cancelled) {
+          setStatus(s);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -28,8 +36,9 @@ export function usePushRegistration() {
     setLoading(true);
     setError(null);
     try {
-      const { token, platform } = await pushTokenService.register();
+      const { token, platform } = await pushTokenService.acquireToken();
       await api.write.registerPushToken(token, platform);
+      await pushTokenService.persistToken(token);
       setStatus({ state: 'registered', token });
     } catch (err) {
       const refreshedStatus = await pushTokenService.getStatus();

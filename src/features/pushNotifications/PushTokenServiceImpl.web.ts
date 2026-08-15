@@ -5,9 +5,11 @@ export const pushTokenService: PushTokenService = {
     return { state: 'unsupported' };
   },
 
-  async register(): Promise<PushRegistration> {
+  async acquireToken(): Promise<PushRegistration> {
     throw new Error('unsupported_platform');
   },
+
+  async persistToken(): Promise<void> {},
 
   async clearStoredToken(): Promise<void> {},
 };

@@ -8,6 +8,7 @@ export type PushStatus =
 
 export type PushTokenService = {
   getStatus(): Promise<PushStatus>;
-  register(): Promise<PushRegistration>;
+  acquireToken(): Promise<PushRegistration>;
+  persistToken(token: string): Promise<void>;
   clearStoredToken(): Promise<void>;
 };

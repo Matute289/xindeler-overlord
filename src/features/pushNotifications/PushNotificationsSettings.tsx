@@ -62,6 +62,9 @@ export function PushNotificationsSettings() {
       {status.state === 'registered' && (
         <>
           <Text className="text-sm text-steel-muted dark:text-night-steel-muted">Activas.</Text>
+          <Text className="text-sm text-steel-muted dark:text-night-steel-muted">
+            El envío real depende de las credenciales push de EAS, todavía no configuradas.
+          </Text>
           <Pressable onPress={() => void disable()} accessibilityRole="button" disabled={loading}>
             <Text
               className="text-xs text-steel-muted dark:text-night-steel-muted"

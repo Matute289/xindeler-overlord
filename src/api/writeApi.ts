@@ -78,20 +78,18 @@ export function createWriteApi(http: HttpClient) {
       );
     },
 
-    registerPushToken(expoPushToken: string, platform: 'ios' | 'android') {
-      return http.request(
-        '/api/v1/push/register',
-        { method: 'POST', body: { expo_push_token: expoPushToken, platform } },
-        OkResponseSchema,
-      );
+    registerPushToken(expoPushToken: string, platform: 'ios' | 'android'): Promise<void> {
+      return http.request('/api/v1/push/register', {
+        method: 'POST',
+        body: { expo_push_token: expoPushToken, platform },
+      });
     },
 
-    unregisterPushToken(expoPushToken: string) {
-      return http.request(
-        '/api/v1/push/unregister',
-        { method: 'POST', body: { expo_push_token: expoPushToken } },
-        OkResponseSchema,
-      );
+    unregisterPushToken(expoPushToken: string): Promise<void> {
+      return http.request('/api/v1/push/unregister', {
+        method: 'POST',
+        body: { expo_push_token: expoPushToken },
+      });
     },
 
     stageOracleEvent(id: string, dmEvent: DmEvent, stepUpCode: string, idempotencyKey?: string) {

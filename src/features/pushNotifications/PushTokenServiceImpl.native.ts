@@ -37,7 +37,7 @@ export const pushTokenService: PushTokenService = {
     return { state: 'not_requested' };
   },
 
-  async register(): Promise<PushRegistration> {
+  async acquireToken(): Promise<PushRegistration> {
     await ensureAndroidChannel();
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let status = existingStatus;
@@ -50,8 +50,11 @@ export const pushTokenService: PushTokenService = {
     }
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
     return { token, platform: Platform.OS as 'ios' | 'android' };
+  },
+
+  async persistToken(token: string): Promise<void> {
+    await SecureStore.setItemAsync(TOKEN_KEY, token);
   },
 
   async clearStoredToken(): Promise<void> {

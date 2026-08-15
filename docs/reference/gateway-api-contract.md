@@ -239,14 +239,19 @@ handling.
 
 | Method | Path | Body |
 |---|---|---|
-| `POST` | `/api/v1/push/register` | `{ expo_push_token, platform: "ios"\|"android" }` → `{ ok: true }` |
-| `POST` | `/api/v1/push/unregister` | `{ expo_push_token }` → `{ ok: true }` |
+| `POST` | `/api/v1/push/register` | `{ expo_push_token, platform: "ios"\|"android" }` → 204 No Content |
+| `POST` | `/api/v1/push/unregister` | `{ expo_push_token }` → 204 No Content |
 
 CSRF-protected, no step-up (registering a device isn't destructive — nothing fires or is delivered by
 this action alone). The gateway relays to Expo's own push service (`https://exp.host/--/api/v2/push/send`)
 using platform credentials (APNs key, FCM service account) configured at the EAS-project level, not
 held by the gateway itself — see `xindeler-zuul`'s own `ZG-44` for the server-side design. This app
 never talks to APNs/FCM directly.
+
+The real gateway returns a bare `204 No Content` on both endpoints — confirmed 2026-08-15 against the
+real `xindeler-zuul` source (`server/src/push.rs`), not just its own backlog prose. The mock returns
+`200 { ok: true }` for consistency with this app's other write endpoints — dev-only difference, does
+not affect the client, which never reads either response body.
 
 ---
 
