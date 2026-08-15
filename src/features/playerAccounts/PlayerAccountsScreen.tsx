@@ -22,6 +22,7 @@ export function PlayerAccountsScreen() {
   );
 
   async function handleConfirm() {
+    setSuccessMessage(null);
     setConfirming(false);
     const target = username.trim();
     const result = await unlockAction.run();
