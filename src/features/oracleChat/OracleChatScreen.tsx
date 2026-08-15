@@ -103,7 +103,7 @@ export function OracleChatScreen() {
     // button, which is disabled under both — but silent data loss shouldn't depend on that.)
     if (text.trim().length === 0 || sending) return;
     setDraftText('');
-    await send(activeThread.id, text);
+    await send(activeThread.id, text, 'local');
   }
 
   // Stable across streamed tokens (see `useOracleChatThreads`'s refs) so `ChatTurnRow`'s `memo()`

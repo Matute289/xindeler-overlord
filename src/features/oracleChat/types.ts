@@ -10,6 +10,11 @@ export type ChatTurn = {
   // `gatewayErrorMessage`/`ActionError` pattern (VPN diagnosis included) instead of a hardcoded
   // string that tells the operator nothing. Always `null` unless `status === 'failed'`.
   error: Error | null;
+  // `null` for operator turns (they have no tier). Set once, when an assistant turn is created,
+  // and read back by `retryTurn` so a retry resends on the SAME tier it originally used — a
+  // Bedrock send that failed must not silently downgrade to a free local retry, which would be a
+  // different, cheaper operation than what the operator actually asked for.
+  tier: 'local' | 'bedrock' | null;
 };
 
 export type ChatThread = {

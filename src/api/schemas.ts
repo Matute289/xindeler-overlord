@@ -115,6 +115,16 @@ export type DmEvent = z.infer<typeof DmEventSchema>;
 export const OracleChatTokenSchema = z.object({ text: z.string() });
 export type OracleChatToken = z.infer<typeof OracleChatTokenSchema>;
 
+export const OracleBudgetResponseSchema = z.object({
+  month_to_date_tokens: z.number(),
+  month_to_date_cost_usd: z.number(),
+  tier_breakdown: z.object({
+    local: z.object({ tokens: z.number(), cost_usd: z.number() }),
+    bedrock: z.object({ tokens: z.number(), cost_usd: z.number() }),
+  }),
+});
+export type OracleBudgetResponse = z.infer<typeof OracleBudgetResponseSchema>;
+
 export const OraclePresetSchema = z.object({
   id: z.string(),
   name: z.string(),

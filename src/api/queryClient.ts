@@ -30,4 +30,5 @@ export const queryKeys = {
   audit: (limit?: number) => ['audit', limit] as const,
   oracleEvents: ['oracleEvents'] as const,
   oraclePresets: ['oraclePresets'] as const,
+  oracleBudget: ['oracleBudget'] as const,
 };
