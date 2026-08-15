@@ -193,6 +193,20 @@ export function OracleEventsScreen() {
           <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
         </Pressable>
       </Link>
+      <Link href="/oracle-chat" asChild>
+        <Pressable
+          accessibilityRole="button"
+          className="mx-6 mt-2 flex-row items-center justify-between rounded-lg border border-steel-dark px-4 py-3 dark:border-night-steel-dark"
+        >
+          <Text
+            className="text-steel-light dark:text-night-steel-light"
+            style={{ fontFamily: fonts.semibold }}
+          >
+            Chat con ORACLE
+          </Text>
+          <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
+        </Pressable>
+      </Link>
       <Section
         title="Cargados"
         items={loaded}

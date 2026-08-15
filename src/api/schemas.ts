@@ -112,6 +112,9 @@ export const DmEventSchema = z.object({
 });
 export type DmEvent = z.infer<typeof DmEventSchema>;
 
+export const OracleChatTokenSchema = z.object({ text: z.string() });
+export type OracleChatToken = z.infer<typeof OracleChatTokenSchema>;
+
 export const OraclePresetSchema = z.object({
   id: z.string(),
   name: z.string(),
