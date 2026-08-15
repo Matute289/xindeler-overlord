@@ -214,7 +214,7 @@ NH-75 §4.3 (private repo, path above) is the design source for it.
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/v1/oracle/chat` | `{ message, thread_id, tier: "local"\|"bedrock" }` → SSE token stream, then a terminal `draft` event carrying a `DmEvent` |
+| `POST` | `/api/v1/oracle/chat` | `{ message, thread_id, tier: "local"\|"bedrock" }` → one `context` event (`ChatMessage[]`, the untrusted player-chat snippets fed to the model — NH-75 §5.4), then an SSE token stream, then a terminal `draft` event carrying a `DmEvent` |
 | `GET` | `/api/v1/oracle/budget` | month-to-date token/cost ledger, for the Bedrock button's label |
 
 **The model proposes; a human applies.** The chat endpoint can only ever return a *draft*. It

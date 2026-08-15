@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { memo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { DmEvent } from '@/api/schemas';
+import type { ChatMessage, DmEvent } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { fonts } from '@/ui/theme';
 
@@ -44,6 +44,25 @@ export const ChatTurnRow = memo(function ChatTurnRow({
             ? 'ORACLE (Bedrock)'
             : 'ORACLE'}
       </Text>
+      {turn.contextSnippets && turn.contextSnippets.length > 0 && (
+        <View className="mt-1 rounded-lg border border-steel-dark p-2 dark:border-night-steel-dark">
+          <Text
+            className="text-xs uppercase text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.semibold }}
+          >
+            Contexto citado (chat de jugadores, no confiable)
+          </Text>
+          {turn.contextSnippets.map((snippet: ChatMessage, index: number) => (
+            <Text
+              key={index}
+              className="mt-0.5 text-steel-light dark:text-night-steel-light"
+              style={{ fontFamily: fonts.regular }}
+            >
+              {`${snippet.author}: ${snippet.message}`}
+            </Text>
+          ))}
+        </View>
+      )}
       {!failed && (
         <Text
           className="mt-0.5 text-steel-light dark:text-night-steel-light"
