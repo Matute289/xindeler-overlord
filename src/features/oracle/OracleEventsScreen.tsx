@@ -84,11 +84,11 @@ export function OracleEventsScreen() {
   const api = useApi();
   const [confirmEnable, setConfirmEnable] = useState(false);
 
-  const disableAction = useDestructiveAction((code, idempotencyKey) =>
-    api.write.setOracleEnabled(false, code, idempotencyKey),
+  const disableAction = useDestructiveAction((idempotencyKey) =>
+    api.write.setOracleEnabled(false, idempotencyKey),
   );
-  const enableAction = useDestructiveAction((code, idempotencyKey) =>
-    api.write.setOracleEnabled(true, code, idempotencyKey),
+  const enableAction = useDestructiveAction((idempotencyKey) =>
+    api.write.setOracleEnabled(true, idempotencyKey),
   );
 
   // The two actions render their errors side by side, above the same status label, and each one's

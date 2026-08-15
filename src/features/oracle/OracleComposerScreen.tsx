@@ -171,12 +171,12 @@ export function OracleComposerScreen() {
     };
   }
 
-  const stageAction = useDestructiveAction((code, idempotencyKey) => {
+  const stageAction = useDestructiveAction((idempotencyKey) => {
     const dmEvent = buildDmEvent();
     // Unreachable while the button is disabled — but the invariant lives in the type system here,
     // not only in a prop: an invalid form refuses to produce a write, it does not stage a guess.
     if (dmEvent === null) throw new Error('invalid form state');
-    return api.write.stageOracleEvent(stagedId, dmEvent, code, idempotencyKey);
+    return api.write.stageOracleEvent(stagedId, dmEvent, idempotencyKey);
   });
 
   const canStage = buildDmEvent() !== null && !stageAction.pending;

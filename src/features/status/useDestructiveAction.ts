@@ -2,12 +2,11 @@ import * as Crypto from 'expo-crypto';
 import { useState } from 'react';
 
 import { isApiError } from '@/api';
+import { useApi } from '@/api/ApiContext';
 import { isStepUpCancelled, useStepUpAuth } from '@/auth/StepUpContext';
 
-const STEP_UP_ERROR_CODES = new Set(['invalid_totp', 'step_up_required']);
-
 export function useDestructiveAction<T>(
-  call: (stepUpCode: string, idempotencyKey: string) => Promise<T>,
+  call: (idempotencyKey: string) => Promise<T>,
   // Additive, opt-in — every existing call site omits this and keeps behaving exactly as before
   // (cached step-up code reused when still fresh). `forceFreshStepUp` exists for actions
   // consequential enough that they must never silently ride a step-up obtained for a DIFFERENT,
@@ -17,6 +16,7 @@ export function useDestructiveAction<T>(
   // gate down to just the typing.
   options?: { forceFreshStepUp?: boolean },
 ) {
+  const api = useApi();
   const { requestStepUp } = useStepUpAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -41,13 +41,28 @@ export function useDestructiveAction<T>(
     const idempotencyKey = Crypto.randomUUID();
     try {
       const code = await requestStepUp(forceFreshStepUp ? { forceFresh: true } : undefined);
+      // OC-54: the real gateway (xindeler-zuul) is session-scoped, not header-scoped — a TOTP
+      // code only means anything once it's been exchanged for a step-up WINDOW via this call.
+      // The destructive `call()` below sends no code at all; the gateway reads session state.
+      // This runs on EVERY `run()`, even when `requestStepUp()` returned a cached (not freshly
+      // prompted) code — the client-side 90s cache and the server-side 5-minute window are two
+      // different things, and re-establishing the window costs one extra request but keeps the
+      // window fresh for exactly as long as the write that's about to use it needs it to be.
+      await api.auth.stepUp(code);
       let result: T;
       try {
-        result = await call(code, idempotencyKey);
+        result = await call(idempotencyKey);
       } catch (err) {
-        if (isApiError(err) && STEP_UP_ERROR_CODES.has(err.code)) {
+        // `status === 403` (not a specific error code) is what actually distinguishes "no
+        // current step-up window" against BOTH the mock (JSON `step_up_required` envelope) and
+        // the real gateway (plain-text "step-up required" body, no parseable code at all) — the
+        // HTTP status survives either shape. A CSRF-related 403 would also trigger one wasted
+        // retry here before its real error surfaces; accepted, since the retry is capped at one
+        // attempt and every write already requires a valid CSRF header to reach this point.
+        if (isApiError(err) && err.status === 403) {
           const freshCode = await requestStepUp({ forceFresh: true });
-          result = await call(freshCode, idempotencyKey);
+          await api.auth.stepUp(freshCode);
+          result = await call(idempotencyKey);
         } else {
           throw err;
         }

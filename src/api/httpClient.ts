@@ -17,7 +17,6 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   timeoutMs?: number;
-  stepUpCode?: string;
   // When provided, used INSTEAD of `deps.generateIdempotencyKey()` — safety-review finding 6,
   // 2026-08-14. Without this, a caller that needs to send the same logical mutation twice (e.g.
   // `useDestructiveAction`'s retry-once-on-403 step-up flow) has no way to make the two attempts
@@ -45,7 +44,6 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         ...(method !== 'GET'
           ? { 'Idempotency-Key': options.idempotencyKey ?? deps.generateIdempotencyKey() }
           : {}),
-        ...(options.stepUpCode !== undefined ? { 'X-Ops-Totp': options.stepUpCode } : {}),
       };
 
       let response: Response;

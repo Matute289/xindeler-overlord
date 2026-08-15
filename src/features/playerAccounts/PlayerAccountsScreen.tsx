@@ -17,8 +17,8 @@ export function PlayerAccountsScreen() {
   const [confirming, setConfirming] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const unlockAction = useDestructiveAction<void>((code, idempotencyKey) =>
-    api.write.unlockPlayer2fa(username.trim(), code, idempotencyKey),
+  const unlockAction = useDestructiveAction<void>((idempotencyKey) =>
+    api.write.unlockPlayer2fa(username.trim(), idempotencyKey),
   );
 
   async function handleConfirm() {
