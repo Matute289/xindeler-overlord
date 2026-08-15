@@ -21,6 +21,10 @@ export function createAuthApi(http: HttpClient) {
       );
     },
 
+    // Currently unwired — no caller anywhere in this app. Whoever wires this must call
+    // sessionStorage.save({...}) with BOTH the new `token` and the new `csrfToken` from the
+    // response (the mock's /refresh now rotates both), or subsequent writes will 403 with a
+    // stale CSRF token.
     refresh() {
       return http.request('/api/v1/auth/refresh', { method: 'POST' }, TotpResponseSchema);
     },

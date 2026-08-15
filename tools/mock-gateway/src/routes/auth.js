@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { state } = require('../state');
 const { sendError } = require('../errors');
 const { requireAuth } = require('../middleware/auth');
+const { requireCsrf } = require('../middleware/csrf');
 
 const router = express.Router();
 
@@ -50,7 +51,7 @@ router.post('/refresh', requireAuth, (req, res) => {
   res.json(issueSession(res, req.operator));
 });
 
-router.post('/logout', requireAuth, (req, res) => {
+router.post('/logout', requireAuth, requireCsrf, (req, res) => {
   state.sessions.delete(req.token);
   res.clearCookie('overlord_session');
   res.status(204).end();

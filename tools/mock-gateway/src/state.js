@@ -6,7 +6,7 @@ const state = {
     stream_drop: { afterSeconds: 10 },
     auth_expiry: { ttlSeconds: 15 },
   },
-  sessions: new Map(), // token -> { operator, expiresAt, createdAt }
+  sessions: new Map(), // token -> { operator, expiresAt, createdAt, csrfToken }
   challenges: new Map(), // challengeId -> { username }
   logBuffer: [], // { ts, level, target, message }, capped at 500
   chatHistory: [],

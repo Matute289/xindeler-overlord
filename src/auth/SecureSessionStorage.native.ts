@@ -4,7 +4,7 @@ import type { SaveSessionInput, SessionStorage, StoredSession } from './types';
 
 const SESSION_KEY = 'overlord.session';
 
-type StoredSessionWithToken = StoredSession & { token: string; csrfToken: string };
+type StoredSessionWithToken = StoredSession & { token: string; csrfToken?: string };
 
 export const sessionStorage: SessionStorage = {
   async save(session: SaveSessionInput) {

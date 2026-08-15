@@ -2,7 +2,7 @@ import type { SaveSessionInput, SessionStorage, StoredSession } from './types';
 
 const METADATA_KEY = 'overlord.session.metadata';
 
-type StoredMetadataWithCsrf = StoredSession & { csrfToken: string };
+type StoredMetadataWithCsrf = StoredSession & { csrfToken?: string };
 
 // The real credential is the browser's HttpOnly session cookie, which this
 // module never touches — the `token` field of `SaveSessionInput` is

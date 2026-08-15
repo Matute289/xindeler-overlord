@@ -52,7 +52,8 @@ to say so in plain language rather than showing a generic spinner).
 - Every mutating request also carries `x-csrf-token: <token>`, the value returned by
   `POST /auth/totp` (§2). Required unconditionally on write endpoints, regardless of whether the
   request authenticates via the bearer header or the web cookie — confirmed 2026-08-15 against the
-  real `xindeler-zuul` source, not just its own backlog prose.
+  real `xindeler-zuul` source, not just its own backlog prose. (One exception today: `POST
+  /oracle/chat` — see §6.)
 - Destructive endpoints (§4, §5) require a step-up header `X-Ops-Totp: <6 digits>` in addition
   to the session token.
 
@@ -224,6 +225,13 @@ NH-75 §4.3 (private repo, path above) is the design source for it.
 **The model proposes; a human applies.** The chat endpoint can only ever return a *draft*. It
 cannot stage and it cannot fire. Applying is `POST /oracle/stage` then `POST /oracle/trigger`,
 both step-up authenticated, both initiated by a tap.
+
+This client's chat implementation (`streamOracleChat.ts`) is a standalone fetch that never goes
+through `httpClient.ts`, so it does not send the `x-csrf-token` header the §1 rule otherwise
+requires on every write endpoint — correct today only because the mock deliberately excludes chat
+from CSRF enforcement, since the real gateway has no chat implementation yet. Whoever wires this
+endpoint to the real, Phase-5 `xindeler-zuul` chat implementation must give it its own CSRF
+handling.
 
 ---
 
