@@ -49,6 +49,10 @@ to say so in plain language rather than showing a generic spinner).
   the wording, so a new failure mode does not need an app release to be legible.
 - Every mutating request carries an `Idempotency-Key` header (client-generated UUID). Phones
   lose connections mid-request; the gateway must not start the server twice.
+- Every mutating request also carries `x-csrf-token: <token>`, the value returned by
+  `POST /auth/totp` (§2). Required unconditionally on write endpoints, regardless of whether the
+  request authenticates via the bearer header or the web cookie — confirmed 2026-08-15 against the
+  real `xindeler-zuul` source, not just its own backlog prose.
 - Destructive endpoints (§4, §5) require a step-up header `X-Ops-Totp: <6 digits>` in addition
   to the session token.
 
@@ -59,7 +63,7 @@ to say so in plain language rather than showing a generic spinner).
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/api/v1/auth/login` | `{ username, password }` → `{ totp_required: true, challenge_id }` |
-| `POST` | `/api/v1/auth/totp` | `{ challenge_id, code }` → `{ token, expires_at, operator }` |
+| `POST` | `/api/v1/auth/totp` | `{ challenge_id, code }` → `{ token, expires_at, operator, csrf_token }` |
 | `POST` | `/api/v1/auth/refresh` | rotates the session token |
 | `POST` | `/api/v1/auth/logout` | revokes server-side |
 

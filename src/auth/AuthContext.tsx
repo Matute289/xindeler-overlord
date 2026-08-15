@@ -98,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: session.token,
         operator: session.operator,
         expiresAt: session.expires_at,
+        csrfToken: session.csrf_token,
       });
       setOperator(session.operator);
       setStatus('authenticated');

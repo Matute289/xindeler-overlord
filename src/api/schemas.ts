@@ -17,6 +17,7 @@ export const TotpResponseSchema = z.object({
   token: z.string(),
   expires_at: z.string(),
   operator: z.string(),
+  csrf_token: z.string(),
 });
 export type Session = z.infer<typeof TotpResponseSchema>;
 

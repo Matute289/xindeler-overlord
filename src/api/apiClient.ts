@@ -9,6 +9,7 @@ import { createWriteApi } from './writeApi';
 export function createApiClient(baseUrl: string) {
   const http = createHttpClient(baseUrl, {
     getAuthHeader: () => sessionStorage.getAuthHeader(),
+    getCsrfHeader: () => sessionStorage.getCsrfHeader(),
     generateIdempotencyKey: () => Crypto.randomUUID(),
   });
 

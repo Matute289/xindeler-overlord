@@ -9,6 +9,7 @@ const PARSE_FAILED = Symbol('parse-failed');
 
 type HttpClientDeps = {
   getAuthHeader: () => Promise<Record<string, string> | undefined>;
+  getCsrfHeader: () => Promise<Record<string, string> | undefined>;
   generateIdempotencyKey: () => string;
 };
 
@@ -36,9 +37,11 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
 
     try {
       const authHeader = await deps.getAuthHeader();
+      const csrfHeader = method !== 'GET' ? await deps.getCsrfHeader() : undefined;
       const headers: Record<string, string> = {
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(authHeader ?? {}),
+        ...(csrfHeader ?? {}),
         ...(method !== 'GET'
           ? { 'Idempotency-Key': options.idempotencyKey ?? deps.generateIdempotencyKey() }
           : {}),
