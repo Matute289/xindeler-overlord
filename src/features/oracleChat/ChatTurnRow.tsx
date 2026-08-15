@@ -38,7 +38,11 @@ export const ChatTurnRow = memo(function ChatTurnRow({
         className="text-accent-cyan dark:text-night-accent-cyan"
         style={{ fontFamily: fonts.semibold }}
       >
-        {turn.role === 'operator' ? 'Operador' : 'ORACLE'}
+        {turn.role === 'operator'
+          ? 'Operador'
+          : turn.tier === 'bedrock'
+            ? 'ORACLE (Bedrock)'
+            : 'ORACLE'}
       </Text>
       {!failed && (
         <Text

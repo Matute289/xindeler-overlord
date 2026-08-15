@@ -12,6 +12,7 @@ import { fonts } from '@/ui/theme';
 
 import { ChatTurnRow } from './ChatTurnRow';
 import type { ChatTurn } from './types';
+import { useOracleBudgetQuery } from './useOracleBudgetQuery';
 import { useOracleChatThreads } from './useOracleChatThreads';
 
 const SCROLL_BOTTOM_THRESHOLD_PX = 50;
@@ -23,6 +24,7 @@ const TAIL_PROBE_OFFSET_PX = 1_000_000;
 export function OracleChatScreen() {
   const { threads, activeThreadId, setActiveThreadId, createThread, send, retryTurn, sending } =
     useOracleChatThreads();
+  const budgetQuery = useOracleBudgetQuery();
   const [draftText, setDraftText] = useState('');
   const [followTail, setFollowTail] = useState(true);
   const flatListRef = useRef<FlatList<ChatTurn>>(null);
@@ -106,6 +108,13 @@ export function OracleChatScreen() {
     await send(activeThread.id, text, 'local');
   }
 
+  async function handleThinkHarder() {
+    const text = draftText;
+    if (text.trim().length === 0 || sending) return;
+    setDraftText('');
+    await send(activeThread.id, text, 'bedrock');
+  }
+
   // Stable across streamed tokens (see `useOracleChatThreads`'s refs) so `ChatTurnRow`'s `memo()`
   // actually prevents re-rendering every completed row on every token.
   const handleRetry = useCallback(
@@ -184,6 +193,26 @@ export function OracleChatScreen() {
           loading={sending}
           disabled={draftText.trim().length === 0 || sending}
         />
+        <Pressable
+          onPress={handleThinkHarder}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: draftText.trim().length === 0 || sending }}
+          disabled={draftText.trim().length === 0 || sending}
+          className="items-center"
+        >
+          <Text
+            className={
+              draftText.trim().length === 0 || sending
+                ? 'text-steel-muted dark:text-night-steel-muted'
+                : 'text-accent-cyan dark:text-night-accent-cyan'
+            }
+            style={{ fontFamily: fonts.semibold }}
+          >
+            {budgetQuery.data
+              ? `Pensar mejor ($${budgetQuery.data.month_to_date_cost_usd.toFixed(2)} este mes)`
+              : 'Pensar mejor'}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
