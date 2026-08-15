@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { state } = require('../state');
 const { sendError } = require('../errors');
 const { requireAuth } = require('../middleware/auth');
+const { requireCsrf } = require('../middleware/csrf');
 
 const router = express.Router();
 
@@ -10,18 +11,19 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
 function issueSession(res, operator) {
   const token = crypto.randomUUID();
+  const csrfToken = crypto.randomUUID();
   const ttlMs =
     state.scenario === 'auth_expiry'
       ? state.scenarioParams.auth_expiry.ttlSeconds * 1000
       : TWELVE_HOURS_MS;
   const expiresAt = Date.now() + ttlMs;
-  state.sessions.set(token, { operator, expiresAt, createdAt: Date.now() });
+  state.sessions.set(token, { operator, expiresAt, createdAt: Date.now(), csrfToken });
   res.cookie('overlord_session', token, {
     httpOnly: true,
     expires: new Date(expiresAt),
     sameSite: 'lax',
   });
-  return { token, expires_at: new Date(expiresAt).toISOString(), operator };
+  return { token, expires_at: new Date(expiresAt).toISOString(), operator, csrf_token: csrfToken };
 }
 
 router.post('/login', (req, res) => {
@@ -49,7 +51,7 @@ router.post('/refresh', requireAuth, (req, res) => {
   res.json(issueSession(res, req.operator));
 });
 
-router.post('/logout', requireAuth, (req, res) => {
+router.post('/logout', requireAuth, requireCsrf, (req, res) => {
   state.sessions.delete(req.token);
   res.clearCookie('overlord_session');
   res.status(204).end();

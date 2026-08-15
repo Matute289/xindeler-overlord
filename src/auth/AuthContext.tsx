@@ -98,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: session.token,
         operator: session.operator,
         expiresAt: session.expires_at,
+        csrfToken: session.csrf_token,
       });
       setOperator(session.operator);
       setStatus('authenticated');
@@ -120,7 +121,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleAuthError = useCallback((error: unknown): boolean => {
     if (
       error instanceof ApiError &&
-      (error.code === 'session_expired' || error.code === 'unauthorized')
+      (error.code === 'session_expired' ||
+        error.code === 'unauthorized' ||
+        error.code === 'invalid_csrf')
     ) {
       sessionStorage.clear().catch(() => {});
       setOperator(null);
