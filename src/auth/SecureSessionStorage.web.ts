@@ -39,7 +39,7 @@ export const sessionStorage: SessionStorage = {
 
   async getCsrfHeader() {
     const stored = readStoredMetadata();
-    return stored ? { 'x-csrf-token': stored.csrfToken } : undefined;
+    return stored?.csrfToken ? { 'x-csrf-token': stored.csrfToken } : undefined;
   },
 };
 
