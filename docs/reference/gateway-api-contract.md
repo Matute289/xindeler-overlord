@@ -254,6 +254,4 @@ never talks to APNs/FCM directly.
 
 - Exact `status` field names (this doc guesses; `/metrics` naming may leak through).
 - Whether `Idempotency-Key` is honoured or the client must guard against double-taps alone.
-- Whether push notifications ("server down") are gateway-initiated (needs APNs/FCM keys on the
-  VPS) or polled by the app. Deferred to Phase 6 either way.
 - Session token format (opaque vs JWT) — affects whether the app can render "expires in".
