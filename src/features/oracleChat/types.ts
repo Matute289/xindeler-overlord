@@ -1,4 +1,4 @@
-import type { DmEvent } from '@/api/schemas';
+import type { ChatMessage, DmEvent } from '@/api/schemas';
 
 export type ChatTurn = {
   id: string;
@@ -15,6 +15,11 @@ export type ChatTurn = {
   // Bedrock send that failed must not silently downgrade to a free local retry, which would be a
   // different, cheaper operation than what the operator actually asked for.
   tier: 'local' | 'bedrock' | null;
+  // `null` for operator turns (they have no context) and for an assistant turn before its
+  // `context` event arrives, or if the stream never sends one. Set once, when the `context`
+  // event lands — before any tokens, matching the real ordering: what the model read is decided
+  // before what it wrote.
+  contextSnippets: ChatMessage[] | null;
 };
 
 export type ChatThread = {

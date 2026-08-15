@@ -125,6 +125,11 @@ export function useOracleChatThreads() {
               status: 'complete',
               error: null,
             }));
+          } else if (event.type === 'context') {
+            updateTurn(threadId, assistantTurnId, (turn) => ({
+              ...turn,
+              contextSnippets: event.snippets,
+            }));
           }
         }
         // A stream that ends without ever emitting a terminal `draft` event told us
@@ -171,6 +176,7 @@ export function useOracleChatThreads() {
         draft: null,
         error: null,
         tier: null,
+        contextSnippets: null,
       };
       const assistantTurn: ChatTurn = {
         id: Crypto.randomUUID(),
@@ -180,6 +186,7 @@ export function useOracleChatThreads() {
         draft: null,
         error: null,
         tier,
+        contextSnippets: null,
       };
       setThreads((prev) =>
         prev.map((thread) =>
@@ -211,6 +218,7 @@ export function useOracleChatThreads() {
         status: 'streaming',
         draft: null,
         error: null,
+        contextSnippets: null,
       }));
       await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId, tier);
     },

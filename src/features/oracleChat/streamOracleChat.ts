@@ -1,8 +1,10 @@
 import { ApiError } from '@/api';
 import {
+  ChatMessageSchema,
   DmEventSchema,
   ErrorEnvelopeSchema,
   OracleChatTokenSchema,
+  type ChatMessage,
   type DmEvent,
 } from '@/api/schemas';
 import { parseSseStream } from '@/stream/sseParser';
@@ -19,7 +21,9 @@ const CONNECT_TIMEOUT_MS = 10_000;
 const IDLE_TIMEOUT_MS = 10_000;
 
 export type OracleChatStreamEvent =
-  { type: 'token'; text: string } | { type: 'draft'; draft: DmEvent };
+  | { type: 'token'; text: string }
+  | { type: 'draft'; draft: DmEvent }
+  | { type: 'context'; snippets: ChatMessage[] };
 
 // A minimal fetch-shaped type for exactly the fields this module passes — mirrors the same
 // approach `StreamClient.ts` uses for its own GET-only equivalent, so both `expo/fetch` and
@@ -145,6 +149,13 @@ export async function* streamOracleChat(
           try {
             const parsed = DmEventSchema.safeParse(JSON.parse(event.data));
             if (parsed.success) yield { type: 'draft', draft: parsed.data };
+          } catch {
+            // Malformed JSON in one event — skip it, don't kill the whole stream.
+          }
+        } else if (event.event === 'context') {
+          try {
+            const parsed = ChatMessageSchema.array().safeParse(JSON.parse(event.data));
+            if (parsed.success) yield { type: 'context', snippets: parsed.data };
           } catch {
             // Malformed JSON in one event — skip it, don't kill the whole stream.
           }
