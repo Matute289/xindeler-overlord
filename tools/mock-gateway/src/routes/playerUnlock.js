@@ -25,7 +25,7 @@ router.post('/', (req, res) => {
       operator: req.operator,
       action: 'players.2fa_unlock',
       payload: { username: trimmed },
-      outcome: 'failed',
+      outcome: 'error',
     });
     return sendError(res, 502, 'gateway_error', 'failed to reach the auth service');
   }
@@ -33,7 +33,7 @@ router.post('/', (req, res) => {
     operator: req.operator,
     action: 'players.2fa_unlock',
     payload: { username: trimmed },
-    outcome: 'success',
+    outcome: 'ok',
   });
   res.status(204).end();
 });
