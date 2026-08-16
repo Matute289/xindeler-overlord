@@ -13,8 +13,8 @@ import { useEffect } from 'react';
 
 import { ApiProvider } from '@/api/ApiContext';
 import { QueryProvider } from '@/api/QueryProvider';
-import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { AppLockGate } from '@/auth/AppLockGate';
+import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { EnvironmentProvider } from '@/config/EnvironmentContext';
 import { StreamProvider } from '@/stream/StreamContext';
 

@@ -61,12 +61,15 @@ for "block interaction without losing state" in this codebase. A real `logout()`
 
 ## State machine
 
-`locked` starts `true`. It's set back to `true` by a `useEffect` keyed on `AuthContext`'s `status`
-transitioning *to* `'authenticated'` — this single rule covers both cases that need it: a cold
-boot that restores an already-valid persisted session (first render goes straight to
-`authenticated`, the effect still fires on mount), and a fresh login after a real logout (the
-`AppLockGate` component instance persists across that cycle, so its `locked` state would
-otherwise still hold whatever it was left at).
+`locked` starts `true`. It's set back to `true` whenever `AuthContext`'s `status` transitions *to*
+`'authenticated'` — this single rule covers both cases that need it: a cold boot that restores an
+already-valid persisted session (first render goes straight to `authenticated`), and a fresh login
+after a real logout (the `AppLockGate` component instance persists across that cycle, so its
+`locked` state would otherwise still hold whatever it was left at). Implemented as a render-time
+state adjustment, not a `useEffect` — this repo's `react-hooks/set-state-in-effect` lint rule
+forbids an effect that calls `setState` unconditionally in its body; the exact idiom (a `prevStatus`
+value compared during render) is already established twice elsewhere in this codebase
+(`StreamContext.tsx`, `OracleComposerScreen.tsx`) and is documented inline in `AppLockGate.tsx`.
 
 A second `AppState` listener, active only while `status === 'authenticated'`, sets `locked = true`
 on any transition away from `'active'`. Skipped entirely on web (`Platform.OS === 'web'` — no
@@ -85,9 +88,13 @@ scope-narrowing, not an oversight — see "Out of scope."
 A new `AppLockScreen` component, structurally modeled on `StepUpPrompt.tsx` (opaque `Modal`,
 themed `Button`) but with two deliberate differences: it can't be dismissed by tapping outside or
 the hardware back button (this is a lock, not a confirmation you can back out of), and it
-auto-triggers the OS biometric prompt once on mount rather than waiting for a tap — the common
-path (returning to a backgrounded app) shouldn't cost an extra tap just to get to the prompt
-that's about to appear anyway.
+auto-triggers the OS biometric prompt once the app is actually in the foreground, rather than
+waiting for a tap — the common path (returning to a backgrounded app) shouldn't cost an extra tap
+just to get to the prompt that's about to appear anyway. **Not simply "on mount"**: this screen
+mounts the instant it's told to lock, which happens while the app is still backgrounding, not
+after it returns — triggering the OS prompt at that moment produces a spurious failure the
+operator would see the instant they come back. The trigger instead waits for the next transition
+to `AppState`'s `'active'` (or fires immediately if already active, covering the cold-boot case).
 
 Calls `expo-local-authentication`'s `authenticateAsync({ promptMessage, disableDeviceFallback:
 false })`. `disableDeviceFallback: false` is deliberate: on a biometric failure, iOS/Android's own
@@ -118,6 +125,14 @@ use biometrics right now.
   while backgrounded, the existing `handleAuthError` path (a real `401`/`403` from the next
   request) already handles that correctly — unlocking biometrically doesn't and shouldn't try to
   pre-empt that.
+- **iOS app-switcher snapshot.** The lock arms on the transition away from `'active'`
+  (`AppState`), and the overlay's opaque background mounts synchronously with that — in practice
+  this likely covers the app-switcher snapshot most of the time, since it happens well before iOS
+  captures it. Not a hard guarantee (React committing the new tree before the OS takes the
+  snapshot isn't something this app controls), and not verified on a device. Explicitly
+  unaddressed, not silently ignored — a future device-level check (or, if it proves to be a real
+  problem, a `react-native-screen-privacy`-style always-on cover) would need this to be revisited
+  with real observation, not just this note.
 
 ## Testing
 

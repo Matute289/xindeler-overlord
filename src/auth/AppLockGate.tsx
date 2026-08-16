@@ -26,11 +26,23 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     if (Platform.OS === 'web') return;
     let cancelled = false;
     (async () => {
-      const [hasHardware, isEnrolled] = await Promise.all([
-        LocalAuthentication.hasHardwareAsync(),
-        LocalAuthentication.isEnrolledAsync(),
-      ]);
-      if (!cancelled) setBiometricsAvailable(hasHardware && isEnrolled);
+      try {
+        const [hasHardware, isEnrolled] = await Promise.all([
+          LocalAuthentication.hasHardwareAsync(),
+          LocalAuthentication.isEnrolledAsync(),
+        ]);
+        if (!cancelled) setBiometricsAvailable(hasHardware && isEnrolled);
+      } catch {
+        // final-review finding, Critical 1: this probe previously had no `.catch()` — a rejection
+        // (native module not linked in a build predating this ticket's config-plugin change, a
+        // keychain/keystore error, etc.) left `biometricsAvailable` `null` FOREVER, and
+        // `shouldShowLock` below requires it to be exactly `true` — so the entire lock silently,
+        // permanently fails open for that session with no error, no log, nothing. If we can't
+        // even determine whether biometrics work, we can't safely gate on them; resolve to
+        // `false` explicitly so the feature is silently absent (same as the already-accepted "no
+        // hardware/nothing enrolled" case) rather than hung in an indeterminate state forever.
+        if (!cancelled) setBiometricsAvailable(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -64,16 +76,22 @@ export function AppLockGate({ children }: { children: ReactNode }) {
   }, [status]);
 
   const shouldShowLock = status === 'authenticated' && locked && biometricsAvailable === true;
+  // final-review finding, Important 2: while `biometricsAvailable` is still unresolved (`null`)
+  // — the window between this component mounting and its hardware/enrollment probe settling,
+  // most reachable on a cold boot that restores an already-valid session — `shouldShowLock`
+  // above is correctly `false` (we don't yet know whether to lock), but `children` used to
+  // render unconditionally regardless, so `(tabs)` became briefly, genuinely visible before the
+  // probe resolved. Render nothing at all during that specific window instead — the same "render
+  // nothing while indeterminate" idiom `app/_layout.tsx`'s own font-load gate and
+  // `AuthContext`'s `status === 'loading'` state (satisfying neither `Stack.Protected` guard)
+  // already use elsewhere in this app for an analogous race.
+  const isResolvingLock = status === 'authenticated' && locked && biometricsAvailable === null;
 
   return (
     <>
-      {children}
+      {!isResolvingLock && children}
       {shouldShowLock && (
-        <AppLockScreen
-          operator={operator}
-          onUnlock={() => setLocked(false)}
-          onLogout={() => void logout()}
-        />
+        <AppLockScreen operator={operator} onUnlock={() => setLocked(false)} onLogout={logout} />
       )}
     </>
   );
