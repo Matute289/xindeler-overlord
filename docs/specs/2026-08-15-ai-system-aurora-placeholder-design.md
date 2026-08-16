@@ -93,7 +93,19 @@ nothing to call.
   purely a navigational and honesty placeholder.
 - A generic, reusable `SegmentedControl` UI primitive — this is the first use site.
 - Persisting which section (ORACLE/AURORA) was last selected across app restarts or navigation
-  away and back.
+  away and back. **Verified 2026-08-15 (final review + live check)**: at the wide/tablet
+  breakpoint (the `SidebarLayout`/`Slot`-based layout), switching to another main tab and back
+  genuinely resets `AiSystemScreen` and its section state to `'oracle'` — confirmed live. At
+  phone width, `expo-router`'s `<Tabs>` (React Navigation bottom tabs) keeps sibling tab screens
+  mounted by default (no `unmountOnBlur` set anywhere in this app), so `AiSystemScreen`'s local
+  `section` state may persist across a tab-away-and-back cycle there instead of resetting — not
+  independently live-verified on phone width due to tooling limits in this session, flagged
+  honestly rather than assumed. Harmless either way: AURORA stays completely inert regardless of
+  which section is showing, so a stale selection cannot misrepresent any capability or cause any
+  side effect. Not fixed — low severity, real fix would mean either accepting the phone-width
+  persistence as fine (arguably reasonable UX — remembering which section you were looking at) or
+  adding `unmountOnBlur`-style logic that would also affect ORACLE's own scroll/query state across
+  every OTHER main-tab switch, a bigger and unrelated behavior change not worth making for this.
 - Renaming the `/oracle` route path/URL or the underlying file — only the tab's displayed label
   and icon change.
 
