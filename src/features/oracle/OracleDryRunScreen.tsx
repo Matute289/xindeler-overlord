@@ -163,7 +163,7 @@ export function OracleDryRunScreen() {
     if (playersQuery.data) playersRef.current = playersQuery.data;
   }, [playersQuery.data]);
 
-  const triggerAction = useDestructiveAction((code, idempotencyKey) => {
+  const triggerAction = useDestructiveAction((idempotencyKey) => {
     const target = buildTarget(playersRef.current);
     if (!target) {
       // Operator-facing Spanish, not an internal debug string: the only way to actually reach
@@ -172,7 +172,7 @@ export function OracleDryRunScreen() {
       // `ActionError`. Same text as the `selectedPlayerOffline` banner below, deliberately.
       throw new Error('Este jugador ya no está conectado.');
     }
-    return api.write.triggerOracleEvent(eventId, target, true, code, idempotencyKey);
+    return api.write.triggerOracleEvent(eventId, target, true, idempotencyKey);
   });
 
   // Fires exactly what the operator previewed: `result.target` (frozen at the moment the dry-run
@@ -192,7 +192,7 @@ export function OracleDryRunScreen() {
   // hold in fact, not just usually" claim actually true — the server's Task 1
   // `target_player_offline` check remains the authoritative backstop regardless.
   const fireAction = useDestructiveAction(
-    async (code, idempotencyKey) => {
+    async (idempotencyKey) => {
       if (!result) {
         throw new Error('No hay una vista previa vigente.');
       }
@@ -203,7 +203,7 @@ export function OracleDryRunScreen() {
         }
       }
       try {
-        return await api.write.fireOracleEvent(eventId, result.target, code, idempotencyKey);
+        return await api.write.fireOracleEvent(eventId, result.target, idempotencyKey);
       } catch (err) {
         // Classified here rather than after `run()` resolves, because `run()` collapses every
         // failure mode into a `null` return (a cancelled step-up included) and its `error` state

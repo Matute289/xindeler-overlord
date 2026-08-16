@@ -158,12 +158,14 @@ export function StatusScreen() {
     setDisplayedConfirmAction(confirmAction);
   }
 
-  // Safety-review finding 6, 2026-08-14: `call` now takes `(stepUpCode, idempotencyKey)` — the
-  // idempotency key is generated ONCE per `run()` invocation (inside `useDestructiveAction`) and
-  // reused across both the initial attempt and the retry-once-on-403 attempt, so the gateway sees
-  // one logical operation, not two, if a step-up code needs to be retried.
-  const startAction = useDestructiveAction((code, idempotencyKey) =>
-    api.write.startServer(code, idempotencyKey),
+  // Safety-review finding 6, 2026-08-14: the idempotency key is generated ONCE per `run()`
+  // invocation (inside `useDestructiveAction`) and reused across both the initial attempt and the
+  // retry-once-on-403 attempt, so the gateway sees one logical operation, not two, if a step-up
+  // window needs to be re-established mid-action. OC-54: `useDestructiveAction` now calls
+  // `api.auth.stepUp()` itself before invoking this closure — `call` no longer takes a TOTP code
+  // at all.
+  const startAction = useDestructiveAction((idempotencyKey) =>
+    api.write.startServer(idempotencyKey),
   );
   // Bonus fix, safety review 2026-08-14: Detener issued while 'starting' (the escape hatch for a
   // stalled start, finding 3 from the prior round) now sends `mode: 'immediate'` instead of the
@@ -171,21 +173,20 @@ export function StatusScreen() {
   // starting up may itself just hang, which isn't a useful abort for this specific case.
   // `stopMode` is captured at button-press time (see the two Detener `onPress` handlers below),
   // not read live from `state`, so the body sent matches exactly what the sheet described.
-  const stopAction = useDestructiveAction((code, idempotencyKey) =>
+  const stopAction = useDestructiveAction((idempotencyKey) =>
     api.write.stopServer(
-      code,
       stopMode === 'immediate' ? { mode: 'immediate' } : { mode: 'graceful', seconds: 30 },
       idempotencyKey,
     ),
   );
-  const restartAction = useDestructiveAction((code, idempotencyKey) =>
-    api.write.restartServer(code, { seconds: 30 }, idempotencyKey),
+  const restartAction = useDestructiveAction((idempotencyKey) =>
+    api.write.restartServer({ seconds: 30 }, idempotencyKey),
   );
-  const cancelAction = useDestructiveAction((code, idempotencyKey) =>
-    api.write.cancelShutdown(code, idempotencyKey),
+  const cancelAction = useDestructiveAction((idempotencyKey) =>
+    api.write.cancelShutdown(idempotencyKey),
   );
-  const disconnectAllAction = useDestructiveAction((code, idempotencyKey) =>
-    api.write.disconnectAll(code, idempotencyKey),
+  const disconnectAllAction = useDestructiveAction((idempotencyKey) =>
+    api.write.disconnectAll(idempotencyKey),
   );
 
   // Finding 5: `cancelAction.error` is only cleared at the start of the NEXT `cancelAction.run()`

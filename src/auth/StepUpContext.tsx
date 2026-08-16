@@ -17,8 +17,11 @@ import { StepUpPrompt } from './StepUpPrompt';
 // even though it "works" forever against the mock's fixed-string check. 90s narrows, but does
 // not eliminate, the risk of the cached value having expired server-side by the time it's
 // reused — which is exactly why `forceFresh` exists: a real consumer MUST retry with
-// `requestStepUp({ forceFresh: true })` after a `403 invalid_totp`/`step_up_required` response,
-// not treat the cache as a correctness guarantee.
+// `requestStepUp({ forceFresh: true })` whenever a cached code turns out to be wrong or stale.
+// OC-54: a wrong code itself surfaces as `401` from `POST /api/v1/step-up`; a session whose
+// step-up window lapsed between establishing it and using it surfaces as `403` from the
+// destructive write itself — `useDestructiveAction` retries both cases, each capped at one
+// attempt, not treating this cache as a correctness guarantee either way.
 const STEP_UP_CACHE_WINDOW_MS = 90_000;
 
 type CachedCode = { code: string; obtainedAt: number };

@@ -22,59 +22,53 @@ const OkResponseSchema = z.object({ ok: z.literal(true) });
 
 export function createWriteApi(http: HttpClient) {
   return {
-    startServer(stepUpCode: string, idempotencyKey?: string) {
+    startServer(idempotencyKey?: string) {
       return http.request(
         '/api/v1/server/start',
-        { method: 'POST', body: {}, stepUpCode, idempotencyKey },
+        { method: 'POST', body: {}, idempotencyKey },
         OkResponseSchema,
       );
     },
 
     stopServer(
-      stepUpCode: string,
       body: { mode: 'graceful' | 'immediate'; seconds?: number; reason?: string },
       idempotencyKey?: string,
     ) {
       return http.request(
         '/api/v1/server/stop',
-        { method: 'POST', body, stepUpCode, idempotencyKey },
+        { method: 'POST', body, idempotencyKey },
         OkResponseSchema,
       );
     },
 
-    restartServer(
-      stepUpCode: string,
-      body: { seconds: number; reason?: string },
-      idempotencyKey?: string,
-    ) {
+    restartServer(body: { seconds: number; reason?: string }, idempotencyKey?: string) {
       return http.request(
         '/api/v1/server/restart',
-        { method: 'POST', body, stepUpCode, idempotencyKey },
+        { method: 'POST', body, idempotencyKey },
         OkResponseSchema,
       );
     },
 
-    cancelShutdown(stepUpCode: string, idempotencyKey?: string) {
+    cancelShutdown(idempotencyKey?: string) {
       return http.request(
         '/api/v1/server/cancel_shutdown',
-        { method: 'POST', body: {}, stepUpCode, idempotencyKey },
+        { method: 'POST', body: {}, idempotencyKey },
         OkResponseSchema,
       );
     },
 
-    disconnectAll(stepUpCode: string, idempotencyKey?: string) {
+    disconnectAll(idempotencyKey?: string) {
       return http.request(
         '/api/v1/server/disconnect_all',
-        { method: 'POST', body: {}, stepUpCode, idempotencyKey },
+        { method: 'POST', body: {}, idempotencyKey },
         OkResponseSchema,
       );
     },
 
-    unlockPlayer2fa(username: string, stepUpCode: string, idempotencyKey?: string) {
+    unlockPlayer2fa(username: string, idempotencyKey?: string) {
       return http.request<void>('/api/v1/players/2fa/unlock', {
         method: 'POST',
         body: { username },
-        stepUpCode,
         idempotencyKey,
       });
     },
@@ -101,10 +95,10 @@ export function createWriteApi(http: HttpClient) {
       });
     },
 
-    stageOracleEvent(id: string, dmEvent: DmEvent, stepUpCode: string, idempotencyKey?: string) {
+    stageOracleEvent(id: string, dmEvent: DmEvent, idempotencyKey?: string) {
       return http.request(
         '/api/v1/oracle/stage',
-        { method: 'POST', body: { id, dm_event: dmEvent }, stepUpCode, idempotencyKey },
+        { method: 'POST', body: { id, dm_event: dmEvent }, idempotencyKey },
         StageOracleEventResponseSchema,
       );
     },
@@ -120,17 +114,11 @@ export function createWriteApi(http: HttpClient) {
       eventId: string,
       target: OracleTarget,
       dryRun: true,
-      stepUpCode: string,
       idempotencyKey?: string,
     ) {
       return http.request(
         '/api/v1/oracle/trigger',
-        {
-          method: 'POST',
-          body: { event_id: eventId, target, dry_run: dryRun },
-          stepUpCode,
-          idempotencyKey,
-        },
+        { method: 'POST', body: { event_id: eventId, target, dry_run: dryRun }, idempotencyKey },
         OracleTriggerResponseSchema,
       );
     },
@@ -139,28 +127,18 @@ export function createWriteApi(http: HttpClient) {
     // `dryRun: true` literal type stays exactly as OC-32/33's final review narrowed it; this is the
     // ONLY place `dry_run: false` appears anywhere in client code, and it's not a parameter — it's
     // hardcoded. Grepping for `fireOracleEvent` finds every real-fire call site in this app.
-    fireOracleEvent(
-      eventId: string,
-      target: OracleTarget,
-      stepUpCode: string,
-      idempotencyKey?: string,
-    ) {
+    fireOracleEvent(eventId: string, target: OracleTarget, idempotencyKey?: string) {
       return http.request(
         '/api/v1/oracle/trigger',
-        {
-          method: 'POST',
-          body: { event_id: eventId, target, dry_run: false },
-          stepUpCode,
-          idempotencyKey,
-        },
+        { method: 'POST', body: { event_id: eventId, target, dry_run: false }, idempotencyKey },
         OracleTriggerResponseSchema,
       );
     },
 
-    setOracleEnabled(enabled: boolean, stepUpCode: string, idempotencyKey?: string) {
+    setOracleEnabled(enabled: boolean, idempotencyKey?: string) {
       return http.request(
         '/api/v1/oracle/enabled',
-        { method: 'POST', body: { enabled }, stepUpCode, idempotencyKey },
+        { method: 'POST', body: { enabled }, idempotencyKey },
         OracleEnabledResponseSchema,
       );
     },

@@ -2,21 +2,24 @@ import * as Crypto from 'expo-crypto';
 import { useState } from 'react';
 
 import { isApiError } from '@/api';
+import { useApi } from '@/api/ApiContext';
 import { isStepUpCancelled, useStepUpAuth } from '@/auth/StepUpContext';
 
-const STEP_UP_ERROR_CODES = new Set(['invalid_totp', 'step_up_required']);
-
 export function useDestructiveAction<T>(
-  call: (stepUpCode: string, idempotencyKey: string) => Promise<T>,
+  call: (idempotencyKey: string) => Promise<T>,
   // Additive, opt-in — every existing call site omits this and keeps behaving exactly as before
   // (cached step-up code reused when still fresh). `forceFreshStepUp` exists for actions
-  // consequential enough that they must never silently ride a step-up obtained for a DIFFERENT,
-  // earlier action — OC-34's Fire is the first such action: it's typically invoked seconds after
-  // a dry-run that just populated the step-up cache, and without this option Fire would almost
-  // always skip a fresh TOTP prompt, collapsing its intended "step-up AND typing FIRE" double
-  // gate down to just the typing.
+  // consequential enough that they must never silently skip the operator-facing TOTP PROMPT
+  // because a DIFFERENT, earlier action's code is still sitting in `StepUpContext`'s 90s client
+  // cache — OC-34's Fire is the first such action: it's typically invoked seconds after a dry-run
+  // that just populated that cache, and without this option Fire would almost always skip the
+  // prompt, collapsing its intended "step-up AND typing FIRE" double gate down to just the
+  // typing. (OC-54: the SERVER only ever sees one 5-minute window per session regardless of which
+  // action opened it — this option controls the client-side prompt/cache only, not a
+  // server-side per-action grant.)
   options?: { forceFreshStepUp?: boolean },
 ) {
+  const api = useApi();
   const { requestStepUp } = useStepUpAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -41,13 +44,51 @@ export function useDestructiveAction<T>(
     const idempotencyKey = Crypto.randomUUID();
     try {
       const code = await requestStepUp(forceFreshStepUp ? { forceFresh: true } : undefined);
+      // OC-54: the real gateway (xindeler-zuul) is session-scoped, not header-scoped — a TOTP
+      // code only means anything once it's been exchanged for a step-up WINDOW via this call.
+      // The destructive `call()` below sends no code at all; the gateway reads session state.
+      // This runs on EVERY `run()`, even when `requestStepUp()` returned a cached (not freshly
+      // prompted) code — the client-side 90s cache and the server-side 5-minute window are two
+      // different things, and re-establishing the window costs one extra request but keeps the
+      // window fresh for exactly as long as the write that's about to use it needs it to be.
+      try {
+        await api.auth.stepUp(code);
+      } catch (err) {
+        // A rejected TOTP code fails THIS call with `401` (matching the real gateway's own
+        // `rejected()` status for a bad code here — see docs/reference/gateway-api-contract.md
+        // §2.1), not the `403` the write-call retry below checks for. Fix, discovered live during
+        // OC-54 Task 2: without this branch, a wrong code propagated straight to the outer catch
+        // AND stayed cached in `StepUpContext` for its full 90s window, so every subsequent tap —
+        // this run() included, had it not retried here — silently resent the same known-bad code
+        // with no re-prompt at all. `requestStepUp({ forceFresh: true })` both discards that
+        // cached value and re-prompts, so a mistyped code recovers on the very next attempt
+        // instead of going silent for up to 90 seconds.
+        if (isApiError(err) && err.status === 401) {
+          const freshCode = await requestStepUp({ forceFresh: true });
+          await api.auth.stepUp(freshCode);
+        } else {
+          throw err;
+        }
+      }
       let result: T;
       try {
-        result = await call(code, idempotencyKey);
+        result = await call(idempotencyKey);
       } catch (err) {
-        if (isApiError(err) && STEP_UP_ERROR_CODES.has(err.code)) {
+        // `status === 403` (not a specific error code) is what actually distinguishes "no
+        // current step-up window" against BOTH the mock (JSON `step_up_required` envelope) and
+        // the real gateway (plain-text "step-up required" body, no parseable code at all) — the
+        // HTTP status survives either shape. A CSRF-related 403 would also trigger one wasted
+        // retry here before its real error surfaces; accepted, since the retry is capped at one
+        // attempt and every write already requires a valid CSRF header to reach this point.
+        // Excludes `oracle_disabled` explicitly — final-review finding 1, 2026-08-15: ORACLE's
+        // kill switch also returns a legitimate, unrelated-to-step-up 403
+        // (tools/mock-gateway/src/routes/oracleTrigger.js, oracleStage.js) that a step-up retry
+        // can never fix — retrying it force-prompts the operator for a TOTP code that has nothing
+        // to do with the actual failure, then resends an identical, identically-failing write.
+        if (isApiError(err) && err.status === 403 && err.code !== 'oracle_disabled') {
           const freshCode = await requestStepUp({ forceFresh: true });
-          result = await call(freshCode, idempotencyKey);
+          await api.auth.stepUp(freshCode);
+          result = await call(idempotencyKey);
         } else {
           throw err;
         }
