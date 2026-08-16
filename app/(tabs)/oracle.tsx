@@ -1,10 +1,10 @@
-import { OracleEventsScreen } from '@/features/oracle/OracleEventsScreen';
+import { AiSystemScreen } from '@/features/aiSystem/AiSystemScreen';
 import { Screen } from '@/ui/Screen';
 
 export default function OracleRoute() {
   return (
     <Screen>
-      <OracleEventsScreen />
+      <AiSystemScreen />
     </Screen>
   );
 }

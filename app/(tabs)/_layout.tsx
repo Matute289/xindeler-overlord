@@ -21,7 +21,7 @@ const DESTINATIONS: Destination[] = [
   { href: '/players', routeName: 'players', label: 'Jugadores', icon: 'people-outline' },
   { href: '/logs', routeName: 'logs', label: 'Logs', icon: 'list-outline' },
   { href: '/chat', routeName: 'chat', label: 'Chat', icon: 'chatbubbles-outline' },
-  { href: '/oracle', routeName: 'oracle', label: 'ORACLE', icon: 'sparkles-outline' },
+  { href: '/oracle', routeName: 'oracle', label: 'Sistema IA', icon: 'hardware-chip-outline' },
   { href: '/more', routeName: 'more', label: 'Más', icon: 'ellipsis-horizontal-outline' },
 ];
 
