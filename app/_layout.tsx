@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 
 import { ApiProvider } from '@/api/ApiContext';
 import { QueryProvider } from '@/api/QueryProvider';
+import { AppLockGate } from '@/auth/AppLockGate';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { EnvironmentProvider } from '@/config/EnvironmentContext';
 import { StreamProvider } from '@/stream/StreamContext';
@@ -44,8 +45,10 @@ export default function RootLayout() {
         <ApiProvider>
           <QueryProvider>
             <StreamProvider>
-              <StatusBar style="light" />
-              <RootNavigator />
+              <AppLockGate>
+                <StatusBar style="light" />
+                <RootNavigator />
+              </AppLockGate>
             </StreamProvider>
           </QueryProvider>
         </ApiProvider>
