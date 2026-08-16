@@ -30,6 +30,13 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-secure-store',
+    [
+      'expo-local-authentication',
+      {
+        faceIDPermission:
+          'Overlord usa Face ID para volver a abrir tu sesión sin pedirte la contraseña de nuevo.',
+      },
+    ],
     'expo-notifications',
     [
       'expo-splash-screen',
