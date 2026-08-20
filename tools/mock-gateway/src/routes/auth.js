@@ -42,14 +42,20 @@ function issueSession(res, username) {
 
 // One-shot login (OC-55) — mirrors the real gateway's own POST /api/v1/login: username,
 // password, AND totp_code all in one request, session issued directly, no server-side
-// "challenge" concept. Replaces the old two-step login()/totp() invention below.
+// "challenge" concept.
+//
+// One generic rejection for every failure reason — final-review finding, Important 2. The real
+// gateway's login route answers a bad password, a wrong TOTP code, or an operator who isn't
+// allowlisted through the exact same undifferentiated response (its own `rejected()` helper),
+// deliberately, so a client can never distinguish which part failed. This mock previously used
+// two separately-coded checks (`invalid_credentials` vs `invalid_totp`), which let local
+// verification exercise a failure UX that cannot occur against the real, deployed gateway —
+// the same discipline OC-52 already established for a different endpoint: never invent a
+// distinction the backend doesn't provide.
 router.post('/login', (req, res) => {
   const { username, password, totp_code: totpCode } = req.body || {};
-  if (username !== 'matias' || password !== 'mock') {
+  if (username !== 'matias' || password !== 'mock' || totpCode !== '000000') {
     return sendError(res, 401, 'invalid_credentials', 'Usuario o contraseña incorrectos');
-  }
-  if (totpCode !== '000000') {
-    return sendError(res, 401, 'invalid_totp', 'Código TOTP inválido');
   }
   res.json(issueSession(res, username));
 });

@@ -50,7 +50,8 @@ to say so in plain language rather than showing a generic spinner).
 - Every mutating request carries an `Idempotency-Key` header (client-generated UUID). Phones
   lose connections mid-request; the gateway must not start the server twice.
 - Every mutating request also carries `x-csrf-token: <token>`, the value returned by
-  `POST /auth/totp` (§2). Required unconditionally on write endpoints, regardless of whether the
+  `POST /login` (§2, corrected 2026-08-20 — OC-55 removed the old two-step `/auth/totp` this
+  used to come from). Required unconditionally on write endpoints, regardless of whether the
   request authenticates via the bearer header or the web cookie — confirmed 2026-08-15 against the
   real `xindeler-zuul` source, not just its own backlog prose. (One exception today: `POST
   /oracle/chat` — see §6.)
@@ -66,14 +67,15 @@ to say so in plain language rather than showing a generic spinner).
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/v1/auth/login` | `{ username, password }` → `{ totp_required: true, challenge_id }` |
-| `POST` | `/api/v1/auth/totp` | `{ challenge_id, code }` → `{ token, expires_at, operator, csrf_token }` |
-| `POST` | `/api/v1/auth/refresh` | rotates the session token |
-| `POST` | `/api/v1/auth/logout` | revokes server-side |
+| `POST` | `/api/v1/login` | `{ username, password, totp_code }` → `{ csrf_token, operator_uuid, operator_username, is_superuser }` — one request, no challenge step. Bare, **not** nested under `/api/v1/auth/` (corrected 2026-08-20, OC-55 — confirmed directly against the real router, `web.rs`). |
+| `POST` | `/api/v1/logout` | revokes server-side. Bare, same correction. |
 
-Session: 12 h absolute / 30 min idle (NH-75 §5.3.7). The client stores the token in the OS
-secure store (Keychain / Keystore), **never** in `AsyncStorage`/`localStorage`. See the client
-spec §5.3.
+Session: 12 h absolute / 30 min idle (NH-75 §5.3.7). The session lives entirely in an `HttpOnly`
+cookie — there is no session token in any response body to store anywhere. Corrected 2026-08-20
+(OC-55): this doc previously claimed the client stores a token in the OS secure store; that was
+never true of the real gateway's response shape. Native's own way of presenting a session
+credential (once the real gateway supports one — `xindeler-zuul`'s `ZG-52`) is a separate,
+not-yet-shipped mechanism, not something this app does today.
 
 ⚠️ The gateway authenticates against `xindeler-auth`, whose own tokens have a ~15 s TTL. That
 is entirely a gateway-internal detail — the app must never see or store an `authc` token.
@@ -84,8 +86,10 @@ is entirely a gateway-internal detail — the app must never see or store an `au
 |---|---|---|
 | `POST` | `/api/v1/step-up` | `{ totp_code }` → `204` on success |
 
-Bare path, **not** nested under `/api/v1/auth/`, unlike every other endpoint in this section —
-matches the real `xindeler-zuul` router (`web.rs`) exactly. Requires an already-valid session —
+Bare path, **not** nested under `/api/v1/auth/` — matches the real `xindeler-zuul` router
+(`web.rs`) exactly, same as every other endpoint in this section as of OC-55 (2026-08-20; `login`/
+`logout` were corrected from an assumed `/auth/`-nested path to match). Requires an
+already-valid session —
 the real gateway's `AuthenticatedOperator` extractor reads the session **cookie only** here
 (`auth_extractor.rs`), not the bearer header the rest of this doc describes as an alternative
 (final-review correction, 2026-08-15) — plus the `x-csrf-token` header like any other mutating

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
@@ -12,6 +12,14 @@ export default function LoginScreen() {
   const { beginLogin } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+
+  // final-review Minor: bounds how long an abandoned login attempt's credentials sit in
+  // AuthContext's in-memory ref (e.g. the operator typed a code, tapped "Volver", and never
+  // returned) — clearing pending state the moment this screen is reached again is a natural,
+  // no-extra-UI way to do it, distinct from the environment-switch clear above.
+  useEffect(() => {
+    beginLogin('', '');
+  }, [beginLogin]);
 
   function handleSubmit() {
     beginLogin(username, password);

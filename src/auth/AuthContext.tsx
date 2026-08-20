@@ -60,18 +60,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     sessionStorage
       .read()
-      .then((stored) => {
+      .then(async (stored) => {
         if (cancelled) return;
         // No server-communicated expiry to check locally (the real gateway's login response
         // has no `expires_at` — OC-55) — a persisted session record is treated as optimistically
         // authenticated; the first real request that actually fails (session_expired/
         // unauthorized) demotes via handleAuthError below, same as it already does today.
-        if (stored) {
+        // final-review Minor: a device upgrading from before OC-55 may still have an
+        // old-shaped `{operator, expiresAt}` record in storage — `operatorUsername` being
+        // present is enough to distinguish a genuinely new-shaped record from a stale one,
+        // without needing a full schema-validation library for one field check.
+        if (stored && typeof stored.operatorUsername === 'string') {
           setOperator(stored.operatorUsername);
           setOperatorUuid(stored.operatorUuid);
           setIsSuperuser(stored.isSuperuser);
           setStatus('authenticated');
           return;
+        }
+        if (stored) {
+          await sessionStorage.clear();
         }
         setStatus('unauthenticated');
       })
@@ -102,6 +109,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOperatorUuid(null);
     setIsSuperuser(false);
     setStatus('unauthenticated');
+    // final-review finding, Critical: a session for one gateway is meaningless against
+    // another, and the same is true of credentials mid-flow — without this, an operator who
+    // switches environments while sitting on the TOTP screen (reachable via this stack's own
+    // EnvironmentBadge) could have completeLogin() send the OLD gateway's username/password to
+    // the NEW gateway's /api/v1/login, since `api` is memoized on environment.baseUrl and
+    // completeLogin reads whatever is still in pendingCredentials.current. Clearing both here
+    // forces `hasPendingLogin` false, which bounces `/totp` back to `/login` via its own
+    // Redirect guard — the operator re-enters credentials against the gateway they actually
+    // chose, rather than the request going out silently misdirected.
+    pendingCredentials.current = null;
+    setHasPendingLogin(false);
   }, [environment.baseUrl]);
 
   const beginLogin = useCallback((username: string, password: string) => {
