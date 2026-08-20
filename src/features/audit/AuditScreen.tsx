@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
+import { isApiError } from '@/api';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { useStepUpGate } from '@/auth/useStepUpGate';
 import { Button } from '@/ui/Button';
@@ -25,10 +26,17 @@ export function AuditScreen() {
     return <Empty title="Auditoría" message="Confirmá tu identidad para continuar…" />;
   }
 
-  return <AuditList />;
+  // This is a tab screen (app/(tabs)/audit.tsx) that stays mounted after the first visit — it
+  // does not remount on tab re-focus, so `gate.ready` would otherwise stay `true` forever once
+  // set. The real gateway's step-up window is 5 minutes server-side; `onStepUpLapsed` is how
+  // `AuditList` reports that a pull-to-refresh hit that lapsed window (a `403`) so the gate can
+  // re-arm and put the TOTP prompt back in front of the operator — final-review Finding 2,
+  // 2026-08-20. `gate.retry` is stable (useCallback in useStepUpGate) so this prop identity
+  // doesn't churn across renders.
+  return <AuditList onStepUpLapsed={gate.retry} />;
 }
 
-function AuditList() {
+function AuditList({ onStepUpLapsed }: { onStepUpLapsed: () => void }) {
   const query = useAuditQuery();
   const { colors } = useTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -36,7 +44,18 @@ function AuditList() {
   async function handleRefresh() {
     setIsRefreshing(true);
     try {
-      await query.refetch();
+      // Inspect THIS refetch's own result rather than watching `query.error` generally —
+      // the initial load's error path is already handled below (`query.data === undefined`
+      // renders `GatewayErrorEmpty`), and a plain `useEffect` on `query.error` would also fire
+      // on every future mount of this component with the SAME cached error object still sitting
+      // in the query cache (TanStack Query cache persists across this component's unmount when
+      // the gate re-arms and later closes again), re-triggering the gate before its own fresh
+      // fetch has had a chance to resolve. Scoping this to the explicit pull-to-refresh call
+      // avoids both.
+      const result = await query.refetch();
+      if (isApiError(result.error) && result.error.status === 403) {
+        onStepUpLapsed();
+      }
     } finally {
       setIsRefreshing(false);
     }
