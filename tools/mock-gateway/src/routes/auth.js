@@ -23,6 +23,7 @@ function issueSession(res, username) {
   const expiresAt = Date.now() + ttlMs;
   state.sessions.set(token, {
     operator: username,
+    operatorUuid: MOCK_OPERATOR_UUID,
     expiresAt,
     createdAt: Date.now(),
     csrfToken,

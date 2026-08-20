@@ -1,14 +1,17 @@
 const { state } = require('./state');
 const { broadcast } = require('./sse');
 
-function recordAudit({ operator, action, payload, outcome, detail }) {
+let nextId = 1;
+
+function recordAudit({ operatorUuid, operatorUsername, action, payload, outcome }) {
   const row = {
-    ts: new Date().toISOString(),
-    operator,
+    id: nextId++,
+    operator_uuid: operatorUuid,
+    operator_username: operatorUsername,
     action,
     payload: payload ?? {},
     outcome,
-    ...(detail ? { detail } : {}),
+    created_at: Math.floor(Date.now() / 1000),
   };
   state.auditLog.push(row);
   broadcast('audit', row);

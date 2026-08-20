@@ -22,18 +22,20 @@ router.post('/', (req, res) => {
   const known = players.some((p) => p.alias.toLowerCase() === trimmed.toLowerCase());
   if (!known) {
     recordAudit({
-      operator: req.operator,
+      operatorUuid: req.operatorUuid,
+      operatorUsername: req.operator,
       action: 'players.2fa_unlock',
       payload: { username: trimmed },
-      outcome: 'error',
+      outcome: 'failed',
     });
     return sendError(res, 502, 'gateway_error', 'failed to reach the auth service');
   }
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'players.2fa_unlock',
     payload: { username: trimmed },
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.status(204).end();
 });

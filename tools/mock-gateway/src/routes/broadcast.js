@@ -21,10 +21,11 @@ router.post('/', (req, res) => {
   if (state.chatHistory.length > 500) state.chatHistory.shift();
   broadcast('chat', chatEntry);
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'broadcast',
     payload: { message },
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.json({ ok: true });
 });

@@ -12,10 +12,11 @@ router.post('/', (req, res) => {
   }
   state.oracleEnabled = enabled;
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'oracle.enabled',
     payload: { enabled },
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.json({ enabled });
 });

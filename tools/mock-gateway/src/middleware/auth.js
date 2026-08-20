@@ -26,6 +26,7 @@ function requireAuth(req, res, next) {
   }
 
   req.operator = session.operator;
+  req.operatorUuid = session.operatorUuid;
   req.token = token;
   next();
 }

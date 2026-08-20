@@ -60,10 +60,11 @@ router.post('/', (req, res) => {
       message: `ORACLE event disparado: ${eventId}`,
     });
     recordAudit({
-      operator: req.operator,
+      operatorUuid: req.operatorUuid,
+      operatorUsername: req.operator,
       action: 'oracle.trigger',
       payload: { event_id: eventId, target, dry_run: false },
-      outcome: 'ok',
+      outcome: 'success',
     });
   }
 

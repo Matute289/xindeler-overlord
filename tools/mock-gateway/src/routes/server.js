@@ -8,7 +8,13 @@ const router = express.Router();
 
 router.post('/start', requireStepUp, (req, res) => {
   scenarios.startServer();
-  recordAudit({ operator: req.operator, action: 'server.start', payload: {}, outcome: 'ok' });
+  recordAudit({
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
+    action: 'server.start',
+    payload: {},
+    outcome: 'success',
+  });
   res.json({ ok: true });
 });
 
@@ -26,10 +32,11 @@ router.post('/stop', requireStepUp, (req, res) => {
     scenarios.beginGracefulStop({ seconds: seconds ?? 30, reason, autoRestart: false });
   }
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'server.stop',
     payload: { mode, seconds, reason },
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.json({ ok: true });
 });
@@ -41,10 +48,11 @@ router.post('/restart', requireStepUp, (req, res) => {
   }
   scenarios.beginGracefulStop({ seconds, reason, autoRestart: true });
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'server.restart',
     payload: { seconds, reason },
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.json({ ok: true });
 });
@@ -54,19 +62,20 @@ router.post('/cancel_shutdown', requireStepUp, (req, res) => {
     scenarios.cancelShutdown();
   } catch (err) {
     recordAudit({
-      operator: req.operator,
+      operatorUuid: req.operatorUuid,
+      operatorUsername: req.operator,
       action: 'server.cancel_shutdown',
       payload: {},
-      outcome: 'error',
-      detail: err.message,
+      outcome: 'failed',
     });
     return sendError(res, 400, err.code || 'cancel_failed', err.message);
   }
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'server.cancel_shutdown',
     payload: {},
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.json({ ok: true });
 });
@@ -78,10 +87,11 @@ router.post('/disconnect_all', requireStepUp, (req, res) => {
     message: 'Todos los jugadores fueron desconectados',
   });
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'server.disconnect_all',
     payload: {},
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.json({ ok: true });
 });
