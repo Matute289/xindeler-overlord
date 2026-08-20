@@ -4,7 +4,7 @@ import type { SaveSessionInput, SessionStorage, StoredSession } from './types';
 
 const SESSION_KEY = 'overlord.session';
 
-type StoredSessionWithCsrf = StoredSession & { csrfToken?: string };
+type StoredSessionWithSecrets = StoredSession & { csrfToken?: string; sessionToken?: string };
 
 export const sessionStorage: SessionStorage = {
   async save(session: SaveSessionInput) {
@@ -17,7 +17,7 @@ export const sessionStorage: SessionStorage = {
   async read(): Promise<StoredSession | null> {
     const stored = await readStoredSession();
     if (!stored) return null;
-    const { csrfToken: _csrfToken, ...metadata } = stored;
+    const { csrfToken: _csrfToken, sessionToken: _sessionToken, ...metadata } = stored;
     return metadata;
   },
 
@@ -25,10 +25,11 @@ export const sessionStorage: SessionStorage = {
     await SecureStore.deleteItemAsync(SESSION_KEY);
   },
 
-  // No working native bearer mechanism yet — see types.ts's doc comment. OC-58 (blocked on
-  // xindeler-zuul's ZG-52) replaces this once the real gateway actually supports it.
+  // OC-58 (xindeler-zuul's ZG-52) — the real gateway now accepts a bearer token as an
+  // alternative to the session cookie for native, which has no HTTP cookie jar of its own.
   async getAuthHeader() {
-    return undefined;
+    const stored = await readStoredSession();
+    return stored?.sessionToken ? { Authorization: `Bearer ${stored.sessionToken}` } : undefined;
   },
 
   async getCsrfHeader() {
@@ -37,7 +38,7 @@ export const sessionStorage: SessionStorage = {
   },
 };
 
-async function readStoredSession(): Promise<StoredSessionWithCsrf | null> {
+async function readStoredSession(): Promise<StoredSessionWithSecrets | null> {
   const raw = await SecureStore.getItemAsync(SESSION_KEY);
-  return raw ? (JSON.parse(raw) as StoredSessionWithCsrf) : null;
+  return raw ? (JSON.parse(raw) as StoredSessionWithSecrets) : null;
 }

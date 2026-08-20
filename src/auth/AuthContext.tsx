@@ -139,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         operatorUsername: result.operator_username,
         isSuperuser: result.is_superuser,
         csrfToken: result.csrf_token,
+        sessionToken: result.session_token,
       });
       pendingCredentials.current = null;
       setHasPendingLogin(false);

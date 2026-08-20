@@ -42,8 +42,13 @@ to say so in plain language rather than showing a generic spinner).
 
 - Base URL comes from app config, not hardcoded. Dev/staging/prod are three profiles.
 - All bodies are JSON. All timestamps RFC3339 UTC.
-- Auth: `Authorization: Bearer <session-token>`. The web build may additionally accept an
-  `HttpOnly` cookie; native builds use the bearer header only (no cookie jar assumptions).
+- Auth: the gateway checks the `zuul_session` `HttpOnly` cookie first, falling back to an
+  `Authorization: Bearer <session_token>` header if no cookie is present (confirmed 2026-08-20,
+  OC-58, against the real gateway's shared token-recovery helper — `auth_extractor.rs`). Web
+  sends the cookie only (`credentials: 'include'`), never the header. Native has a cookie jar of
+  its own (React Native does maintain one) but uses the bearer header instead, since
+  `expo-secure-store` (Keychain/Keystore-backed) is stronger storage than a native app's own
+  cookie jar — not because no cookie jar exists.
 - Errors are always `{ "error": { "code": "<machine_code>", "message": "<human text>" } }`
   with a meaningful HTTP status. **The client renders `message` verbatim** — the gateway owns
   the wording, so a new failure mode does not need an app release to be legible.
@@ -67,15 +72,19 @@ to say so in plain language rather than showing a generic spinner).
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/v1/login` | `{ username, password, totp_code }` → `{ csrf_token, operator_uuid, operator_username, is_superuser }` — one request, no challenge step. Bare, **not** nested under `/api/v1/auth/` (corrected 2026-08-20, OC-55 — confirmed directly against the real router, `web.rs`). |
+| `POST` | `/api/v1/login` | `{ username, password, totp_code }` → `{ csrf_token, operator_uuid, operator_username, is_superuser, session_token }` — one request, no challenge step. Bare, **not** nested under `/api/v1/auth/` (corrected 2026-08-20, OC-55 — confirmed directly against the real router, `web.rs`). |
 | `POST` | `/api/v1/logout` | revokes server-side. Bare, same correction. |
 
-Session: 12 h absolute / 30 min idle (NH-75 §5.3.7). The session lives entirely in an `HttpOnly`
-cookie — there is no session token in any response body to store anywhere. Corrected 2026-08-20
-(OC-55): this doc previously claimed the client stores a token in the OS secure store; that was
-never true of the real gateway's response shape. Native's own way of presenting a session
-credential (once the real gateway supports one — `xindeler-zuul`'s `ZG-52`) is a separate,
-not-yet-shipped mechanism, not something this app does today.
+Session: 12 h absolute / 30 min idle (NH-75 §5.3.7). Web's session lives entirely in an
+`HttpOnly`/`SameSite=Strict` cookie, unreadable by this app's own JS. Native's own cookie jar is
+weaker storage than `expo-secure-store` (see §1), so `session_token` (above) — the exact same raw
+value minted for the cookie — is also returned in the login response body, for native to store in
+`expo-secure-store`
+(Keychain/Keystore-backed) and present as `Authorization: Bearer <session_token>` on every
+subsequent request. Corrected 2026-08-20 (OC-58, `xindeler-zuul`'s `ZG-52`, shipped and deployed):
+this doc previously called native's bearer mechanism "not-yet-shipped" — it now exists and this
+app's native builds use it. Web never reads or sends `session_token`; it continues to rely on the
+cookie exclusively.
 
 ⚠️ The gateway authenticates against `xindeler-auth`, whose own tokens have a ~15 s TTL. That
 is entirely a gateway-internal detail — the app must never see or store an `authc` token.
@@ -89,11 +98,11 @@ is entirely a gateway-internal detail — the app must never see or store an `au
 Bare path, **not** nested under `/api/v1/auth/` — matches the real `xindeler-zuul` router
 (`web.rs`) exactly, same as every other endpoint in this section as of OC-55 (2026-08-20; `login`/
 `logout` were corrected from an assumed `/auth/`-nested path to match). Requires an
-already-valid session —
-the real gateway's `AuthenticatedOperator` extractor reads the session **cookie only** here
-(`auth_extractor.rs`), not the bearer header the rest of this doc describes as an alternative
-(final-review correction, 2026-08-15) — plus the `x-csrf-token` header like any other mutating
-request (§1); a successful call opens a 5-minute step-up window on that session
+already-valid session — the real gateway's `AuthenticatedOperator` extractor accepts either the
+session cookie or an `Authorization: Bearer <session_token>` header as of `ZG-52` (2026-08-20,
+OC-58; corrects this section's own earlier 2026-08-15 note, which predated that change and said
+cookie-only) — plus the `x-csrf-token` header like any other mutating request (§1); a successful
+call opens a 5-minute step-up window on that session
 (`STEP_UP_TTL_SECS` in the real gateway's `session.rs`), during which every destructive endpoint
 in §4/§5 accepts writes with no further step-up signal at all. Wrong or missing code → `401`
 (mock: JSON `invalid_totp`; real gateway: plain-text "invalid credentials" via `rejected()`, no
