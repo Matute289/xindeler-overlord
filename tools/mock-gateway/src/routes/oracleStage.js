@@ -25,10 +25,11 @@ router.post('/', (req, res) => {
     // will later spawn, so an audit reader has to be able to reconstruct it from the row alone
     // (NH-75's "who, when, exact sanitized payload, resolved position, outcome").
     recordAudit({
-      operator: req.operator,
+      operatorUuid: req.operatorUuid,
+      operatorUsername: req.operator,
       action: 'oracle.stage',
       payload: { id, dm_event: sanitized },
-      outcome: 'ok',
+      outcome: 'success',
     });
     res.json({ loaded: true, sanitized, diff });
   }, STAGE_DELAY_MS);
@@ -40,10 +41,11 @@ router.delete('/:id', (req, res) => {
     return sendError(res, 404, 'event_not_found', `No existe el evento '${req.params.id}'`);
   }
   recordAudit({
-    operator: req.operator,
+    operatorUuid: req.operatorUuid,
+    operatorUsername: req.operator,
     action: 'oracle.unstage',
     payload: { id: req.params.id },
-    outcome: 'ok',
+    outcome: 'success',
   });
   res.status(204).end();
 });

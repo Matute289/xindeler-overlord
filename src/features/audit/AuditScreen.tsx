@@ -31,7 +31,7 @@ export function AuditScreen() {
       </View>
       <FlatList
         data={rows}
-        keyExtractor={(row) => `${row.ts}-${row.operator}-${row.action}`}
+        keyExtractor={(row) => String(row.id)}
         renderItem={({ item }) => <AuditLogRow row={item} />}
         ListEmptyComponent={
           <View className="items-center py-12">

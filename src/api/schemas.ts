@@ -74,12 +74,17 @@ export const ChatResponseSchema = z.array(ChatMessageSchema);
 export const ChronicleResponseSchema = z.array(z.record(z.string(), z.unknown()));
 
 export const AuditRowSchema = z.object({
-  ts: z.string(),
-  operator: z.string(),
+  id: z.number(),
+  operator_uuid: z.string(),
+  operator_username: z.string(),
   action: z.string(),
   payload: z.record(z.string(), z.unknown()),
-  outcome: z.enum(['ok', 'error']),
-  detail: z.string().optional(),
+  // Free-form, not a closed enum: the real gateway's `outcome` is a Rust `String`, currently
+  // "success"/"failed" but xindeler-zuul already has unmerged work that adds more values (a
+  // "requested" pre-mutation row, RestartOutcome variant names) -- modeling this as a closed
+  // enum would just mean another client patch the moment that ships.
+  outcome: z.string(),
+  created_at: z.number(),
 });
 export type AuditRow = z.infer<typeof AuditRowSchema>;
 export const AuditResponseSchema = z.array(AuditRowSchema);
