@@ -109,7 +109,7 @@ export function OperatorsScreen() {
           label="Agregar operador"
           onPress={() => setConfirmingAdd(true)}
           loading={addAction.pending}
-          disabled={uuid.trim().length === 0}
+          disabled={uuid.trim().length === 0 || addAction.pending}
         />
         {addAction.error && <ActionError error={addAction.error} />}
         {addSuccessMessage && (
@@ -154,14 +154,20 @@ export function OperatorsScreen() {
           displayName.trim() ? ` (${displayName.trim()})` : ''
         } a la lista de operadores permitidos. Todavía va a necesitar que corras enroll-operator por SSH para su TOTP.`}
         onConfirm={handleConfirmAdd}
-        onCancel={() => setConfirmingAdd(false)}
+        onCancel={() => {
+          setConfirmingAdd(false);
+          addAction.reset();
+        }}
       />
       <ConfirmByTypingSheet
         visible={removeTarget !== null}
         word="REMOVE"
         description={`Esto quita a "${removeTarget?.display_name}" de la lista de operadores permitidos y revoca sus sesiones activas y su TOTP.`}
         onConfirm={handleConfirmRemove}
-        onCancel={() => setRemoveTarget(null)}
+        onCancel={() => {
+          setRemoveTarget(null);
+          removeAction.reset();
+        }}
       />
     </View>
   );
