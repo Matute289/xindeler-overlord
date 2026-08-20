@@ -1,36 +1,29 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 
-import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
-import { useEnvironment } from '@/config/EnvironmentContext';
-import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
-import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
 import { Screen } from '@/ui/Screen';
 import { TextField } from '@/ui/TextField';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
-  const { environment } = useEnvironment();
+  const { beginLogin } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<Error | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit() {
-    setError(null);
-    setLoading(true);
-    try {
-      const { challengeId } = await login(username, password);
-      router.push({ pathname: '/totp', params: { challengeId } });
-    } catch (err) {
-      setError(isApiError(err) ? err : new Error('No se pudo conectar con el gateway'));
-    } finally {
-      setLoading(false);
-    }
+  // final-review Minor: bounds how long an abandoned login attempt's credentials sit in
+  // AuthContext's in-memory ref (e.g. the operator typed a code, tapped "Volver", and never
+  // returned) — clearing pending state the moment this screen is reached again is a natural,
+  // no-extra-UI way to do it, distinct from the environment-switch clear above.
+  useEffect(() => {
+    beginLogin('', '');
+  }, [beginLogin]);
+
+  function handleSubmit() {
+    beginLogin(username, password);
+    router.push('/totp');
   }
 
   return (
@@ -64,18 +57,9 @@ export default function LoginScreen() {
               textContentType="password"
             />
           </View>
-          {error && (
-            <>
-              <Text className="text-center text-sm text-danger dark:text-night-danger">
-                {gatewayErrorMessage(environment.id, error)}
-              </Text>
-              {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
-            </>
-          )}
           <Button
             label="Ingresar"
             onPress={handleSubmit}
-            loading={loading}
             disabled={username.length === 0 || password.length === 0}
           />
         </View>

@@ -8,18 +8,12 @@ export const ErrorEnvelopeSchema = z.object({
 });
 
 export const LoginResponseSchema = z.object({
-  totp_required: z.literal(true),
-  challenge_id: z.string(),
-});
-export type LoginChallenge = z.infer<typeof LoginResponseSchema>;
-
-export const TotpResponseSchema = z.object({
-  token: z.string(),
-  expires_at: z.string(),
-  operator: z.string(),
   csrf_token: z.string(),
+  operator_uuid: z.string(),
+  operator_username: z.string(),
+  is_superuser: z.boolean(),
 });
-export type Session = z.infer<typeof TotpResponseSchema>;
+export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
 export const StatusSchema = z.object({
   service: z.enum(['active', 'inactive', 'failed']),

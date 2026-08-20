@@ -35,7 +35,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(require('cookie-parser')());
 app.use(express.json());
 
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1', authRoutes);
 app.use('/api/v1/step-up', requireAuth, requireCsrf, stepUpRoutes);
 
 app.use('/api/v1/status', requireAuth, statusRoutes);

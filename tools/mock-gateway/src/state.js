@@ -7,7 +7,6 @@ const state = {
     auth_expiry: { ttlSeconds: 15 },
   },
   sessions: new Map(), // token -> { operator, expiresAt, createdAt, csrfToken, steppedUpUntil }
-  challenges: new Map(), // challengeId -> { username }
   logBuffer: [], // { ts, level, target, message }, capped at 500
   chatHistory: [],
   serverStartedAt: Date.now(),
