@@ -19,8 +19,21 @@ type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 type AuthContextValue = {
   status: AuthStatus;
   operator: string | null;
-  login: (username: string, password: string) => Promise<{ challengeId: string }>;
-  totp: (challengeId: string, code: string) => Promise<void>;
+  operatorUuid: string | null;
+  isSuperuser: boolean;
+  // Whether beginLogin() has stashed credentials awaiting completeLogin() — the TOTP screen's
+  // own guard against being reached with nothing pending (deep link, back/forward on web),
+  // replacing the old challengeId route-param check. Deliberately a boolean, not the raw
+  // username/password themselves — nothing outside this provider ever reads those directly.
+  hasPendingLogin: boolean;
+  // Synchronous, no network — stores username/password in-memory only (never sessionStorage,
+  // never a route param) for completeLogin() to use once the operator enters their TOTP code.
+  // A password must never transit through anything URL-shaped (OC-55 design doc).
+  beginLogin: (username: string, password: string) => void;
+  // Fires the one real request the real gateway actually expects (username + password + TOTP
+  // together). On failure, does NOT clear the pending credentials — a wrong code should only
+  // need retyping the code, not the whole form again.
+  completeLogin: (totpCode: string) => Promise<void>;
   logout: () => Promise<void>;
   // Clearing the session here only resets auth *state* (status/operator/sessionStorage) —
   // it does not cancel any in-flight requests still carrying the now-invalid token/cookie.
@@ -36,6 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { environment } = useEnvironment();
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [operator, setOperator] = useState<string | null>(null);
+  const [operatorUuid, setOperatorUuid] = useState<string | null>(null);
+  const [isSuperuser, setIsSuperuser] = useState(false);
+  const [hasPendingLogin, setHasPendingLogin] = useState(false);
+  const pendingCredentials = useRef<{ username: string; password: string } | null>(null);
 
   const api = useMemo(() => createApiClient(environment.baseUrl), [environment.baseUrl]);
 
@@ -43,17 +60,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     sessionStorage
       .read()
-      .then(async (stored) => {
+      .then((stored) => {
         if (cancelled) return;
-        if (stored && new Date(stored.expiresAt).getTime() > Date.now()) {
-          setOperator(stored.operator);
+        // No server-communicated expiry to check locally (the real gateway's login response
+        // has no `expires_at` — OC-55) — a persisted session record is treated as optimistically
+        // authenticated; the first real request that actually fails (session_expired/
+        // unauthorized) demotes via handleAuthError below, same as it already does today.
+        if (stored) {
+          setOperator(stored.operatorUsername);
+          setOperatorUuid(stored.operatorUuid);
+          setIsSuperuser(stored.isSuperuser);
           setStatus('authenticated');
           return;
         }
-        if (stored) {
-          await sessionStorage.clear();
-        }
-        if (cancelled) return;
         setStatus('unauthenticated');
       })
       .catch(() => {
@@ -80,27 +99,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     sessionStorage.clear().catch(() => {});
     setOperator(null);
+    setOperatorUuid(null);
+    setIsSuperuser(false);
     setStatus('unauthenticated');
   }, [environment.baseUrl]);
 
-  const login = useCallback(
-    async (username: string, password: string) => {
-      const result = await api.auth.login(username, password);
-      return { challengeId: result.challenge_id };
-    },
-    [api],
-  );
+  const beginLogin = useCallback((username: string, password: string) => {
+    pendingCredentials.current = { username, password };
+    setHasPendingLogin(true);
+  }, []);
 
-  const totp = useCallback(
-    async (challengeId: string, code: string) => {
-      const session = await api.auth.totp(challengeId, code);
+  const completeLogin = useCallback(
+    async (totpCode: string) => {
+      const pending = pendingCredentials.current;
+      if (!pending) {
+        throw new Error('completeLogin called with no pending credentials');
+      }
+      const result = await api.auth.login(pending.username, pending.password, totpCode);
       await sessionStorage.save({
-        token: session.token,
-        operator: session.operator,
-        expiresAt: session.expires_at,
-        csrfToken: session.csrf_token,
+        operatorUuid: result.operator_uuid,
+        operatorUsername: result.operator_username,
+        isSuperuser: result.is_superuser,
+        csrfToken: result.csrf_token,
       });
-      setOperator(session.operator);
+      pendingCredentials.current = null;
+      setHasPendingLogin(false);
+      setOperator(result.operator_username);
+      setOperatorUuid(result.operator_uuid);
+      setIsSuperuser(result.is_superuser);
       setStatus('authenticated');
     },
     [api],
@@ -113,8 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Best-effort — logging out locally must not get stuck waiting on a network call
       // that may never succeed (the gateway could already be unreachable).
     }
+    pendingCredentials.current = null;
+    setHasPendingLogin(false);
     await sessionStorage.clear();
     setOperator(null);
+    setOperatorUuid(null);
+    setIsSuperuser(false);
     setStatus('unauthenticated');
   }, [api]);
 
@@ -127,6 +157,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ) {
       sessionStorage.clear().catch(() => {});
       setOperator(null);
+      setOperatorUuid(null);
+      setIsSuperuser(false);
       setStatus('unauthenticated');
       return true;
     }
@@ -134,8 +166,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, operator, login, totp, logout, handleAuthError }),
-    [status, operator, login, totp, logout, handleAuthError],
+    () => ({
+      status,
+      operator,
+      operatorUuid,
+      isSuperuser,
+      hasPendingLogin,
+      beginLogin,
+      completeLogin,
+      logout,
+      handleAuthError,
+    }),
+    [
+      status,
+      operator,
+      operatorUuid,
+      isSuperuser,
+      hasPendingLogin,
+      beginLogin,
+      completeLogin,
+      logout,
+      handleAuthError,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

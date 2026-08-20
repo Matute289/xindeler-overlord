@@ -1,4 +1,4 @@
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 
@@ -13,14 +13,13 @@ import { Screen } from '@/ui/Screen';
 import { TextField } from '@/ui/TextField';
 
 export default function TotpScreen() {
-  const { challengeId } = useLocalSearchParams<{ challengeId: string }>();
-  const { totp } = useAuth();
+  const { hasPendingLogin, completeLogin } = useAuth();
   const { environment } = useEnvironment();
   const [code, setCode] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (!challengeId) {
+  if (!hasPendingLogin) {
     return <Redirect href="/login" />;
   }
 
@@ -28,7 +27,7 @@ export default function TotpScreen() {
     setError(null);
     setLoading(true);
     try {
-      await totp(challengeId, code);
+      await completeLogin(code);
       // No manual navigation on success — AuthContext's status flip to 'authenticated'
       // is what Stack.Protected reacts to; the app switches to (tabs) on its own.
     } catch (err) {
