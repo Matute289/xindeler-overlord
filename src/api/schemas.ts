@@ -12,6 +12,14 @@ export const LoginResponseSchema = z.object({
   operator_uuid: z.string(),
   operator_username: z.string(),
   is_superuser: z.boolean(),
+  // ZG-52 (xindeler-zuul) — the same raw session token minted for the Set-Cookie header, handed
+  // back here too so native (no HTTP cookie jar) can store it and present it as
+  // `Authorization: Bearer <session_token>` on every subsequent request. Web ignores this field
+  // entirely — it already gets the equivalent HttpOnly cookie, which this value duplicates
+  // rather than replaces. Confirmed against the real gateway's `login.rs` (LoginResponse struct)
+  // — never log or telemetry this value, it's a full bearer credential for the session, not a
+  // double-submit anti-CSRF token like `csrf_token`.
+  session_token: z.string(),
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 

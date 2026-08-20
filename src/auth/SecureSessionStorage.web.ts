@@ -2,7 +2,7 @@ import type { SaveSessionInput, SessionStorage, StoredSession } from './types';
 
 const METADATA_KEY = 'overlord.session.metadata';
 
-type StoredMetadataWithCsrf = StoredSession & { csrfToken?: string };
+type StoredMetadataWithSecrets = StoredSession & { csrfToken?: string; sessionToken?: string };
 
 // The real credential is the browser's HttpOnly session cookie, which this module never
 // touches. `localStorage` only holds a non-secret marker so the UI can optimistically know
@@ -13,7 +13,10 @@ type StoredMetadataWithCsrf = StoredSession & { csrfToken?: string };
 // sense. A CSRF token exists specifically to be readable by this origin's own JS (that's the
 // whole mechanism: proving the request came from a script that could read this origin's
 // storage, which a cross-site attacker's forged request can't), so it's stored here alongside
-// the metadata.
+// the metadata. `sessionToken` (OC-58) is genuinely secret — web never reads it back
+// (`getAuthHeader()` always returns `undefined` here, the cookie already carries the session),
+// but it's still part of the shared save payload since both platforms get the same login
+// response; `read()` strips it the same way it already strips `csrfToken`.
 export const sessionStorage: SessionStorage = {
   async save(session: SaveSessionInput) {
     localStorage.setItem(METADATA_KEY, JSON.stringify(session));
@@ -22,7 +25,7 @@ export const sessionStorage: SessionStorage = {
   async read(): Promise<StoredSession | null> {
     const stored = readStoredMetadata();
     if (!stored) return null;
-    const { csrfToken: _csrfToken, ...metadata } = stored;
+    const { csrfToken: _csrfToken, sessionToken: _sessionToken, ...metadata } = stored;
     return metadata;
   },
 
@@ -40,7 +43,7 @@ export const sessionStorage: SessionStorage = {
   },
 };
 
-function readStoredMetadata(): StoredMetadataWithCsrf | null {
+function readStoredMetadata(): StoredMetadataWithSecrets | null {
   const raw = localStorage.getItem(METADATA_KEY);
-  return raw ? (JSON.parse(raw) as StoredMetadataWithCsrf) : null;
+  return raw ? (JSON.parse(raw) as StoredMetadataWithSecrets) : null;
 }

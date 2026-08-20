@@ -37,6 +37,9 @@ function issueSession(res, username) {
     operator_uuid: MOCK_OPERATOR_UUID,
     operator_username: username,
     is_superuser: true,
+    // OC-58 — mirrors the real gateway's ZG-52: the same raw token minted for the Set-Cookie
+    // header above, handed back here too so a native client can present it as a bearer header.
+    session_token: token,
   };
 }
 
