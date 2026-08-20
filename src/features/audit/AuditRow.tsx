@@ -3,10 +3,10 @@ import { Text, View } from 'react-native';
 
 import type { AuditRow } from '@/api/schemas';
 import { fonts } from '@/ui/theme';
-import { formatTime } from '@/ui/formatTime';
+import { formatUnixTime } from '@/ui/formatTime';
 
 export const AuditLogRow = memo(function AuditLogRow({ row }: { row: AuditRow }) {
-  const isError = row.outcome === 'error';
+  const isError = row.outcome !== 'success';
   const payloadText = Object.keys(row.payload).length > 0 ? JSON.stringify(row.payload) : null;
 
   return (
@@ -31,14 +31,14 @@ export const AuditLogRow = memo(function AuditLogRow({ row }: { row: AuditRow })
           className="text-steel-muted dark:text-night-steel-muted"
           style={{ fontFamily: fonts.regular }}
         >
-          {formatTime(row.ts)}
+          {formatUnixTime(row.created_at)}
         </Text>
       </View>
       <Text
         className="mt-0.5 text-steel-muted dark:text-night-steel-muted"
         style={{ fontFamily: fonts.regular }}
       >
-        {row.operator}
+        {row.operator_username}
       </Text>
       {payloadText && (
         <Text
@@ -46,14 +46,6 @@ export const AuditLogRow = memo(function AuditLogRow({ row }: { row: AuditRow })
           style={{ fontFamily: fonts.regular }}
         >
           {payloadText}
-        </Text>
-      )}
-      {row.detail && (
-        <Text
-          className="mt-0.5 text-xs text-danger dark:text-night-danger"
-          style={{ fontFamily: fonts.regular }}
-        >
-          {row.detail}
         </Text>
       )}
     </View>
