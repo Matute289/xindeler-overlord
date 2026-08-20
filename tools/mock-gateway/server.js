@@ -47,7 +47,7 @@ app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);
 app.use('/api/v1/audit', requireAuth, auditRoutes);
 app.use('/api/v1/stream', requireAuth, streamRoutes);
 app.use('/api/v1/server', requireAuth, requireCsrf, serverRoutes);
-app.use('/api/v1/broadcast', requireAuth, requireCsrf, broadcastRoutes);
+app.use('/api/v1/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
 app.use('/api/v1/push', requireAuth, requireCsrf, pushRoutes);
 app.use('/api/v1/oracle/events', requireAuth, oracleEventsRoutes);
 app.use('/api/v1/oracle/presets', requireAuth, oraclePresetsRoutes);

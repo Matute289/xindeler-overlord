@@ -73,12 +73,12 @@ export function createWriteApi(http: HttpClient) {
       });
     },
 
-    broadcastMessage(message: string) {
-      return http.request(
-        '/api/v1/broadcast',
-        { method: 'POST', body: { message } },
-        OkResponseSchema,
-      );
+    broadcastMessage(message: string, idempotencyKey?: string) {
+      return http.request<void>('/api/v1/broadcast', {
+        method: 'POST',
+        body: { msg: message },
+        idempotencyKey,
+      });
     },
 
     registerPushToken(expoPushToken: string, platform: 'ios' | 'android'): Promise<void> {
