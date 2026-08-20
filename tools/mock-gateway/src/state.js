@@ -6,7 +6,7 @@ const state = {
     stream_drop: { afterSeconds: 10 },
     auth_expiry: { ttlSeconds: 15 },
   },
-  sessions: new Map(), // token -> { operator, expiresAt, createdAt, csrfToken, steppedUpUntil }
+  sessions: new Map(), // token -> { operator, operatorUuid, expiresAt, createdAt, csrfToken, steppedUpUntil }
   logBuffer: [], // { ts, level, target, message }, capped at 500
   chatHistory: [],
   serverStartedAt: Date.now(),
@@ -15,7 +15,7 @@ const state = {
   logGeneratorTimer: null,
   recoveryTimers: null,
   streamClients: new Set(), // Set<express.Response> currently open on /api/v1/stream
-  auditLog: [], // { ts, operator, action, payload, outcome, detail? }
+  auditLog: [], // { id, operator_uuid, operator_username, action, payload, outcome, created_at }
   pushTokens: [], // { operator, expoPushToken, platform, createdAt }
   oracleEnabled: true,
   oracleEvents: new Map(), // id -> { dm_event, status: 'staging' | 'loaded', stagedAt }
