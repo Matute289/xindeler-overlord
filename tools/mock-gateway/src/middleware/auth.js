@@ -2,12 +2,15 @@ const { state } = require('../state');
 const { sendError } = require('../errors');
 
 function requireAuth(req, res, next) {
-  // Native builds always send the bearer header — prefer it when present. Web builds may
-  // instead rely on the HttpOnly `overlord_session` cookie (see gateway-api-contract.md §1).
+  // Cookie checked first, bearer header as the fallback — matches the real gateway's own
+  // precedence exactly (auth_extractor.rs's shared token-recovery helper, ZG-52), corrected
+  // 2026-08-20 (OC-58 final review) from this mock's previous bearer-first order. See
+  // gateway-api-contract.md §1.
+  const cookieToken = req.cookies?.overlord_session;
   const header = req.headers.authorization || '';
   const [scheme, bearerToken] = header.split(' ');
   const hasBearer = scheme === 'Bearer' && !!bearerToken;
-  const token = hasBearer ? bearerToken : req.cookies?.overlord_session;
+  const token = cookieToken || (hasBearer ? bearerToken : undefined);
 
   if (!token) {
     return sendError(res, 401, 'unauthorized', 'Falta el header Authorization: Bearer <token>');

@@ -13,13 +13,22 @@ type StoredMetadataWithSecrets = StoredSession & { csrfToken?: string; sessionTo
 // sense. A CSRF token exists specifically to be readable by this origin's own JS (that's the
 // whole mechanism: proving the request came from a script that could read this origin's
 // storage, which a cross-site attacker's forged request can't), so it's stored here alongside
-// the metadata. `sessionToken` (OC-58) is genuinely secret — web never reads it back
-// (`getAuthHeader()` always returns `undefined` here, the cookie already carries the session),
-// but it's still part of the shared save payload since both platforms get the same login
-// response; `read()` strips it the same way it already strips `csrfToken`.
+// the metadata. `sessionToken` (OC-58) is genuinely secret — a full bearer credential, not a
+// double-submit value — and web never needs it (`getAuthHeader()` always returns `undefined`
+// here, the cookie already carries the session), so `save()` strips it before ever writing to
+// `localStorage`; `read()` strips it again on the way out as defense in depth, not as the only
+// safeguard.
 export const sessionStorage: SessionStorage = {
   async save(session: SaveSessionInput) {
-    localStorage.setItem(METADATA_KEY, JSON.stringify(session));
+    // final-review Critical, OC-58: `sessionToken` is a full bearer credential and web never
+    // needs it — `getAuthHeader()` below is a hardcoded `undefined` on this platform, the
+    // HttpOnly/SameSite=Strict cookie already carries the session. Persisting it anyway would
+    // put in origin-readable `localStorage` the exact value HttpOnly exists to keep out of JS's
+    // reach — converting a cookie an attacker's script can't touch into one it can just read.
+    // Stripped here, at write time, not just on read: read()'s own strip below is defense in
+    // depth for records written by this build, not a substitute for never writing it at all.
+    const { sessionToken: _sessionToken, ...persisted } = session;
+    localStorage.setItem(METADATA_KEY, JSON.stringify(persisted));
   },
 
   async read(): Promise<StoredSession | null> {
