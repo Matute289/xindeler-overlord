@@ -63,14 +63,31 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
       }
 
       if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        const parsed = ErrorEnvelopeSchema.safeParse(body);
+        // The real gateway sends a plain-text body (not this doc's own JSON envelope) for many
+        // error responses -- confirmed 2026-08-15 (OC-54) and again during OC-59's own
+        // investigation (OC-57's admin routes, OC-59's audit/broadcast routes). A `Response`
+        // body can only be consumed once, so read it as text first and attempt to parse THAT as
+        // JSON, rather than calling `.json()` directly and losing the raw text on failure.
+        const rawText = await response.text().catch(() => '');
+        let envelopeCandidate: unknown;
+        try {
+          envelopeCandidate = JSON.parse(rawText);
+        } catch {
+          envelopeCandidate = null;
+        }
+        const parsed = ErrorEnvelopeSchema.safeParse(envelopeCandidate);
         if (parsed.success) {
           throw new ApiError(parsed.data.error.code, parsed.data.error.message, response.status);
         }
+        // Not the JSON envelope -- surface the raw text directly when there's something legible
+        // to show, instead of a generic status-code-only message. Capped defensively (a real,
+        // known-small backend body never approaches this, but an unexpected huge/binary body
+        // shouldn't render unbounded).
+        const MAX_RAW_ERROR_LEN = 500;
+        const trimmed = rawText.trim().slice(0, MAX_RAW_ERROR_LEN);
         throw new ApiError(
           'unknown_error',
-          `Error inesperado del gateway (${response.status})`,
+          trimmed.length > 0 ? trimmed : `Error inesperado del gateway (${response.status})`,
           response.status,
         );
       }
