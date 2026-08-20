@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useApi } from '@/api/ApiContext';
 
+import { establishStepUp } from './establishStepUp';
 import { isStepUpCancelled, useStepUpAuth } from './StepUpContext';
 
 // For a screen whose DATA READ (not a write) requires an active step-up window on the real
@@ -33,8 +34,13 @@ export function useStepUpGate(): { ready: boolean; error: Error | null; retry: (
       setReady(false);
       setError(null);
       try {
-        const code = await requestStepUp();
-        await api.auth.stepUp(code);
+        // Shared with useDestructiveAction — `establishStepUp` retries once with a freshly
+        // prompted code if the cached one comes back `401` (already wrong or stale server-side;
+        // see its own doc comment). Without this, a cached-but-rejected code would set `error`
+        // below and every subsequent "Reintentar" tap would hand back that exact same bad code
+        // with no new prompt shown at all, until the 90s client cache naturally expires —
+        // final-review Finding 1, 2026-08-20.
+        await establishStepUp(requestStepUp, api.auth.stepUp);
         if (latestRef.current === thisRun) setReady(true);
       } catch (err) {
         if (latestRef.current !== thisRun) return;
@@ -55,5 +61,10 @@ export function useStepUpGate(): { ready: boolean; error: Error | null; retry: (
     };
   }, [requestStepUp, api, attempt]);
 
-  return { ready, error, retry: () => setAttempt((n) => n + 1) };
+  // Stable across renders (empty deps) — OC-59 Finding 2's AuditScreen passes this down as a
+  // prop (`onStepUpLapsed`) that AuditList depends on for a re-arm call; an inline `() => ...`
+  // recreated every render would churn that prop's identity for no reason.
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
+  return { ready, error, retry };
 }
