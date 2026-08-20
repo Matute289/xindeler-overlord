@@ -114,21 +114,23 @@ required"`.
 before every destructive write — the operator only ever sees the existing TOTP prompt, never a
 second, separate step-up screen.
 
-⚠️ Confirmed 2026-08-15 (OC-54) that the real gateway's error bodies for both this endpoint and
-every destructive route are **plain text**, not this doc's own §1 JSON envelope convention. The
-client already degrades safely (`httpClient.ts`'s envelope parse falls back to a generic message
-on a non-JSON body) but not legibly. Separate, pre-existing, cross-cutting mismatch — not fixed by
-OC-54, not yet ticketed.
+Confirmed 2026-08-15 (OC-54) that the real gateway's error bodies for both this endpoint and
+every destructive route are **plain text**, not this doc's own §1 JSON envelope convention. Fixed
+2026-08-20 (OC-59, Task 1): `httpClient.ts` now reads every error body as text first and attempts
+to parse *that* as the JSON envelope, falling back to rendering the raw text itself (capped at 500
+chars) when it isn't JSON — a plain-text gateway error now surfaces legibly instead of a generic
+status-code-only message.
 
-⚠️ **Confirmed 2026-08-15 (OC-54 final review) that step-up is not actually limited to §4/§5.**
+**Confirmed 2026-08-15 (OC-54 final review) that step-up is not actually limited to §4/§5.**
 The real gateway also step-up-gates `GET /api/v1/audit` (§3 — an aggregated view of every
 operator's destructive history, `console.rs`) and `POST /api/v1/broadcast` (§4's own table below
-— `lifecycle.rs`), neither of which this app currently routes through step-up: `/audit` is called
-as a plain unguarded `GET` (`readApi.ts`), and `/broadcast` is called directly
-(`api.write.broadcastMessage()`, `BroadcastComposer.tsx`), bypassing `useDestructiveAction`
-entirely. Both will `403` against the real gateway. Not fixed by OC-54 — *which* endpoints require
-step-up is explicitly out of this ticket's scope — flagged here so this doc stops asserting
-"reads are session-only," which is no longer true. Real follow-up work, not yet ticketed.
+— `lifecycle.rs`). Fixed 2026-08-20 (OC-59): Auditoría now opens behind `useStepUpGate`, a
+navigation-triggered analogue of `useDestructiveAction` that transparently establishes a step-up
+window on entry (and re-arms if a later pull-to-refresh 403s once the window lapses) before
+`GET /api/v1/audit` is ever called; broadcast now runs through the existing
+`useDestructiveAction` (`BroadcastComposer.tsx`) the same as every other destructive write,
+establishing step-up before `POST /api/v1/broadcast`. Both gaps are closed — this doc no longer
+overstates "reads are session-only" for either route.
 
 ---
 
@@ -143,8 +145,10 @@ step-up is explicitly out of this ticket's scope — flagged here so this doc st
 | `GET` | `/api/v1/chronicle?limit=N` | ORACLE chronicle tail (in-memory server-side, resets on restart) |
 | `GET` | `/api/v1/audit?limit=N` | durable gateway audit rows: who, when, action, payload, outcome |
 
-⚠️ `GET /api/v1/audit` is step-up-gated on the real gateway, unlike every other read on this page
-— see §2.1's note. This app calls it unguarded today.
+`GET /api/v1/audit` is step-up-gated on the real gateway, unlike every other read on this page
+— see §2.1's note. Fixed 2026-08-20 (OC-59): the Auditoría screen now establishes a step-up
+window via `useStepUpGate` before ever calling this endpoint (and re-arms it if a later
+pull-to-refresh comes back `403`), rather than calling it unguarded.
 
 ### 3.1 Live stream
 
@@ -156,10 +160,17 @@ step-up is explicitly out of this ticket's scope — flagged here so this doc st
 | `log` | one log line |
 | `chat` | one in-game chat message |
 | `lifecycle` | `{ state: "running"\|"draining"\|"stopped"\|"starting", seconds_left? }` |
-| `audit` | one new audit row |
 
 The gateway polls the game server on **one** internal timer and fans out; N connected clients
 cost the game server one poll, not N (NH-75 §3.3).
+
+⚠️ **Confirmed 2026-08-20 (OC-59) that the real gateway's `stream.rs` has NO `audit` SSE event at
+all** — `record_audit()` (`lifecycle.rs`) only ever writes to the DB, never broadcasts. This
+table previously listed `audit` as a real-gateway stream event; that was a mock-only invention
+(`tools/mock-gateway`'s `recordAudit` → `broadcast('audit', row)`), left in place there for dev
+convenience but with no real-gateway equivalent. Against the real gateway, new audit rows only
+ever appear on the next `GET /api/v1/audit` — this is exactly why Auditoría (§2.1, §3) has a
+pull-to-refresh affordance, not why it doesn't need one.
 
 ⚠️ **SSE is a first-class client constraint, not a detail.** React Native's default `fetch`
 does not stream. The app must use `expo/fetch` (streaming-capable) or a native SSE package —
@@ -176,7 +187,7 @@ see the client spec §5.2. Do not assume the browser `EventSource` global exists
 | `POST` | `/api/v1/server/restart` | `{ seconds, reason }` — gateway orchestrates stop→wait→start |
 | `POST` | `/api/v1/server/cancel_shutdown` | `{}` |
 | `POST` | `/api/v1/server/disconnect_all` | `{}` |
-| `POST` | `/api/v1/broadcast` | `{ message }` — rate-limited; **step-up-gated on the real gateway** (corrected 2026-08-15, see §2.1) even though this app doesn't currently send one here |
+| `POST` | `/api/v1/broadcast` | `{ msg }` — rate-limited; **step-up-gated on the real gateway** (corrected 2026-08-15, see §2.1). Body field corrected 2026-08-20 (OC-59) from an assumed `message` to the real gateway's `BroadcastRequest { msg: String }` (`lifecycle.rs`) — this app and the mock had independently invented `message`, agreeing with each other but not the real gateway, which would `400` on it. `BroadcastComposer.tsx` now sends `msg` and routes through `useDestructiveAction`, so step-up is established too. |
 
 ⚠️ **Restart is two steps, not one.** The unit is `Restart=on-failure`, so a graceful shutdown
 exits 0 and systemd will *not* bring it back (NH-75 §1.3, §4.2). The gateway owns the

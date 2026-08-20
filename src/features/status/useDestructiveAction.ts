@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
+import { establishStepUp } from '@/auth/establishStepUp';
 import { isStepUpCancelled, useStepUpAuth } from '@/auth/StepUpContext';
 
 export function useDestructiveAction<T>(
@@ -43,7 +44,6 @@ export function useDestructiveAction<T>(
     // `start` sent while the gateway is mid-orchestration from the first attempt is a real risk.
     const idempotencyKey = Crypto.randomUUID();
     try {
-      const code = await requestStepUp(forceFreshStepUp ? { forceFresh: true } : undefined);
       // OC-54: the real gateway (xindeler-zuul) is session-scoped, not header-scoped — a TOTP
       // code only means anything once it's been exchanged for a step-up WINDOW via this call.
       // The destructive `call()` below sends no code at all; the gateway reads session state.
@@ -51,25 +51,14 @@ export function useDestructiveAction<T>(
       // prompted) code — the client-side 90s cache and the server-side 5-minute window are two
       // different things, and re-establishing the window costs one extra request but keeps the
       // window fresh for exactly as long as the write that's about to use it needs it to be.
-      try {
-        await api.auth.stepUp(code);
-      } catch (err) {
-        // A rejected TOTP code fails THIS call with `401` (matching the real gateway's own
-        // `rejected()` status for a bad code here — see docs/reference/gateway-api-contract.md
-        // §2.1), not the `403` the write-call retry below checks for. Fix, discovered live during
-        // OC-54 Task 2: without this branch, a wrong code propagated straight to the outer catch
-        // AND stayed cached in `StepUpContext` for its full 90s window, so every subsequent tap —
-        // this run() included, had it not retried here — silently resent the same known-bad code
-        // with no re-prompt at all. `requestStepUp({ forceFresh: true })` both discards that
-        // cached value and re-prompts, so a mistyped code recovers on the very next attempt
-        // instead of going silent for up to 90 seconds.
-        if (isApiError(err) && err.status === 401) {
-          const freshCode = await requestStepUp({ forceFresh: true });
-          await api.auth.stepUp(freshCode);
-        } else {
-          throw err;
-        }
-      }
+      // `establishStepUp` (shared with `useStepUpGate`) owns the "get code → exchange it →
+      // retry once with a fresh code on 401" sequence — see its own doc comment for why a `401`
+      // here needs this recovery. `forceFreshStepUp` only affects the FIRST request; a retry
+      // triggered by a 401 already forces fresh regardless.
+      await establishStepUp(
+        (options) => requestStepUp(forceFreshStepUp ? { forceFresh: true } : options),
+        api.auth.stepUp,
+      );
       let result: T;
       try {
         result = await call(idempotencyKey);

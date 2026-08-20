@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
-import { useEnvironment } from '@/config/EnvironmentContext';
-import { gatewayErrorMessage } from '@/features/connectivity/gatewayErrorMessage';
+import { ActionError } from '@/features/connectivity/ActionError';
+import { useDestructiveAction } from '@/features/status/useDestructiveAction';
+import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { fonts, useTheme } from '@/ui/theme';
 
 import { ChatMessageRow } from './ChatMessageRow';
@@ -12,25 +13,22 @@ const MAX_MESSAGE_LENGTH = 200;
 
 export function BroadcastComposer() {
   const api = useApi();
-  const { environment } = useEnvironment();
   const { colors } = useTheme();
   const [message, setMessage] = useState('');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const trimmed = message.trim();
-  const canSend = trimmed.length > 0 && message.length <= MAX_MESSAGE_LENGTH && !sending;
+  const canSend = trimmed.length > 0 && message.length <= MAX_MESSAGE_LENGTH;
 
-  async function handleSend() {
-    setSending(true);
-    setError(null);
-    try {
-      await api.write.broadcastMessage(trimmed);
+  const sendAction = useDestructiveAction<void>((idempotencyKey) =>
+    api.write.broadcastMessage(trimmed, idempotencyKey),
+  );
+
+  async function handleConfirm() {
+    setConfirming(false);
+    const result = await sendAction.run();
+    if (result !== null) {
       setMessage('');
-    } catch (err) {
-      if (err instanceof Error) setError(err);
-    } finally {
-      setSending(false);
     }
   }
 
@@ -67,19 +65,19 @@ export function BroadcastComposer() {
           {`${message.length}/${MAX_MESSAGE_LENGTH}`}
         </Text>
         <Pressable
-          onPress={handleSend}
-          disabled={!canSend}
+          onPress={() => setConfirming(true)}
+          disabled={!canSend || sendAction.pending}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canSend }}
+          accessibilityState={{ disabled: !canSend || sendAction.pending }}
           className={`rounded-full px-4 py-2 ${
-            canSend
+            canSend && !sendAction.pending
               ? 'bg-accent-cyan dark:bg-night-accent-cyan'
               : 'bg-steel-dark dark:bg-night-steel-dark'
           }`}
         >
           <Text
             className={
-              canSend
+              canSend && !sendAction.pending
                 ? 'text-bg-base dark:text-night-bg-base'
                 : 'text-steel-muted dark:text-night-steel-muted'
             }
@@ -89,11 +87,14 @@ export function BroadcastComposer() {
           </Text>
         </Pressable>
       </View>
-      {error && (
-        <Text className="text-xs text-danger dark:text-night-danger">
-          {gatewayErrorMessage(environment.id, error)}
-        </Text>
-      )}
+      {sendAction.error && <ActionError error={sendAction.error} />}
+      <ConfirmByTypingSheet
+        visible={confirming}
+        word="BROADCAST"
+        description={`Esto envía "${trimmed}" a todos los jugadores conectados — no se puede deshacer.`}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirming(false)}
+      />
     </View>
   );
 }
