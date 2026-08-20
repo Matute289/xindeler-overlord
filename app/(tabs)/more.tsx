@@ -10,7 +10,7 @@ import { Screen } from '@/ui/Screen';
 import { fonts, useTheme } from '@/ui/theme';
 
 export default function MoreScreen() {
-  const { logout, operator } = useAuth();
+  const { logout, operator, isSuperuser } = useAuth();
   const { colors } = useTheme();
 
   return (
@@ -44,6 +44,22 @@ export default function MoreScreen() {
             <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
           </Pressable>
         </Link>
+        {isSuperuser && (
+          <Link href="/operators" asChild>
+            <Pressable
+              accessibilityRole="button"
+              className="mt-2 flex-row items-center justify-between rounded-lg border border-steel-dark px-4 py-3 dark:border-night-steel-dark"
+            >
+              <Text
+                className="text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.semibold }}
+              >
+                Operadores
+              </Text>
+              <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
+            </Pressable>
+          </Link>
+        )}
         <PushNotificationsSettings />
       </View>
       <EnvironmentSwitcher />

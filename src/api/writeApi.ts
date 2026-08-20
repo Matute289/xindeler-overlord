@@ -142,5 +142,20 @@ export function createWriteApi(http: HttpClient) {
         OracleEnabledResponseSchema,
       );
     },
+
+    addOperator(uuid: string, displayName: string | undefined, idempotencyKey?: string) {
+      return http.request<void>('/api/v1/admin/operators', {
+        method: 'POST',
+        body: { uuid, display_name: displayName },
+        idempotencyKey,
+      });
+    },
+
+    removeOperator(uuid: string, idempotencyKey?: string) {
+      return http.request<void>(`/api/v1/admin/operators/${encodeURIComponent(uuid)}`, {
+        method: 'DELETE',
+        idempotencyKey,
+      });
+    },
   };
 }

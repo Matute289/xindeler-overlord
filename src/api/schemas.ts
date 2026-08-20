@@ -170,3 +170,14 @@ export const StageOracleEventResponseSchema = z.object({
   diff: z.array(DmEventDiffEntrySchema),
 });
 export type StageOracleEventResponse = z.infer<typeof StageOracleEventResponseSchema>;
+
+export const TotpStatusSchema = z.enum(['none', 'pending', 'confirmed']);
+export const OperatorSchema = z.object({
+  uuid: z.string(),
+  display_name: z.string(),
+  is_superuser: z.boolean(),
+  totp_status: TotpStatusSchema,
+  added_at: z.number(),
+});
+export type Operator = z.infer<typeof OperatorSchema>;
+export const OperatorsResponseSchema = z.array(OperatorSchema);

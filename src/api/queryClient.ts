@@ -31,4 +31,5 @@ export const queryKeys = {
   oracleEvents: ['oracleEvents'] as const,
   oraclePresets: ['oraclePresets'] as const,
   oracleBudget: ['oracleBudget'] as const,
+  operators: ['operators'] as const,
 };

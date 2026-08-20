@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { state } = require('../state');
+const { state, MOCK_OPERATOR_UUID } = require('../state');
 const { sendError } = require('../errors');
 const { requireAuth } = require('../middleware/auth');
 const { requireCsrf } = require('../middleware/csrf');
@@ -8,10 +8,6 @@ const { requireCsrf } = require('../middleware/csrf');
 const router = express.Router();
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-// Fabricated but fixed — this mock only ever has one test operator ('matias'/'mock'), and OC-57's
-// eventual admin screen needs a superuser session to test against locally, so this one is
-// deliberately `true` rather than `false`.
-const MOCK_OPERATOR_UUID = '11111111-1111-4111-8111-111111111111';
 
 function issueSession(res, username) {
   const token = crypto.randomUUID();
@@ -24,6 +20,7 @@ function issueSession(res, username) {
   state.sessions.set(token, {
     operator: username,
     operatorUuid: MOCK_OPERATOR_UUID,
+    isSuperuser: true,
     expiresAt,
     createdAt: Date.now(),
     csrfToken,

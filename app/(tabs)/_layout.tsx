@@ -73,6 +73,7 @@ export default function TabsLayout() {
               <Tabs.Screen name="oracle-composer" options={{ href: null }} />
               <Tabs.Screen name="oracle-trigger" options={{ href: null }} />
               <Tabs.Screen name="oracle-chat" options={{ href: null }} />
+              <Tabs.Screen name="operators" options={{ href: null }} />
             </Tabs>
           )}
         </View>
