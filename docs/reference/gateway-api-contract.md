@@ -76,9 +76,10 @@ to say so in plain language rather than showing a generic spinner).
 | `POST` | `/api/v1/logout` | revokes server-side. Bare, same correction. |
 
 Session: 12 h absolute / 30 min idle (NH-75 §5.3.7). Web's session lives entirely in an
-`HttpOnly`/`SameSite=Strict` cookie, unreadable by this app's own JS. Native has no cookie jar of
-its own, so `session_token` (above) — the exact same raw value minted for the cookie — is also
-returned in the login response body, for native to store in `expo-secure-store`
+`HttpOnly`/`SameSite=Strict` cookie, unreadable by this app's own JS. Native's own cookie jar is
+weaker storage than `expo-secure-store` (see §1), so `session_token` (above) — the exact same raw
+value minted for the cookie — is also returned in the login response body, for native to store in
+`expo-secure-store`
 (Keychain/Keystore-backed) and present as `Authorization: Bearer <session_token>` on every
 subsequent request. Corrected 2026-08-20 (OC-58, `xindeler-zuul`'s `ZG-52`, shipped and deployed):
 this doc previously called native's bearer mechanism "not-yet-shipped" — it now exists and this
