@@ -1,3 +1,9 @@
+// Fabricated but fixed — this mock only ever has one test operator ('matias'/'mock'), and OC-57's
+// admin screen needs a superuser session to test against locally, so this one is deliberately
+// `true` rather than `false`. Moved here from routes/auth.js (OC-57) so state.js's own
+// `operators` seed below can reference it without a circular require.
+const MOCK_OPERATOR_UUID = '11111111-1111-4111-8111-111111111111';
+
 const state = {
   scenario: 'normal',
   scenarioParams: {
@@ -6,7 +12,7 @@ const state = {
     stream_drop: { afterSeconds: 10 },
     auth_expiry: { ttlSeconds: 15 },
   },
-  sessions: new Map(), // token -> { operator, operatorUuid, expiresAt, createdAt, csrfToken, steppedUpUntil }
+  sessions: new Map(), // token -> { operator, operatorUuid, isSuperuser, expiresAt, createdAt, csrfToken, steppedUpUntil }
   logBuffer: [], // { ts, level, target, message }, capped at 500
   chatHistory: [],
   serverStartedAt: Date.now(),
@@ -21,6 +27,18 @@ const state = {
   oracleEvents: new Map(), // id -> { dm_event, status: 'staging' | 'loaded', stagedAt }
   lastBroadcastAt: 0,
   shutdownReason: null,
+  // Seeded with the mock's own single test operator (OC-57) — matches xindeler-zuul's own
+  // bootstrap-seed behavior (operators.rs's seed_from_config), just in-memory instead of a real
+  // DB table. { uuid, display_name, is_superuser, totp_status, added_at }
+  operators: [
+    {
+      uuid: MOCK_OPERATOR_UUID,
+      display_name: 'matias',
+      is_superuser: true,
+      totp_status: 'confirmed',
+      added_at: Math.floor(Date.now() / 1000),
+    },
+  ],
 };
 
-module.exports = { state };
+module.exports = { state, MOCK_OPERATOR_UUID };
