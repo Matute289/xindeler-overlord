@@ -34,9 +34,18 @@ export function OperatorsScreen() {
   const addAction = useDestructiveAction<void>((idempotencyKey) =>
     api.write.addOperator(uuid.trim(), displayName.trim() || undefined, idempotencyKey),
   );
-  const removeAction = useDestructiveAction<void>((idempotencyKey) =>
-    api.write.removeOperator(removeTarget?.uuid ?? '', idempotencyKey),
-  );
+  // `useDestructiveAction`'s `call` is created fresh every render and closes over `removeTarget`
+  // as it stood at that render — by the time `handleConfirmRemove` invokes `removeAction.run()`,
+  // that's always the render where the confirm sheet was showing a real target, so `removeTarget`
+  // is never actually null here. Rather than paper over that with a silent `?? ''` fallback (which
+  // would only ever manifest as an opaque 404 on a malformed `DELETE .../` — a fragile pattern
+  // that invites a real bug on a future refactor), fail loudly if the invariant is ever broken.
+  const removeAction = useDestructiveAction<void>((idempotencyKey) => {
+    if (removeTarget === null) {
+      return Promise.reject(new Error('removeOperator: no removeTarget set'));
+    }
+    return api.write.removeOperator(removeTarget.uuid, idempotencyKey);
+  });
 
   async function handleRefresh() {
     setIsRefreshing(true);

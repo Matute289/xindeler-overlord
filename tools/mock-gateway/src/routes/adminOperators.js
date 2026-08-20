@@ -7,6 +7,10 @@ const { requireStepUp } = require('../middleware/stepUp');
 
 const router = express.Router();
 const MAX_DISPLAY_NAME_LEN = 128;
+// Not RFC-strict (doesn't pin the version/variant nibbles) — just enough to reject an obvious
+// typo the same way the real gateway does, which deserializes this field into a proper `Uuid`
+// type and rejects a malformed one with a 400.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // `GET /admin/operators` — read-only, no CSRF/step-up. `requireAuth`+`requireSuperuser` are
 // applied at the app.use() level in server.js, uniformly for every method on this path; this
@@ -25,6 +29,9 @@ router.post('/', requireCsrf, requireStepUp, (req, res) => {
     return sendError(res, 400, 'invalid_body', 'uuid es requerido');
   }
   const trimmedUuid = uuid.trim();
+  if (!UUID_RE.test(trimmedUuid)) {
+    return sendError(res, 400, 'invalid_body', 'uuid must be a valid UUID');
+  }
   const trimmedName = typeof displayName === 'string' ? displayName.trim() : undefined;
   if (trimmedName !== undefined) {
     if (trimmedName.length === 0) {
