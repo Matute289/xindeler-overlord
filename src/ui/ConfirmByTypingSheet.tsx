@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, View } from 're
 import { Button } from './Button';
 import { fonts } from './theme';
 import { TextField } from './TextField';
+import { useEscapeToClose } from './useEscapeToClose';
 
 export function ConfirmByTypingSheet({
   visible,
@@ -24,6 +25,8 @@ export function ConfirmByTypingSheet({
     setTyped('');
     onCancel();
   }
+
+  useEscapeToClose(visible, handleCancel);
 
   function handleConfirm() {
     setTyped('');
