@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
+import { useEnvironment } from '@/config/EnvironmentContext';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
@@ -82,6 +83,7 @@ export function OracleEventsScreen() {
   const { colors } = useTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const api = useApi();
+  const { environment } = useEnvironment();
   const [confirmEnable, setConfirmEnable] = useState(false);
 
   const disableAction = useDestructiveAction((idempotencyKey) =>
@@ -207,6 +209,17 @@ export function OracleEventsScreen() {
           <Ionicons name="chevron-forward-outline" color={colors.textMuted} size={18} />
         </Pressable>
       </Link>
+      {environment.id !== 'mock' && (
+        <View className="mt-2 px-6">
+          <Text
+            className="text-xs text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.regular }}
+          >
+            El chat todavía no tiene implementación en el gateway real — solo responde contra el
+            entorno Mock (falta Bedrock del lado del gateway).
+          </Text>
+        </View>
+      )}
       <Section
         title="Cargados"
         items={loaded}
