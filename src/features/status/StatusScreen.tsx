@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { ActionError } from '@/features/connectivity/ActionError';
@@ -14,6 +14,7 @@ import { StatRow } from './StatRow';
 import { useDestructiveAction } from './useDestructiveAction';
 import type { LifecycleState } from './useLifecycleState';
 import { useLifecycleState } from './useLifecycleState';
+import { useServerStatusLiveActivity } from './useServerStatusLiveActivity';
 import { useStatusQuery } from './useStatusQuery';
 
 // Hoisted to module scope rather than constructed inside formatStartedAt — that function is
@@ -146,6 +147,12 @@ export function StatusScreen() {
   // would itself be a safety regression (invariant 11).
   const streamStatus = useStreamStatus();
   const dataMaybeStale = streamStatus === 'reconnecting';
+
+  // OC-47: the Lock Screen Live Activity toggle. `useServerStatusLiveActivity` reads its own
+  // copy of `useStatusQuery()`/`useLifecycleState()` rather than being handed this screen's
+  // already-computed `state`/`status` — kept self-contained (see that hook's own comments) so it
+  // doesn't need this screen's early-return-before-hooks ordering reasoned about on its behalf.
+  const liveActivity = useServerStatusLiveActivity();
 
   // Finding 7: the sheet's `word`/`description` must not flip to the wrong action's copy while
   // it's sliding away mid-close-animation, which happens if they're derived straight from
@@ -294,6 +301,41 @@ export function StatusScreen() {
         <StatRow label="Entidades" value={String(status.entity_count)} />
         <StatRow label="Chunks" value={String(status.chunk_count)} />
         <StatRow label="Iniciado" value={formatStartedAt(status.started_at)} />
+
+        {/* OC-47: styled as a StatRow-shaped row (same border-b/label convention as the rows
+            above) with a pill control matching FollowTailToggle's existing on/off pill pattern
+            (used by LogsScreen/ChatScreen/OracleChatScreen) — this app has no dedicated Switch
+            component, and this reuses the closest existing convention rather than inventing a
+            third toggle style. */}
+        <View className="flex-row items-center justify-between border-b border-steel-dark py-3 dark:border-night-steel-dark">
+          <Text
+            className="text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.regular }}
+          >
+            Seguir en pantalla de bloqueo
+          </Text>
+          <Pressable
+            onPress={liveActivity.toggle}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: liveActivity.active }}
+            className={`rounded-full border px-3 py-1 ${
+              liveActivity.active
+                ? 'border-accent-cyan dark:border-night-accent-cyan'
+                : 'border-steel-dark dark:border-night-steel-dark'
+            }`}
+          >
+            <Text
+              className={
+                liveActivity.active
+                  ? 'text-accent-cyan dark:text-night-accent-cyan'
+                  : 'text-steel-muted dark:text-night-steel-muted'
+              }
+              style={{ fontFamily: fonts.regular }}
+            >
+              {liveActivity.active ? 'Activado' : 'Desactivado'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <View className="mt-6 gap-3">
