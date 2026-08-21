@@ -5,7 +5,7 @@ import { createLiveActivity, type LiveActivityComponent } from 'expo-widgets';
 // Re-exported (not just imported) so `useServerStatusLiveActivity.ts`'s single
 // `import { serverStatusActivity, type ServerStatusActivityState } from './ServerStatusActivity'`
 // resolves on iOS too — Metro routes that extensionless specifier to this file there, so this
-// file (like the generic `ServerStatusActivity.ts` stub) must itself re-export the type, not just
+// file (like the generic `ServerStatusActivity.tsx` stub) must itself re-export the type, not just
 // consume it.
 export type { ServerStatusActivityState };
 
