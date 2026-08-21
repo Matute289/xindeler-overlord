@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/ui/Button';
 import { Pressable } from '@/ui/Pressable';
@@ -42,42 +43,46 @@ export function StepUpPrompt({
               letting it grow past a short landscape screen, with the ScrollView inside taking
               over from there. */}
           <View className="max-h-full w-full max-w-sm rounded-lg bg-bg-surface dark:bg-night-bg-surface">
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <View className="gap-4 p-6">
-                <Text
-                  className="text-xl text-steel-light dark:text-night-steel-light"
-                  style={{ fontFamily: fonts.bold }}
-                >
-                  Confirmá tu identidad
-                </Text>
-                <Text
-                  className="text-sm text-steel-muted dark:text-night-steel-muted"
-                  style={{ fontFamily: fonts.regular }}
-                >
-                  Esta acción requiere tu código TOTP.
-                </Text>
-                <TextField
-                  label="Código de 6 dígitos"
-                  value={code}
-                  onChangeText={setCode}
-                  keyboardType="number-pad"
-                  autoCapitalize="none"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  textContentType="oneTimeCode"
-                  autoFocus
-                />
-                <Button label="Confirmar" onPress={handleSubmit} disabled={code.length !== 6} />
-                <Pressable onPress={handleCancel} accessibilityRole="button">
+            {/* `edges={['bottom']}` only — same reasoning as ConfirmByTypingSheet.tsx: only the
+                bottom edge of this card can ever coincide with the home indicator. */}
+            <SafeAreaView edges={['bottom']}>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <View className="gap-4 p-6">
                   <Text
-                    className="text-center text-sm text-steel-muted dark:text-night-steel-muted"
+                    className="text-xl text-steel-light dark:text-night-steel-light"
+                    style={{ fontFamily: fonts.bold }}
+                  >
+                    Confirmá tu identidad
+                  </Text>
+                  <Text
+                    className="text-sm text-steel-muted dark:text-night-steel-muted"
                     style={{ fontFamily: fonts.regular }}
                   >
-                    Cancelar
+                    Esta acción requiere tu código TOTP.
                   </Text>
-                </Pressable>
-              </View>
-            </ScrollView>
+                  <TextField
+                    label="Código de 6 dígitos"
+                    value={code}
+                    onChangeText={setCode}
+                    keyboardType="number-pad"
+                    autoCapitalize="none"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                    autoFocus
+                  />
+                  <Button label="Confirmar" onPress={handleSubmit} disabled={code.length !== 6} />
+                  <Pressable onPress={handleCancel} accessibilityRole="button">
+                    <Text
+                      className="text-center text-sm text-steel-muted dark:text-night-steel-muted"
+                      style={{ fontFamily: fonts.regular }}
+                    >
+                      Cancelar
+                    </Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
+            </SafeAreaView>
           </View>
         </View>
       </KeyboardAvoidingView>
