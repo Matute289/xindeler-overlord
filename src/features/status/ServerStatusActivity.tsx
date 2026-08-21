@@ -1,26 +1,77 @@
-import { Text } from '@expo/ui/swift-ui';
+import { Text, VStack } from '@expo/ui/swift-ui';
 import { createLiveActivity, type LiveActivityComponent } from 'expo-widgets';
 
-// OC-47 Task 1 smoke test: proves the expo-widgets Live Activity pipeline renders real content
-// end-to-end (JS layout -> babel-preset-expo's 'widget' directive transform -> native
-// WidgetKit/ActivityKit rendering) before Task 2 builds the real countdown/status content on
-// top of it. Deliberately static — no dynamic props, no real server data yet.
-type ServerStatusActivityProps = {
-  message: string;
+// OC-47 Task 2: real status/players/countdown content, replacing Task 1's static smoke test.
+//
+// Kept in sync with `useServerStatusLiveActivity.ts`'s own copy of this shape (that file cannot
+// import this type directly — see the comment there for why) and loosely mirrors
+// `useLifecycleState.ts`'s `LifecycleState` union plus the two fields off `Status`
+// (`players_online`, `pending_shutdown.seconds_left`) this activity actually needs. Deliberately
+// NOT the full `Status` object — only what's rendered here, kept small since every field crosses
+// into the widget extension's own process on every `.start()`/`.update()` call.
+export type ServerStatusActivityState = {
+  lifecycleState: 'running' | 'draining' | 'stopped' | 'starting';
+  playersOnline: number;
+  drainSecondsLeft: number | null;
 };
 
-// The `'widget'` directive (first statement in the function body, exactly like `'use client'`)
-// is what babel-preset-expo's widgets-plugin looks for (see
+// The `'widget'` directive (first statement in the function body, exactly like `'use client'`) is
+// what babel-preset-expo's widgets-plugin looks for (see
 // node_modules/babel-preset-expo/build/plugins/widgets-plugin.js) — it stringifies this exact
-// function body at build time so it can be evaluated natively inside the widget extension. It
-// must stay a block-bodied function (not an implicit-return arrow) for the directive to parse.
-const layout: LiveActivityComponent<ServerStatusActivityProps> = (props) => {
+// function body (via @babel/generator, verbatim AST -> source, no scope-checking) at build time
+// so it can be evaluated natively inside the widget extension's own embedded JavaScriptCore
+// runtime. Two consequences confirmed in Task 1's report, both load-bearing for how this function
+// is written:
+//   1. It must stay a block-bodied function (not an implicit-return arrow) for the directive to
+//      parse — `!t.isBlockStatement(path.node.body)` bails the plugin out otherwise.
+//   2. Nothing outside this function's own parameters is available at runtime — the surrounding
+//      module scope is stripped. `Text`/`VStack` resolve as globals supplied by expo-widgets' own
+//      pre-bundled `ExpoWidgets.bundle` (a real `@expo/ui/swift-ui`, not this file's import), but
+//      any helper function or constant defined elsewhere in this file (e.g. a
+//      `lifecycleLabel(state)` map reused from `StatusScreen.tsx`) would NOT be — so the Spanish
+//      label mapping and countdown-window math are inlined directly in the function body below
+//      rather than factored out, even though that duplicates `StatusScreen.tsx`'s own
+//      `lifecycleLabel`.
+const layout: LiveActivityComponent<ServerStatusActivityState> = (props) => {
   'widget';
+  const stateLabel =
+    props.lifecycleState === 'running'
+      ? 'Activo'
+      : props.lifecycleState === 'draining'
+        ? 'Drenando'
+        : props.lifecycleState === 'stopped'
+          ? 'Detenido'
+          : 'Iniciando';
+  const playersLabel = `${props.playersOnline} jugadores`;
+  // Real widget-native countdown primitive (@expo/ui/swift-ui's `Text` maps straight to
+  // SwiftUI's `Text(timerInterval:countsDown:)`, confirmed present in
+  // node_modules/@expo/ui/build/swift-ui/Text/index.d.ts) — once rendered, this ticks down on
+  // its own via the system clock inside the widget extension process; it does NOT need a JS
+  // timer or a `.update()` call every second. `lower` is "now" as of this render (i.e. as of
+  // the most recent `.start()`/`.update()` call that produced this exact `drainSecondsLeft`),
+  // `upper` is that instant plus the seconds remaining reported by the gateway.
+  const countdown =
+    props.drainSecondsLeft !== null ? (
+      <Text
+        timerInterval={{
+          lower: new Date(),
+          upper: new Date(Date.now() + props.drainSecondsLeft * 1000),
+        }}
+        countsDown
+      />
+    ) : null;
+
   return {
-    banner: <Text>{props.message}</Text>,
-    compactLeading: <Text>OC</Text>,
-    compactTrailing: <Text>47</Text>,
-    minimal: <Text>47</Text>,
+    banner: (
+      <VStack alignment="leading" spacing={4}>
+        <Text>{stateLabel}</Text>
+        <Text>{playersLabel}</Text>
+        {countdown}
+      </VStack>
+    ),
+    compactLeading: <Text>{stateLabel}</Text>,
+    compactTrailing: countdown ?? <Text>{playersLabel}</Text>,
+    minimal: <Text>{String(props.playersOnline)}</Text>,
   };
 };
 
@@ -30,7 +81,7 @@ const layout: LiveActivityComponent<ServerStatusActivityProps> = (props) => {
 // `expo-widgets` plugin `widgets` array — Live Activities are handled generically by the native
 // module regardless of that config (confirmed by reading
 // node_modules/expo-widgets/plugin/build/ios/withWidgetSourceFiles.js).
-export const serverStatusActivity = createLiveActivity<ServerStatusActivityProps>(
+export const serverStatusActivity = createLiveActivity<ServerStatusActivityState>(
   'ServerStatusActivity',
   layout,
 );
