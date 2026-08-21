@@ -46,7 +46,7 @@ export function PlayersScreen() {
       </View>
       <FlatList
         data={players}
-        keyExtractor={(player) => player.uuid}
+        keyExtractor={(player) => player}
         renderItem={renderItem}
         refreshControl={
           <RefreshControl
