@@ -50,6 +50,41 @@ export function useServerStatusLiveActivity(): { active: boolean; toggle: () => 
   // hand-rolled shallow-equal over three fields.
   const derivedKey = derived ? JSON.stringify(derived) : null;
 
+  // Reconciles with a Live Activity still running from a PREVIOUS app session. A freshly mounted
+  // hook instance has nothing tracked yet, but ActivityKit is OS-managed and independent of the
+  // app process — if the app was killed abnormally (swipe-away, OS memory pressure, crash, as
+  // opposed to a clean logout or manual toggle-off, both already handled below) while the toggle
+  // was on, the activity keeps running on the Lock Screen/Dynamic Island with nothing in this
+  // fresh hook instance tracking it. Left unreconciled, that's both a stale "off" reading on a
+  // real running activity AND a landmine: `toggle()` unconditionally calls `.start()` when
+  // `!active`, so an operator trusting the stale reading and tapping the switch would spin up a
+  // second, untracked, concurrent activity instead of adopting the still-running one.
+  // Mount-only (empty deps) — this is a one-time adoption check, not a recurring reconciliation.
+  // The `setActive(true)` call below is deliberately gated on `instanceRef.current` (not on a
+  // plain local like `existing`) so it's dominated by a ref check, the same shape as the
+  // `authStatus`/unmount effects below — this is what the `react-hooks/set-state-in-effect` lint
+  // rule's ref-derived-setState exemption recognizes as a legitimate "sync local state to what a
+  // ref/external system already holds" effect, rather than the "compute derived initial state in
+  // a mount effect" anti-pattern it otherwise flags.
+  useEffect(() => {
+    const [existing] = serverStatusActivity.getInstances();
+    if (existing) {
+      instanceRef.current = existing;
+      // Primes the update-effect's redundant-call guard so it doesn't immediately re-`.update()`
+      // the still-running activity with content it may already have. Only possible if the
+      // bootstrap `/status` fetch has already landed by the time this effect runs (unlikely on a
+      // fresh mount — `derived` is typically still `null` here); if not, this is a no-op and the
+      // update-effect below sends one real `.update()` once the fetch lands, same as it would for
+      // any other status change while active.
+      if (derivedKey) {
+        lastSentRef.current = derivedKey;
+      }
+    }
+    if (!instanceRef.current) return;
+    setActive(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // While active, push every real change in status/lifecycle to the running instance. Compares
   // against `lastSentRef` first so an unrelated re-render with unchanged status data (e.g. the
   // stream's 5s heartbeat re-delivering the same values) doesn't fire a redundant native
