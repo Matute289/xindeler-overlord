@@ -4,7 +4,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 
 import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
-import type { OracleTarget, OracleTriggerResponse, Player } from '@/api/schemas';
+import type { OracleTarget, OracleTriggerResponse } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { usePlayersQuery } from '@/features/players/usePlayersQuery';
@@ -60,8 +60,8 @@ function parseNumeric(text: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function isOnline(players: Player[], candidateAlias: string): boolean {
-  return players.some((p) => p.alias === candidateAlias);
+function isOnline(players: string[], candidateAlias: string): boolean {
+  return players.includes(candidateAlias);
 }
 
 function formatResolvedPos(pos: unknown): string {
@@ -130,7 +130,7 @@ export function OracleDryRunScreen() {
     triggerAction.reset();
   }
 
-  function buildTarget(onlinePlayers: Player[]): OracleTarget | null {
+  function buildTarget(onlinePlayers: string[]): OracleTarget | null {
     if (mode === 'player') {
       if (alias === null) return null;
       if (!isOnline(onlinePlayers, alias)) return null;
@@ -159,7 +159,7 @@ export function OracleDryRunScreen() {
   // keep reading `playersQuery.data` directly rather than the ref, which would otherwise lag by
   // one render behind a just-landed refetch (the ref only updates in the `useEffect` below, which
   // runs after render commits).
-  const playersRef = useRef<Player[]>([]);
+  const playersRef = useRef<string[]>([]);
   useEffect(() => {
     if (playersQuery.data) playersRef.current = playersQuery.data;
   }, [playersQuery.data]);
@@ -294,7 +294,7 @@ export function OracleDryRunScreen() {
           ) : (
             <View className="mt-2">
               <ChipPicker
-                options={players.map((p) => ({ value: p.alias, label: p.alias }))}
+                options={players.map((alias) => ({ value: alias, label: alias }))}
                 selected={alias}
                 onSelect={(value) => {
                   clearResult();

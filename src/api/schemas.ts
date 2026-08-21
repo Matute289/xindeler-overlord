@@ -43,12 +43,13 @@ export const StatusSchema = z.object({
 });
 export type Status = z.infer<typeof StatusSchema>;
 
-export const PlayerSchema = z.object({
-  alias: z.string(),
-  uuid: z.string(),
-});
-export type Player = z.infer<typeof PlayerSchema>;
-export const PlayersResponseSchema = z.array(PlayerSchema);
+// The real gateway's `GET /players` returns a bare array of online player names (confirmed
+// against xindeler-zuul's real merged source, `server/src/console.rs`/`engine.rs`'s
+// `fetch_players` — `Option<Vec<String>>`, own test asserts `["Jugadora","Jugador2"]`) — no
+// uuid, no object wrapper. There is currently no endpoint anywhere that resolves a player name to
+// a uuid; ZG-57 (xindeler-zuul, not yet built) tracks adding one.
+export type Player = string;
+export const PlayersResponseSchema = z.array(z.string());
 
 export const LogLineSchema = z.object({
   ts: z.string(),

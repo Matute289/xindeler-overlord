@@ -11,13 +11,7 @@ export const PlayerRow = memo(function PlayerRow({ player }: { player: Player })
         className="text-steel-light dark:text-night-steel-light"
         style={{ fontFamily: fonts.semibold }}
       >
-        {player.alias}
-      </Text>
-      <Text
-        className="text-steel-muted dark:text-night-steel-muted"
-        style={{ fontFamily: fonts.regular }}
-      >
-        {player.uuid.slice(0, 8)}
+        {player}
       </Text>
     </View>
   );
