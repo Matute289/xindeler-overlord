@@ -21,7 +21,19 @@ const config: ExpoConfig = {
       foregroundImage: './assets/images/android-icon-foreground.png',
       backgroundColor: '#0B0F14',
     },
-    predictiveBackGestureEnabled: false,
+    // NOTE (OC-36a, 2026-08-21): the original plan called for an explicit
+    // `edgeToEdgeEnabled: true` here, but this repo is on Expo SDK 57.0.11, where that option no
+    // longer exists on the `Android` config type (@expo/config-types) and
+    // @expo/prebuild-config's `withEdgeToEdge` plugin emits a build warning telling you to
+    // *remove* it if present — Android 16 makes edge-to-edge mandatory unconditionally in this
+    // SDK, so there's nothing left to "declare". Intentionally omitted; see task-1-report.md.
+    //
+    // Re-enabled predictive back gesture 2026-08-21 (OC-36a) — this was `false` from the
+    // original OC-3 scaffold with no documented reason. RN `Modal`'s `onRequestClose` and
+    // expo-router's own back-handling both fire from the same underlying back-press event
+    // regardless of this flag; predictive-back only adds Android 13+'s preview
+    // animation/gesture on top, it doesn't change what fires.
+    predictiveBackGestureEnabled: true,
   },
   web: {
     output: 'static',
