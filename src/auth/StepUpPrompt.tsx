@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/ui/Button';
 import { Pressable } from '@/ui/Pressable';
@@ -18,6 +18,7 @@ export function StepUpPrompt({
   onCancel: () => void;
 }) {
   const [code, setCode] = useState('');
+  const insets = useSafeAreaInsets();
 
   function handleSubmit() {
     onSubmit(code);
@@ -43,9 +44,16 @@ export function StepUpPrompt({
               letting it grow past a short landscape screen, with the ScrollView inside taking
               over from there. */}
           <View className="max-h-full w-full max-w-sm rounded-lg bg-bg-surface dark:bg-night-bg-surface">
-            {/* `edges={['bottom']}` only — same reasoning as ConfirmByTypingSheet.tsx: only the
-                bottom edge of this card can ever coincide with the home indicator. */}
-            <SafeAreaView edges={['bottom']}>
+            {/* `useSafeAreaInsets()` + manual `paddingBottom`, not the native `<SafeAreaView>`
+                component — same reasoning as ConfirmByTypingSheet.tsx: the native SafeAreaView
+                reads UIKit's `safeAreaInsets` directly and that resolves to 0 inside RN's
+                `<Modal>` on iOS (a known library limitation:
+                https://github.com/AppAndFlow/react-native-safe-area-context/issues/677). The hook
+                reads the already-mounted root `SafeAreaProvider` (from Expo Router) instead, which
+                correctly reports the real inset from inside a Modal too. Only the bottom inset
+                applies — same reasoning as ConfirmByTypingSheet.tsx: only the bottom edge of this
+                card can ever coincide with the home indicator. */}
+            <View style={{ paddingBottom: insets.bottom }}>
               <ScrollView keyboardShouldPersistTaps="handled">
                 <View className="gap-4 p-6">
                   <Text
@@ -82,7 +90,7 @@ export function StepUpPrompt({
                   </Pressable>
                 </View>
               </ScrollView>
-            </SafeAreaView>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>

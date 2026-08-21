@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from './Button';
 import { Pressable } from './Pressable';
@@ -22,6 +22,7 @@ export function ConfirmByTypingSheet({
   onCancel: () => void;
 }) {
   const [typed, setTyped] = useState('');
+  const insets = useSafeAreaInsets();
 
   function handleCancel() {
     setTyped('');
@@ -51,10 +52,18 @@ export function ConfirmByTypingSheet({
             with the keyboard open still leaves the ScrollView inside room to actually scroll,
             instead of the card growing to fill 100% and clipping identically to before. */}
         <View className="max-h-[85%] rounded-t-2xl bg-bg-surface dark:bg-night-bg-surface">
-          {/* `edges={['bottom']}` only — this View's own top/left/right edges are interior to the
-              modal, not device edges; only the bottom can coincide with the home indicator on a
-              phone with no physical home button. Matches `Screen.tsx`'s own established pattern. */}
-          <SafeAreaView edges={['bottom']}>
+          {/* `useSafeAreaInsets()` + manual `paddingBottom`, not the native `<SafeAreaView>`
+              component — react-native-safe-area-context's native SafeAreaView reads UIKit's
+              `safeAreaInsets` directly off its own native view, and that resolves to 0 for any
+              view rendered inside RN's `<Modal>` on iOS (a well-known library limitation:
+              https://github.com/AppAndFlow/react-native-safe-area-context/issues/677). The hook,
+              by contrast, reads from the `SafeAreaProvider` already mounted at the app root by
+              Expo Router, which correctly reports the device's real bottom inset even from inside
+              a Modal. Confirmed via `npx expo run:ios` on a real iPhone 17 simulator: the native
+              `<SafeAreaView edges={['bottom']}>` version measurably added zero bottom padding,
+              while this hook-based version visibly does. Only the bottom inset applies — this
+              View's own top/left/right edges are interior to the modal, not device edges. */}
+          <View style={{ paddingBottom: insets.bottom }}>
             <ScrollView keyboardShouldPersistTaps="handled">
               <View className="gap-4 p-6">
                 <Text
@@ -99,7 +108,7 @@ export function ConfirmByTypingSheet({
                 </Pressable>
               </View>
             </ScrollView>
-          </SafeAreaView>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
