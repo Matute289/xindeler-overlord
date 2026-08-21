@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Modal, Pressable, Text, View } from 'react-native';
+import { AppState, Modal, Text, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 import { Button } from '@/ui/Button';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 export function AppLockScreen({

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { useEnvironment } from '@/config/EnvironmentContext';
@@ -11,6 +11,7 @@ import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
+import { Pressable } from '@/ui/Pressable';
 import { fonts, useTheme } from '@/ui/theme';
 
 import { useOracleEventsQuery } from './useOracleEventsQuery';

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
+import { Pressable } from '@/ui/Pressable';
 import { fonts, useTheme } from '@/ui/theme';
 
 import { ChatMessageRow } from './ChatMessageRow';

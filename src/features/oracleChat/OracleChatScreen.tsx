@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ListRenderItem, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Text, View } from 'react-native';
 
 import type { DmEvent } from '@/api/schemas';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
+import { Pressable } from '@/ui/Pressable';
 import { TextField } from '@/ui/TextField';
 import { fonts } from '@/ui/theme';
 

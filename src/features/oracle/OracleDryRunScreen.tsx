@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
@@ -13,6 +13,7 @@ import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
+import { Pressable } from '@/ui/Pressable';
 import { TextField } from '@/ui/TextField';
 import { fonts } from '@/ui/theme';
 

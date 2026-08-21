@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { ActionError } from '@/features/connectivity/ActionError';
@@ -8,6 +8,7 @@ import { useStreamStatus } from '@/stream/StreamContext';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 import { StatRow } from './StatRow';

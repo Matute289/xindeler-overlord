@@ -1,6 +1,6 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
@@ -8,6 +8,7 @@ import { useEnvironment } from '@/config/EnvironmentContext';
 import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { Button } from '@/ui/Button';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 import { Screen } from '@/ui/Screen';
 import { TextField } from '@/ui/TextField';

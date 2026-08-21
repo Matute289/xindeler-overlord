@@ -1,5 +1,6 @@
-import { Pressable, Text } from 'react-native';
+import { Text } from 'react-native';
 
+import { Pressable } from './Pressable';
 import { fonts } from './theme';
 
 export function FollowTailToggle({

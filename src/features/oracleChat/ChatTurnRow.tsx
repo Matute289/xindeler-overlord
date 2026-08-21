@@ -1,9 +1,10 @@
 import * as Clipboard from 'expo-clipboard';
 import { memo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { ChatMessage, DmEvent } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 import type { ChatTurn } from './types';

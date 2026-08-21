@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, Slot, Tabs, usePathname } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StepUpProvider } from '@/auth/StepUpContext';
 import { StreamStatusBanner } from '@/features/connectivity/StreamStatusBanner';
 import { EnvironmentBadge } from '@/features/environment/EnvironmentBadge';
 import { KeyboardShortcutsHelp } from '@/ui/KeyboardShortcutsHelp';
+import { Pressable } from '@/ui/Pressable';
 import { useBreakpoint } from '@/ui/useBreakpoint';
 import { useTabShortcuts } from '@/ui/useTabShortcuts';
 import { fonts, useTheme } from '@/ui/theme';
