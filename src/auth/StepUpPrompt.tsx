@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, View } from 're
 import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
 import { TextField } from '@/ui/TextField';
+import { useEscapeToClose } from '@/ui/useEscapeToClose';
 
 export function StepUpPrompt({
   visible,
@@ -25,6 +26,8 @@ export function StepUpPrompt({
     setCode('');
     onCancel();
   }
+
+  useEscapeToClose(visible, handleCancel);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
