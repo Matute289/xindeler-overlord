@@ -1,86 +1,43 @@
-import { Text, VStack } from '@expo/ui/swift-ui';
 import { createLiveActivity, type LiveActivityComponent } from 'expo-widgets';
 
-// OC-47 Task 2: real status/players/countdown content, replacing Task 1's static smoke test.
+import type { ServerStatusActivityState } from './ServerStatusActivityState';
+
+// This file MUST be `.tsx`, not `.ts`, despite containing no JSX — confirmed the hard way (a real
+// iOS Simulator crash: `ArgumentCastException: The 2nd argument cannot be cast to type String`,
+// because this stub's `layout` was the one actually reaching native `createLiveActivity` on iOS).
+// Root cause, from `node_modules/metro-resolver/src/resolve.js`'s `resolveSourceFile`: Metro
+// walks `resolver.sourceExts` (this project's order, from `expo/metro-config`: `ts` before `tsx`)
+// one extension at a time, and for EACH extension checks `<name>.<platform>.<ext>` then the bare
+// `<name>.<ext>` before moving to the next extension — it does not check all platform variants
+// before falling back to generic. A generic `ServerStatusActivity.ts` therefore wins during the
+// "ts" pass and shadows `ServerStatusActivity.ios.tsx`, which only gets checked in the later "tsx"
+// pass that Metro never reaches. Keeping this file's extension identical to the real iOS
+// implementation's (`.tsx`) puts both in the same resolution pass, where the platform-specific
+// `.ios.tsx` correctly wins on iOS.
 //
-// Kept in sync with `useServerStatusLiveActivity.ts`'s own copy of this shape (that file cannot
-// import this type directly — see the comment there for why) and loosely mirrors
-// `useLifecycleState.ts`'s `LifecycleState` union plus the two fields off `Status`
-// (`players_online`, `pending_shutdown.seconds_left`) this activity actually needs. Deliberately
-// NOT the full `Status` object — only what's rendered here, kept small since every field crosses
-// into the widget extension's own process on every `.start()`/`.update()` call.
-export type ServerStatusActivityState = {
-  lifecycleState: 'running' | 'draining' | 'stopped' | 'starting';
-  playersOnline: number;
-  drainSecondsLeft: number | null;
-};
+// Re-exported (not just imported) so `useServerStatusLiveActivity.ts`'s single
+// `import { serverStatusActivity, type ServerStatusActivityState } from './ServerStatusActivity'`
+// resolves on Android/Web too — Metro routes that extensionless specifier to this file there, so
+// this file (like the iOS `ServerStatusActivity.ios.tsx` implementation) must itself re-export
+// the type, not just consume it.
+export type { ServerStatusActivityState };
 
-// The `'widget'` directive (first statement in the function body, exactly like `'use client'`) is
-// what babel-preset-expo's widgets-plugin looks for (see
-// node_modules/babel-preset-expo/build/plugins/widgets-plugin.js) — it stringifies this exact
-// function body (via @babel/generator, verbatim AST -> source, no scope-checking) at build time
-// so it can be evaluated natively inside the widget extension's own embedded JavaScriptCore
-// runtime. Two consequences confirmed in Task 1's report, both load-bearing for how this function
-// is written:
-//   1. It must stay a block-bodied function (not an implicit-return arrow) for the directive to
-//      parse — `!t.isBlockStatement(path.node.body)` bails the plugin out otherwise.
-//   2. Nothing outside this function's own parameters is available at runtime — the surrounding
-//      module scope is stripped. `Text`/`VStack` resolve as globals supplied by expo-widgets' own
-//      pre-bundled `ExpoWidgets.bundle` (a real `@expo/ui/swift-ui`, not this file's import), but
-//      any helper function or constant defined elsewhere in this file (e.g. a
-//      `lifecycleLabel(state)` map reused from `StatusScreen.tsx`) would NOT be — so the Spanish
-//      label mapping and countdown-window math are inlined directly in the function body below
-//      rather than factored out, even though that duplicates `StatusScreen.tsx`'s own
-//      `lifecycleLabel`.
-const layout: LiveActivityComponent<ServerStatusActivityState> = (props) => {
-  'widget';
-  const stateLabel =
-    props.lifecycleState === 'running'
-      ? 'Activo'
-      : props.lifecycleState === 'draining'
-        ? 'Drenando'
-        : props.lifecycleState === 'stopped'
-          ? 'Detenido'
-          : 'Iniciando';
-  const playersLabel = `${props.playersOnline} jugadores`;
-  // Real widget-native countdown primitive (@expo/ui/swift-ui's `Text` maps straight to
-  // SwiftUI's `Text(timerInterval:countsDown:)`, confirmed present in
-  // node_modules/@expo/ui/build/swift-ui/Text/index.d.ts) — once rendered, this ticks down on
-  // its own via the system clock inside the widget extension process; it does NOT need a JS
-  // timer or a `.update()` call every second. `lower` is "now" as of this render (i.e. as of
-  // the most recent `.start()`/`.update()` call that produced this exact `drainSecondsLeft`),
-  // `upper` is that instant plus the seconds remaining reported by the gateway.
-  const countdown =
-    props.drainSecondsLeft !== null ? (
-      <Text
-        timerInterval={{
-          lower: new Date(),
-          upper: new Date(Date.now() + props.drainSecondsLeft * 1000),
-        }}
-        countsDown
-      />
-    ) : null;
+// Android/Web stub. `@expo/ui/swift-ui` (used by the real iOS implementation in
+// `ServerStatusActivity.ios.tsx`) throws unconditionally outside iOS — its `Text` component
+// calls `requireNativeView` at module load time, before any `Platform.OS` check can help. This
+// file intentionally has NO such import. `expo-widgets`' own `createLiveActivity` is already
+// platform-safe (it has its own `ExpoWidgets.ios.js`/generic-fallback split, confirmed in
+// `node_modules/expo-widgets/build/ExpoWidgets.js` — the fallback `LiveActivityFactoryStub`
+// ignores the `layout` argument entirely), so `layout` below never actually runs outside iOS; it
+// exists only to satisfy `createLiveActivity`'s type signature. See
+// `docs/specs/2026-08-21-server-status-activity-platform-split-design.md`.
+const layout: LiveActivityComponent<ServerStatusActivityState> = () => ({
+  banner: null,
+  compactLeading: null,
+  compactTrailing: null,
+  minimal: null,
+});
 
-  return {
-    banner: (
-      <VStack alignment="leading" spacing={4}>
-        <Text>{stateLabel}</Text>
-        <Text>{playersLabel}</Text>
-        {countdown}
-      </VStack>
-    ),
-    compactLeading: <Text>{stateLabel}</Text>,
-    compactTrailing: countdown ?? <Text>{playersLabel}</Text>,
-    minimal: <Text>{String(props.playersOnline)}</Text>,
-  };
-};
-
-// `createLiveActivity`'s real signature (confirmed from node_modules/expo-widgets/build/Widgets.d.ts):
-//   createLiveActivity<T extends object>(name: string, liveActivity: LiveActivityComponent<T>): LiveActivityFactory<T>
-// Unlike home-screen widgets, this `name` does NOT need to match any entry in app.config.ts's
-// `expo-widgets` plugin `widgets` array — Live Activities are handled generically by the native
-// module regardless of that config (confirmed by reading
-// node_modules/expo-widgets/plugin/build/ios/withWidgetSourceFiles.js).
 export const serverStatusActivity = createLiveActivity<ServerStatusActivityState>(
   'ServerStatusActivity',
   layout,
