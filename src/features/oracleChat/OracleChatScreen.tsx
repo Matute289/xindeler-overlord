@@ -4,6 +4,7 @@ import type { ListRenderItem, NativeScrollEvent, NativeSyntheticEvent } from 're
 import { FlatList, Pressable, Text, View } from 'react-native';
 
 import type { DmEvent } from '@/api/schemas';
+import { useEnvironment } from '@/config/EnvironmentContext';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
@@ -25,6 +26,7 @@ export function OracleChatScreen() {
   const { threads, activeThreadId, setActiveThreadId, createThread, send, retryTurn, sending } =
     useOracleChatThreads();
   const budgetQuery = useOracleBudgetQuery();
+  const { environment } = useEnvironment();
   const [draftText, setDraftText] = useState('');
   const [followTail, setFollowTail] = useState(true);
   const flatListRef = useRef<FlatList<ChatTurn>>(null);
@@ -144,6 +146,17 @@ export function OracleChatScreen() {
         </Text>
         <FollowTailToggle followTail={followTail} onToggle={toggleFollowTail} />
       </View>
+      {environment.id !== 'mock' && (
+        <View className="px-6 pt-1">
+          <Text
+            className="text-xs text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.regular }}
+          >
+            El chat todavía no tiene implementación en el gateway real — solo responde contra el
+            entorno Mock (falta Bedrock del lado del gateway).
+          </Text>
+        </View>
+      )}
 
       <View className="mt-4 flex-row flex-wrap items-center gap-2 px-6">
         <ChipPicker
