@@ -1,15 +1,8 @@
 import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
 
 import { Button } from '@/ui/Button';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 import { TextField } from '@/ui/TextField';
 import { useEscapeToClose } from '@/ui/useEscapeToClose';

@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { queryKeys } from '@/api/queryClient';
@@ -18,6 +18,7 @@ import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { Empty } from '@/ui/Empty';
+import { Pressable } from '@/ui/Pressable';
 import { TextField } from '@/ui/TextField';
 import { fonts } from '@/ui/theme';
 

@@ -1,8 +1,9 @@
 import { Link } from 'expo-router';
-import { Pressable, Text } from 'react-native';
+import { Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useEnvironment } from '@/config/EnvironmentContext';
+import { Pressable } from '@/ui/Pressable';
 
 // Persistent, always-visible reminder of which server this app talks to.
 // Rendered once above the nav shell (see app/(tabs)/_layout.tsx and

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { AuroraPlaceholderScreen } from '@/features/aurora/AuroraPlaceholderScreen';
 import { OracleEventsScreen } from '@/features/oracle/OracleEventsScreen';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 type Section = 'oracle' | 'aurora';

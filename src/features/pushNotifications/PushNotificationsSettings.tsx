@@ -1,6 +1,7 @@
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
 
 import { Button } from '@/ui/Button';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 import { usePushRegistration } from './usePushRegistration';

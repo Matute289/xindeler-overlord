@@ -1,7 +1,8 @@
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { ENVIRONMENTS } from '@/config/environments';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 export function EnvironmentSwitcher() {

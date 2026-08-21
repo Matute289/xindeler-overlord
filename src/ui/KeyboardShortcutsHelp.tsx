@@ -1,5 +1,6 @@
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, ScrollView, Text, View } from 'react-native';
 
+import { Pressable } from './Pressable';
 import { useEscapeToClose } from './useEscapeToClose';
 import { fonts } from './theme';
 

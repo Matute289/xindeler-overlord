@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthContext';
 import { EnvironmentSwitcher } from '@/features/environment/EnvironmentSwitcher';
 import { PushNotificationsSettings } from '@/features/pushNotifications/PushNotificationsSettings';
 import { Button } from '@/ui/Button';
+import { Pressable } from '@/ui/Pressable';
 import { Screen } from '@/ui/Screen';
 import { fonts, useTheme } from '@/ui/theme';
 

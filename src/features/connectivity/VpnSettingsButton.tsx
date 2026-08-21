@@ -1,5 +1,6 @@
-import { Pressable, Text } from 'react-native';
+import { Text } from 'react-native';
 
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 import { canOpenVpnSettings, openVpnSettings } from './openVpnSettings';

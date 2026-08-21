@@ -1,8 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
 import { memo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { LogLine } from '@/api/schemas';
+import { Pressable } from '@/ui/Pressable';
 import { formatTime } from '@/ui/formatTime';
 import { fonts } from '@/ui/theme';
 

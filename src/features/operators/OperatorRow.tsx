@@ -1,7 +1,8 @@
 import { memo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { Operator } from '@/api/schemas';
+import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 const TOTP_STATUS_LABELS: Record<Operator['totp_status'], string> = {
