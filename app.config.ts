@@ -46,6 +46,12 @@ const config: ExpoConfig = {
         imageWidth: 200,
       },
     ],
+    // No options needed: the plugin derives a bundleIdentifier/groupIdentifier from
+    // `ios.bundleIdentifier` above (confirmed by reading
+    // node_modules/expo-widgets/plugin/build/ios/withIosWidgets.js) and Live Activities
+    // (unlike home-screen widgets) aren't declared through this plugin's `widgets` array at
+    // all — see task-1-report.md for the source-level confirmation.
+    'expo-widgets',
   ],
   experiments: {
     typedRoutes: true,
