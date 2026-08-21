@@ -32,7 +32,7 @@ export default function TabsLayout() {
   const breakpoint = useBreakpoint();
   const { colors } = useTheme();
   const [helpVisible, setHelpVisible] = useState(false);
-  useTabShortcuts(DESTINATIONS, () => setHelpVisible(true));
+  useTabShortcuts(DESTINATIONS, () => setHelpVisible(true), helpVisible);
 
   return (
     <StepUpProvider>

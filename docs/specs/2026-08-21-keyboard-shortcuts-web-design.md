@@ -56,6 +56,7 @@ export function useEscapeToClose(visible: boolean, onClose: () => void): void
 export function useTabShortcuts(
   destinations: { href: Href }[],
   onHelp: () => void,
+  suppressed: boolean,
 ): void
 ```
 
@@ -82,7 +83,7 @@ export function useTabShortcuts(
 ### 4. `app/(tabs)/_layout.tsx` (modificado)
 
 - `TabsLayout` gana un `useState` para `helpVisible`.
-- Llama a `useTabShortcuts(DESTINATIONS, () => setHelpVisible(true))`.
+- Llama a `useTabShortcuts(DESTINATIONS, () => setHelpVisible(true), helpVisible)`.
 - Renderiza `<KeyboardShortcutsHelp visible={helpVisible} onClose={() => setHelpVisible(false)} />`
   al final del árbol, junto a `EnvironmentBadge`/`StreamStatusBanner` (mismo nivel, fuera del
   `Tabs`/`SidebarLayout` condicional, para que funcione en ambos breakpoints).
@@ -95,6 +96,14 @@ export function useTabShortcuts(
   modales existentes gracias a su `autoFocus`. Si en el futuro aparece un modal sin campo de
   texto enfocado, este guard no lo cubre; se documenta como limitación conocida, no se
   sobre-diseña para un caso que no existe hoy.
+- Actualización post-review: la revisión final de la rama completa encontró que el caso "sin
+  campo de texto enfocado" sí ocurría hoy, con `KeyboardShortcutsHelp` mismo — sin un guard, un
+  dígito presionado con el overlay de ayuda abierto navegaba de tab por debajo mientras la
+  tarjeta de ayuda quedaba flotando sobre la pantalla equivocada. En vez de construir el registro
+  global de "modal abierto" descartado arriba, `useTabShortcuts` ahora recibe un flag explícito
+  `suppressed` (alimentado por `helpVisible`) que ignora dígitos y `?` mientras el overlay está
+  abierto; Escape sigue siendo el único cierre, vía `useEscapeToClose` dentro de
+  `KeyboardShortcutsHelp`.
 - Ningún atajo dispara una acción destructiva ni un submit — solo navegación y abrir/cerrar UI
   no destructiva.
 
