@@ -1,8 +1,12 @@
 name: Deploy Web
 
+# Tag-gated, mirroring xindeler-zuul's own deploy.sh convention (ZG-41): deploys are cut from
+# `main` only via a versioned `vX.Y.Z` tag, `development` is never deployed directly. The
+# "reachable from main" check below is the actual enforcement, not just the tag-push trigger --
+# a tag pushed from any other branch is refused the same way deploy.sh refuses one.
 on:
   push:
-    branches: [development]
+    tags: ['v*.*.*']
   workflow_dispatch: {}
 
 jobs:
@@ -11,6 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refuse to deploy anything not reachable from main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "${{ github.sha }}" origin/main || {
+            echo "::error::${{ github.ref_name }} (${{ github.sha }}) is not reachable from main -- refusing to deploy"
+            exit 1
+          }
 
       - uses: actions/setup-node@v4
         with:
