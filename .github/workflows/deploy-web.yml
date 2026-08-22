@@ -42,9 +42,17 @@ jobs:
           ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
       - name: Sync to the VPS
+        # No path after the trailing colon: the deploy key on the VPS side is installed with a
+        # forced `rrsync -wo /opt/xindeler-zuul/web/` command (restricted-rsync-over-ssh), which
+        # already chdirs into that exact directory and treats any destination path from the
+        # client as *relative* to it. Passing the absolute path again here (as an earlier draft
+        # of this workflow did) makes rrsync append it a second time --
+        # "/opt/xindeler-zuul/web/opt/xindeler-zuul/web" -- which doesn't exist, and the transfer
+        # fails outright. Confirmed against the real deploy key and a real rsync 3.2.7 on the VPS,
+        # not assumed from the rrsync docs alone.
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.VPS_SSH_HOST }}" >> ~/.ssh/known_hosts
           rsync -avz --delete --safe-links \
             dist/ \
-            "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:/opt/xindeler-zuul/web/"
+            "${{ secrets.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:"
