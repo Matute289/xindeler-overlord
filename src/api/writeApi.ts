@@ -148,6 +148,8 @@ export function createWriteApi(http: HttpClient) {
       );
     },
 
+    // EXPECTED SHAPE, NOT CONFIRMED against a real backend — see the design doc's "ban by
+    // character" section. Route path and body are a reasonable guess, not a contract.
     unsuspendCharacter(
       segment: string,
       characterId: number,
