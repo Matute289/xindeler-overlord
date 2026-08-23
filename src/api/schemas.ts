@@ -123,6 +123,20 @@ export const PlayerDetailResponseSchema = z.object({
 });
 export type PlayerDetailResponse = z.infer<typeof PlayerDetailResponseSchema>;
 
+export const BanPlayerResponseSchema = z.object({
+  account: AdminPlayerViewSchema.nullable(),
+  connection: z.record(z.string(), z.unknown()).nullable(),
+  outcome: z.enum(['success', 'banned_account_only', 'banned_connection_only', 'failed']),
+});
+export type BanPlayerResponse = z.infer<typeof BanPlayerResponseSchema>;
+
+export const UnbanPlayerResponseSchema = z.object({
+  account: AdminPlayerViewSchema.nullable(),
+  connection_unbanned: z.boolean(),
+  outcome: z.enum(['success', 'unbanned_account_only', 'unbanned_connection_only', 'failed']),
+});
+export type UnbanPlayerResponse = z.infer<typeof UnbanPlayerResponseSchema>;
+
 export const LogLineSchema = z.object({
   ts: z.string(),
   level: z.string(),

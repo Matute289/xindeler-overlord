@@ -1,11 +1,20 @@
 import { z } from 'zod';
 
 import type { createHttpClient } from './httpClient';
-import type { DmEvent, OracleTarget } from './schemas';
+import type {
+  DmEvent,
+  OracleTarget,
+  AdminPlayerView,
+  BanPlayerResponse,
+  UnbanPlayerResponse,
+} from './schemas';
 import {
   StageOracleEventResponseSchema,
   OracleTriggerResponseSchema,
   OracleEnabledResponseSchema,
+  AdminPlayerViewSchema,
+  BanPlayerResponseSchema,
+  UnbanPlayerResponseSchema,
 } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
@@ -71,6 +80,83 @@ export function createWriteApi(http: HttpClient) {
         body: { username },
         idempotencyKey,
       });
+    },
+
+    issuePlayerFlag(
+      segment: string,
+      body: { color: 'yellow' | 'red'; reason: string; ban_duration_secs?: number },
+      idempotencyKey?: string,
+    ) {
+      return http.request<AdminPlayerView>(
+        `/api/v1/players/${encodeURIComponent(segment)}/flags`,
+        { method: 'POST', body, idempotencyKey },
+        AdminPlayerViewSchema,
+      );
+    },
+
+    kickPlayer(segment: string, reason: string | undefined, idempotencyKey?: string) {
+      return http.request<void>(`/api/v1/players/${encodeURIComponent(segment)}/kick`, {
+        method: 'POST',
+        body: reason !== undefined ? { reason } : {},
+        idempotencyKey,
+      });
+    },
+
+    banPlayer(
+      segment: string,
+      body: {
+        reason: string;
+        duration_secs?: number;
+        overwrite?: boolean;
+        target_username?: string;
+        // EXPECTED SHAPE, NOT CONFIRMED against a real backend — see the design doc's "ban by
+        // email" section. `xindeler-zuul` hasn't decided its own final shape for this yet.
+        ban_email?: boolean;
+      },
+      idempotencyKey?: string,
+    ) {
+      return http.request<BanPlayerResponse>(
+        `/api/v1/players/${encodeURIComponent(segment)}/ban`,
+        { method: 'POST', body, idempotencyKey },
+        BanPlayerResponseSchema,
+      );
+    },
+
+    unbanPlayer(
+      segment: string,
+      body: { reason: string; target_username?: string },
+      idempotencyKey?: string,
+    ) {
+      return http.request<UnbanPlayerResponse>(
+        `/api/v1/players/${encodeURIComponent(segment)}/unban`,
+        { method: 'POST', body, idempotencyKey },
+        UnbanPlayerResponseSchema,
+      );
+    },
+
+    // EXPECTED SHAPE, NOT CONFIRMED against a real backend — see the design doc's "ban by
+    // character" section. Route path and body are a reasonable guess, not a contract.
+    suspendCharacter(
+      segment: string,
+      characterId: number,
+      reason: string,
+      idempotencyKey?: string,
+    ): Promise<void> {
+      return http.request(
+        `/api/v1/players/${encodeURIComponent(segment)}/characters/${characterId}/suspend`,
+        { method: 'POST', body: { reason }, idempotencyKey },
+      );
+    },
+
+    unsuspendCharacter(
+      segment: string,
+      characterId: number,
+      idempotencyKey?: string,
+    ): Promise<void> {
+      return http.request(
+        `/api/v1/players/${encodeURIComponent(segment)}/characters/${characterId}/unsuspend`,
+        { method: 'POST', body: {}, idempotencyKey },
+      );
     },
 
     broadcastMessage(message: string, idempotencyKey?: string) {

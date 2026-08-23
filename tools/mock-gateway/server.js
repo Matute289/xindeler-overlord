@@ -17,6 +17,11 @@ const broadcastRoutes = require('./src/routes/broadcast');
 const pushRoutes = require('./src/routes/push');
 const playersDirectoryRoutes = require('./src/routes/playersDirectory').router;
 const playerDetailRoutes = require('./src/routes/playerDetail');
+const playerFlagRoutes = require('./src/routes/playerFlag');
+const playerKickRoutes = require('./src/routes/playerKick');
+const playerBanRoutes = require('./src/routes/playerBan');
+const playerUnbanRoutes = require('./src/routes/playerUnban');
+const playerCharacterSuspendRoutes = require('./src/routes/playerCharacterSuspend');
 const oracleEventsRoutes = require('./src/routes/oracleEvents');
 const oraclePresetsRoutes = require('./src/routes/oraclePresets');
 const oracleStageRoutes = require('./src/routes/oracleStage');
@@ -50,6 +55,29 @@ app.use('/api/v1/status', requireAuth, statusRoutes);
 app.use('/api/v1/players/directory', requireAuth, playersDirectoryRoutes);
 app.use('/api/v1/players', requireAuth, playersRoutes);
 app.use('/api/v1/players/2fa/unlock', requireAuth, requireCsrf, requireStepUp, playerUnlockRoutes);
+app.use(
+  '/api/v1/players/:segment/flags',
+  requireAuth,
+  requireCsrf,
+  requireStepUp,
+  playerFlagRoutes,
+);
+app.use('/api/v1/players/:segment/kick', requireAuth, requireCsrf, playerKickRoutes);
+app.use('/api/v1/players/:segment/ban', requireAuth, requireCsrf, requireStepUp, playerBanRoutes);
+app.use(
+  '/api/v1/players/:segment/unban',
+  requireAuth,
+  requireCsrf,
+  requireStepUp,
+  playerUnbanRoutes,
+);
+app.use(
+  '/api/v1/players/:segment/characters',
+  requireAuth,
+  requireCsrf,
+  requireStepUp,
+  playerCharacterSuspendRoutes,
+);
 app.use('/api/v1/players', requireAuth, playerDetailRoutes);
 app.use('/api/v1/logs', requireAuth, logsRoutes);
 app.use('/api/v1/chat', requireAuth, chatRoutes);
