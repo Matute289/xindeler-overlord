@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
-import type { PlayerFlag } from '@/api/schemas';
+import type { CharacterSummary, PlayerFlag } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Button } from '@/ui/Button';
@@ -13,6 +13,12 @@ import { fonts } from '@/ui/theme';
 
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { usePlayerDetailQuery } from './usePlayerDetailQuery';
+
+// EXPECTED SHAPE, NOT CONFIRMED against a real backend — see the design doc's ban-by-character
+// section. `CharacterSummarySchema` itself stays exactly as the confirmed contract defines it;
+// this is a local, mock-only extension so this screen can render suspension state without
+// widening the shared schema to include a field only the mock currently sends.
+type CharacterWithSuspension = CharacterSummary & { suspended?: boolean };
 
 const STATE_LABELS: Record<string, string> = {
   active: 'Activo',
@@ -31,7 +37,14 @@ function flagLabel(flag: PlayerFlag): string {
   return `${colorLabel} — ${flag.reason}${revoked}`;
 }
 
-type ConfirmAction = 'flag_yellow' | 'flag_red' | 'kick' | 'ban' | 'unban';
+type ConfirmAction =
+  | 'flag_yellow'
+  | 'flag_red'
+  | 'kick'
+  | 'ban'
+  | 'unban'
+  | 'suspend_character'
+  | 'unsuspend_character';
 
 const CONFIRM_WORDS: Record<ConfirmAction, string> = {
   flag_yellow: 'FLAG',
@@ -39,6 +52,8 @@ const CONFIRM_WORDS: Record<ConfirmAction, string> = {
   kick: 'KICK',
   ban: 'BAN',
   unban: 'UNBAN',
+  suspend_character: 'SUSPEND',
+  unsuspend_character: 'UNSUSPEND',
 };
 
 export function PlayerDetailScreen({ reference }: { reference: string }) {
@@ -46,6 +61,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
   const query = usePlayerDetailQuery(reference);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [reason, setReason] = useState('');
+  const [targetCharacter, setTargetCharacter] = useState<CharacterWithSuspension | null>(null);
 
   const flagAction = useDestructiveAction((idempotencyKey) =>
     api.write.issuePlayerFlag(
@@ -63,6 +79,16 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
   const unbanAction = useDestructiveAction((idempotencyKey) =>
     api.write.unbanPlayer(reference, { reason }, idempotencyKey),
   );
+  const suspendCharacterAction = useDestructiveAction((idempotencyKey) =>
+    targetCharacter
+      ? api.write.suspendCharacter(reference, targetCharacter.character_id, reason, idempotencyKey)
+      : Promise.reject(new Error('no target character')),
+  );
+  const unsuspendCharacterAction = useDestructiveAction((idempotencyKey) =>
+    targetCharacter
+      ? api.write.unsuspendCharacter(reference, targetCharacter.character_id, idempotencyKey)
+      : Promise.reject(new Error('no target character')),
+  );
 
   if (query.data === undefined) {
     if (query.error) {
@@ -71,7 +97,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
     return <Empty title="Jugador" message="Cargando…" />;
   }
 
-  const { moderation } = query.data;
+  const { moderation, characters } = query.data;
 
   if (moderation === null) {
     return <Empty title="Jugador" message="No se pudo cargar la información de esta cuenta." />;
@@ -98,6 +124,17 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
         setReason('');
         query.refetch();
       });
+    } else if (confirmAction === 'suspend_character') {
+      suspendCharacterAction.run().then(() => {
+        setReason('');
+        setTargetCharacter(null);
+        query.refetch();
+      });
+    } else if (confirmAction === 'unsuspend_character') {
+      unsuspendCharacterAction.run().then(() => {
+        setTargetCharacter(null);
+        query.refetch();
+      });
     }
   }
 
@@ -113,6 +150,10 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
         return `Se baneará la cuenta de ${safeModeration.display_username}.`;
       case 'unban':
         return `Se levantará el ban y se revocarán los flags activos de ${safeModeration.display_username}.`;
+      case 'suspend_character':
+        return `Se suspenderá al personaje ${targetCharacter?.name ?? ''}.`;
+      case 'unsuspend_character':
+        return `Se levantará la suspensión del personaje ${targetCharacter?.name ?? ''}.`;
       default:
         return '';
     }
@@ -186,6 +227,50 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
         />
         {unbanAction.error && <ActionError error={unbanAction.error} />}
       </View>
+
+      {characters !== null && characters.length > 0 && (
+        <View className="gap-2">
+          <Text
+            className="text-sm text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.semibold }}
+          >
+            Personajes
+          </Text>
+          {(characters as CharacterWithSuspension[]).map((character) => (
+            <View
+              key={character.character_id}
+              className="flex-row items-center justify-between border-b border-steel-dark py-2 dark:border-night-steel-dark"
+            >
+              <View>
+                <Text className="text-steel-light dark:text-night-steel-light">
+                  {`${character.name} — Nv. ${character.level} ${character.class}`}
+                </Text>
+                {character.suspended === true && (
+                  <Text className="text-xs text-danger dark:text-night-danger">Suspendido</Text>
+                )}
+              </View>
+              <Button
+                label={character.suspended === true ? 'Levantar suspensión' : 'Suspender'}
+                onPress={() => {
+                  setTargetCharacter(character);
+                  setConfirmAction(
+                    character.suspended === true ? 'unsuspend_character' : 'suspend_character',
+                  );
+                }}
+                loading={
+                  (character.suspended === true
+                    ? unsuspendCharacterAction.pending
+                    : suspendCharacterAction.pending) &&
+                  targetCharacter?.character_id === character.character_id
+                }
+                disabled={character.suspended !== true && reason.trim().length === 0}
+              />
+            </View>
+          ))}
+        </View>
+      )}
+      {suspendCharacterAction.error && <ActionError error={suspendCharacterAction.error} />}
+      {unsuspendCharacterAction.error && <ActionError error={unsuspendCharacterAction.error} />}
 
       <ConfirmByTypingSheet
         visible={confirmAction !== null}
