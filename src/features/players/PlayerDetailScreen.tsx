@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import type { CharacterSummary, PlayerFlag } from '@/api/schemas';
@@ -8,8 +8,9 @@ import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
+import { Pressable } from '@/ui/Pressable';
 import { TextField } from '@/ui/TextField';
-import { fonts } from '@/ui/theme';
+import { fonts, useTheme } from '@/ui/theme';
 
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { usePlayerDetailQuery } from './usePlayerDetailQuery';
@@ -55,6 +56,43 @@ const CONFIRM_WORDS: Record<ConfirmAction, string> = {
   suspend_character: 'SUSPEND',
   unsuspend_character: 'UNSUSPEND',
 };
+
+function CompactCharacterButton({
+  character,
+  onPress,
+  loading = false,
+  disabled = false,
+}: {
+  character: CharacterWithSuspension;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  const { colors } = useTheme();
+  const isDisabled = disabled || loading;
+  const label = character.suspended === true ? 'Levantar suspensión' : 'Suspender';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      className={`rounded-full bg-accent-cyan px-3 py-1.5 dark:bg-night-accent-cyan ${isDisabled ? 'opacity-50' : ''}`}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.background} />
+      ) : (
+        <Text
+          className="text-sm text-bg-base dark:text-night-bg-base"
+          style={{ fontFamily: fonts.semibold }}
+        >
+          {label}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
 
 export function PlayerDetailScreen({ reference }: { reference: string }) {
   const api = useApi();
@@ -249,8 +287,8 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
                   <Text className="text-xs text-danger dark:text-night-danger">Suspendido</Text>
                 )}
               </View>
-              <Button
-                label={character.suspended === true ? 'Levantar suspensión' : 'Suspender'}
+              <CompactCharacterButton
+                character={character}
                 onPress={() => {
                   setTargetCharacter(character);
                   setConfirmAction(
