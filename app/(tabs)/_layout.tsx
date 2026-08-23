@@ -73,11 +73,12 @@ export default function TabsLayout() {
               {/* `<Tabs>` sources its screens from the filesystem, not only from the declared
                   `<Tabs.Screen>` children above — every file under `app/(tabs)/` gets a tab-bar
                   item unless it opts out. `href: null` suppresses the item while leaving the
-                  route mounted and reachable, which is what these four need: `audit` is reached
+                  route mounted and reachable, which is what these seven need: `audit` is reached
                   from `more.tsx`'s "Auditoría" row, `oracle-composer` from
                   `OracleEventsScreen.tsx`'s "Componer evento" row, `oracle-trigger` from that
-                  same screen's per-row "Probar disparo" action, and `oracle-chat` from that same
-                  screen's "Chat con ORACLE" row — none of them from the tab bar. Without this
+                  same screen's per-row "Probar disparo" action, `oracle-chat` from that same
+                  screen's "Chat con ORACLE" row, and `players/[reference]` from tapping a row in
+                  the Jugadores directory screen — none of them from the tab bar. Without this
                   they render as unlabeled icon tabs at phone width. */}
               <Tabs.Screen name="audit" options={{ href: null }} />
               <Tabs.Screen name="player-accounts" options={{ href: null }} />
@@ -85,6 +86,7 @@ export default function TabsLayout() {
               <Tabs.Screen name="oracle-trigger" options={{ href: null }} />
               <Tabs.Screen name="oracle-chat" options={{ href: null }} />
               <Tabs.Screen name="operators" options={{ href: null }} />
+              <Tabs.Screen name="players/[reference]" options={{ href: null }} />
             </Tabs>
           )}
         </View>

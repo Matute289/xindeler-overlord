@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
-import type { CharacterSummary, PlayerFlag } from '@/api/schemas';
+import type {
+  BanPlayerResponse,
+  CharacterSummary,
+  PlayerFlag,
+  UnbanPlayerResponse,
+} from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
 import { Button } from '@/ui/Button';
@@ -35,7 +40,42 @@ function stateLabel(state: string): string {
 function flagLabel(flag: PlayerFlag): string {
   const colorLabel = flag.color === 'red' ? 'Rojo' : 'Amarillo';
   const revoked = flag.revoked_at !== null ? ' (revocado)' : '';
-  return `${colorLabel} — ${flag.reason}${revoked}`;
+  const issuedAt = new Date(flag.issued_at * 1000).toLocaleString('es-AR');
+  return `${colorLabel} — ${flag.reason}${revoked} — ${issuedAt} — por operador ${flag.issued_by_operator_uuid}`;
+}
+
+// Ban outcomes other than `'success'` (EXPECTED SHAPE, NOT CONFIRMED against a real backend —
+// the mock always resolves `'success'`, see tools/mock-gateway/src/routes/playerBan.js) still
+// return a `200 OK`, so `banAction.run()` resolving non-null is not itself proof the ban landed —
+// this maps the partial-failure outcomes to an operator-facing message. `null` means "no message
+// needed," covering both `'success'` and any future outcome value this hasn't been taught yet.
+function banOutcomeMessage(outcome: BanPlayerResponse['outcome']): string | null {
+  switch (outcome) {
+    case 'banned_account_only':
+      return 'Se baneó la cuenta, pero no se pudo desconectar al jugador.';
+    case 'banned_connection_only':
+      return 'El ban de la cuenta falló, pero se desconectó al jugador.';
+    case 'failed':
+      return 'El ban falló por completo.';
+    default:
+      return null;
+  }
+}
+
+// Same idea as `banOutcomeMessage`, for unban's own (differently-named) partial-failure outcomes.
+// EXPECTED SHAPE, NOT CONFIRMED against a real backend — the mock always resolves `'success'`,
+// see tools/mock-gateway/src/routes/playerUnban.js.
+function unbanOutcomeMessage(outcome: UnbanPlayerResponse['outcome']): string | null {
+  switch (outcome) {
+    case 'unbanned_account_only':
+      return 'Se levantó el ban de la cuenta, pero no se pudo desbanear la conexión.';
+    case 'unbanned_connection_only':
+      return 'Se desbaneó la conexión, pero no se pudo levantar el ban de la cuenta.';
+    case 'failed':
+      return 'El unban falló por completo.';
+    default:
+      return null;
+  }
 }
 
 type ConfirmAction =
@@ -56,6 +96,8 @@ const CONFIRM_WORDS: Record<ConfirmAction, string> = {
   suspend_character: 'SUSPEND',
   unsuspend_character: 'UNSUSPEND',
 };
+
+const SUCCESS_MESSAGE_MS = 3000;
 
 function CompactCharacterButton({
   character,
@@ -99,8 +141,12 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
   const query = usePlayerDetailQuery(reference);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [reason, setReason] = useState('');
+  // EXPECTED SHAPE, NOT CONFIRMED against a real backend
   const [banEmail, setBanEmail] = useState(false);
   const [targetCharacter, setTargetCharacter] = useState<CharacterWithSuspension | null>(null);
+  const [banOutcomeMsg, setBanOutcomeMsg] = useState<string | null>(null);
+  const [unbanOutcomeMsg, setUnbanOutcomeMsg] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const flagAction = useDestructiveAction((idempotencyKey) =>
     api.write.issuePlayerFlag(
@@ -113,16 +159,25 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
     api.write.kickPlayer(reference, reason || undefined, idempotencyKey),
   );
   const banAction = useDestructiveAction((idempotencyKey) =>
-    api.write.banPlayer(reference, { reason, ban_email: banEmail }, idempotencyKey),
+    api.write.banPlayer(
+      reference,
+      // EXPECTED SHAPE, NOT CONFIRMED against a real backend — `ban_email` only included when
+      // true (Fix 4, final review) so a plain ban never widens the blast radius of this
+      // speculative field.
+      { reason, ...(banEmail ? { ban_email: true } : {}) },
+      idempotencyKey,
+    ),
   );
   const unbanAction = useDestructiveAction((idempotencyKey) =>
     api.write.unbanPlayer(reference, { reason }, idempotencyKey),
   );
+  // EXPECTED SHAPE, NOT CONFIRMED against a real backend
   const suspendCharacterAction = useDestructiveAction((idempotencyKey) =>
     targetCharacter
       ? api.write.suspendCharacter(reference, targetCharacter.character_id, reason, idempotencyKey)
       : Promise.reject(new Error('no target character')),
   );
+  // EXPECTED SHAPE, NOT CONFIRMED against a real backend
   const unsuspendCharacterAction = useDestructiveAction((idempotencyKey) =>
     targetCharacter
       ? api.write.unsuspendCharacter(reference, targetCharacter.character_id, idempotencyKey)
@@ -144,37 +199,59 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
 
   const safeModeration = moderation;
 
-  function handleSheetConfirm() {
+  // `run()` resolves `T | null` — `null` on either a real failure (already surfaced via
+  // `*.error`) or a cancelled step-up prompt (deliberately silent). Every branch below gates its
+  // success side-effects on `result !== null` (Fix 3, final review) so a cancelled prompt no
+  // longer clears the reason field / resets state / refetches as if the action had succeeded.
+  async function handleSheetConfirm() {
     setConfirmAction(null);
+    setBanOutcomeMsg(null);
+    setUnbanOutcomeMsg(null);
     if (confirmAction === 'flag_yellow' || confirmAction === 'flag_red') {
-      flagAction.run().then(() => {
+      const result = await flagAction.run();
+      if (result !== null) {
         setReason('');
         query.refetch();
-      });
+      }
     } else if (confirmAction === 'kick') {
-      kickAction.run().then(() => setReason(''));
+      const result = await kickAction.run();
+      if (result !== null) {
+        setReason('');
+        // Kick has no other visible feedback (the mock doesn't track live connections), so this
+        // is its only success signal.
+        setSuccessMessage(`Listo — se pidió la desconexión de ${safeModeration.display_username}.`);
+        setTimeout(() => setSuccessMessage(null), SUCCESS_MESSAGE_MS);
+      }
     } else if (confirmAction === 'ban') {
-      banAction.run().then(() => {
+      const result = await banAction.run();
+      if (result !== null) {
         setReason('');
         setBanEmail(false);
+        // A `200 OK` doesn't guarantee `outcome === 'success'` (Fix 2, final review) — surface
+        // partial failures instead of discarding them.
+        setBanOutcomeMsg(banOutcomeMessage(result.outcome));
         query.refetch();
-      });
+      }
     } else if (confirmAction === 'unban') {
-      unbanAction.run().then(() => {
+      const result = await unbanAction.run();
+      if (result !== null) {
         setReason('');
+        setUnbanOutcomeMsg(unbanOutcomeMessage(result.outcome));
         query.refetch();
-      });
+      }
     } else if (confirmAction === 'suspend_character') {
-      suspendCharacterAction.run().then(() => {
+      const result = await suspendCharacterAction.run();
+      if (result !== null) {
         setReason('');
         setTargetCharacter(null);
         query.refetch();
-      });
+      }
     } else if (confirmAction === 'unsuspend_character') {
-      unsuspendCharacterAction.run().then(() => {
+      const result = await unsuspendCharacterAction.run();
+      if (result !== null) {
         setTargetCharacter(null);
         query.refetch();
-      });
+      }
     }
   }
 
@@ -252,6 +329,11 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
           loading={kickAction.pending}
         />
         {kickAction.error && <ActionError error={kickAction.error} />}
+        {successMessage && (
+          <Text className="text-sm text-accent-cyan dark:text-night-accent-cyan">
+            {successMessage}
+          </Text>
+        )}
 
         <Button
           label="Ban"
@@ -259,31 +341,39 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
           loading={banAction.pending}
           disabled={reason.trim().length === 0}
         />
-        <Pressable
-          onPress={() => setBanEmail((current) => !current)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: banEmail }}
-          className="flex-row items-center gap-2"
-        >
-          <View
-            className={`h-5 w-5 items-center justify-center rounded border ${
-              banEmail
-                ? 'border-accent-cyan bg-accent-cyan dark:border-night-accent-cyan dark:bg-night-accent-cyan'
-                : 'border-steel-dark dark:border-night-steel-dark'
-            }`}
+        {/* Only rendered when there's a real email to show — `email` is nullable, and the
+            design doc requires the operator see the actual value before confirming a
+            ban-by-email (Fix 5, final review). Without this guard an operator could check the
+            box for an account with no email on file and silently send `ban_email: true` for
+            `null`. */}
+        {safeModeration.email !== null && (
+          <Pressable
+            onPress={() => setBanEmail((current) => !current)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: banEmail }}
+            className="flex-row items-center gap-2"
           >
-            {banEmail && <Text className="text-xs text-bg-base dark:text-night-bg-base">✓</Text>}
-          </View>
-          <Text className="text-sm text-steel-light dark:text-night-steel-light">
-            También banear el email asociado
-          </Text>
-        </Pressable>
+            <View
+              className={`h-5 w-5 items-center justify-center rounded border ${
+                banEmail
+                  ? 'border-accent-cyan bg-accent-cyan dark:border-night-accent-cyan dark:bg-night-accent-cyan'
+                  : 'border-steel-dark dark:border-night-steel-dark'
+              }`}
+            >
+              {banEmail && <Text className="text-xs text-bg-base dark:text-night-bg-base">✓</Text>}
+            </View>
+            <Text className="text-sm text-steel-light dark:text-night-steel-light">
+              También banear el email asociado
+            </Text>
+          </Pressable>
+        )}
         {banEmail && safeModeration.email !== null && (
           <Text className="pl-7 text-xs text-steel-muted dark:text-night-steel-muted">
             {`también banear ${safeModeration.email}`}
           </Text>
         )}
         {banAction.error && <ActionError error={banAction.error} />}
+        {banOutcomeMsg && <ActionError error={new Error(banOutcomeMsg)} />}
 
         <Button
           label="Unban"
@@ -292,6 +382,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
           disabled={reason.trim().length === 0}
         />
         {unbanAction.error && <ActionError error={unbanAction.error} />}
+        {unbanOutcomeMsg && <ActionError error={new Error(unbanOutcomeMsg)} />}
       </View>
 
       {characters !== null && characters.length > 0 && (

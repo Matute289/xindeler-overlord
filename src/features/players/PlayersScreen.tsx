@@ -40,6 +40,12 @@ export function PlayersScreen() {
     return <Empty title="Jugadores" message="Cargando…" />;
   }
 
+  // Pagination deferred: `usePlayerDirectoryQuery` requests no cursor/limit, so this is always a
+  // single unpaginated page, and the mock always returns `next_cursor: null` so that's invisible
+  // locally. The search below and the `Jugadores (${count})` header both only ever see that one
+  // page — against a real backend with more than one page of accounts, both would silently miss
+  // rows rather than surface the gap. This is a known, intentional limitation, not an oversight —
+  // revisit once a real gateway with pagination exists.
   const searchLower = search.trim().toLowerCase();
   const players = query.data.players.filter((player) =>
     searchLower.length === 0 ? true : player.display_username.toLowerCase().includes(searchLower),
