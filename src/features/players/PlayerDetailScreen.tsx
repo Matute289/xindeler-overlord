@@ -99,6 +99,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
   const query = usePlayerDetailQuery(reference);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [reason, setReason] = useState('');
+  const [banEmail, setBanEmail] = useState(false);
   const [targetCharacter, setTargetCharacter] = useState<CharacterWithSuspension | null>(null);
 
   const flagAction = useDestructiveAction((idempotencyKey) =>
@@ -112,7 +113,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
     api.write.kickPlayer(reference, reason || undefined, idempotencyKey),
   );
   const banAction = useDestructiveAction((idempotencyKey) =>
-    api.write.banPlayer(reference, { reason }, idempotencyKey),
+    api.write.banPlayer(reference, { reason, ban_email: banEmail }, idempotencyKey),
   );
   const unbanAction = useDestructiveAction((idempotencyKey) =>
     api.write.unbanPlayer(reference, { reason }, idempotencyKey),
@@ -155,6 +156,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
     } else if (confirmAction === 'ban') {
       banAction.run().then(() => {
         setReason('');
+        setBanEmail(false);
         query.refetch();
       });
     } else if (confirmAction === 'unban') {
@@ -185,7 +187,9 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
       case 'kick':
         return `Se desconectará a ${safeModeration.display_username} si está conectado.`;
       case 'ban':
-        return `Se baneará la cuenta de ${safeModeration.display_username}.`;
+        return banEmail && safeModeration.email !== null
+          ? `Se baneará la cuenta de ${safeModeration.display_username} y también su email (${safeModeration.email}).`
+          : `Se baneará la cuenta de ${safeModeration.display_username}.`;
       case 'unban':
         return `Se levantará el ban y se revocarán los flags activos de ${safeModeration.display_username}.`;
       case 'suspend_character':
@@ -255,6 +259,30 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
           loading={banAction.pending}
           disabled={reason.trim().length === 0}
         />
+        <Pressable
+          onPress={() => setBanEmail((current) => !current)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: banEmail }}
+          className="flex-row items-center gap-2"
+        >
+          <View
+            className={`h-5 w-5 items-center justify-center rounded border ${
+              banEmail
+                ? 'border-accent-cyan bg-accent-cyan dark:border-night-accent-cyan dark:bg-night-accent-cyan'
+                : 'border-steel-dark dark:border-night-steel-dark'
+            }`}
+          >
+            {banEmail && <Text className="text-xs text-bg-base dark:text-night-bg-base">✓</Text>}
+          </View>
+          <Text className="text-sm text-steel-light dark:text-night-steel-light">
+            También banear el email asociado
+          </Text>
+        </Pressable>
+        {banEmail && safeModeration.email !== null && (
+          <Text className="pl-7 text-xs text-steel-muted dark:text-night-steel-muted">
+            {`también banear ${safeModeration.email}`}
+          </Text>
+        )}
         {banAction.error && <ActionError error={banAction.error} />}
 
         <Button
