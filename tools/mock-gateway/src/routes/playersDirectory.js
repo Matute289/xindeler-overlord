@@ -12,7 +12,7 @@ function toDirectoryRow(player) {
     reference: player.reference,
     display_username: player.alias,
     account_state: player.account_state,
-    online: state.scenario !== 'down',
+    online: state.scenario === 'down' ? false : player.online,
     position: null,
     character_id: player.characters[0]?.character_id ?? null,
   };

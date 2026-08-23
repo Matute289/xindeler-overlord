@@ -97,19 +97,24 @@ export const AdminPlayerViewSchema = z.object({
 });
 export type AdminPlayerView = z.infer<typeof AdminPlayerViewSchema>;
 
-export const CharacterSummarySchema = z.object({
-  character_id: z.number(),
-  name: z.string(),
-  level: z.number(),
-  class: z.string(),
-  location: z
-    .object({
-      site: z.string().nullable(),
-      kingdom: z.string().nullable(),
-      continent: z.string().nullable(),
-    })
-    .nullable(),
-});
+// Passthrough unrecognized keys (the mock sends `suspended`, which isn't part of the confirmed
+// real contract yet) so Task 5's UI can read the mock's suspend status for local testing, even
+// though a real backend that never sends it will still validate fine.
+export const CharacterSummarySchema = z
+  .object({
+    character_id: z.number(),
+    name: z.string(),
+    level: z.number(),
+    class: z.string(),
+    location: z
+      .object({
+        site: z.string().nullable(),
+        kingdom: z.string().nullable(),
+        continent: z.string().nullable(),
+      })
+      .nullable(),
+  })
+  .passthrough();
 export type CharacterSummary = z.infer<typeof CharacterSummarySchema>;
 
 export const PlayerDetailResponseSchema = z.object({
