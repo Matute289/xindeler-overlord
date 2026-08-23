@@ -39,6 +39,10 @@ const state = {
       added_at: Math.floor(Date.now() / 1000),
     },
   ],
+  // EXPECTED SHAPE, NOT CONFIRMED against a real backend — see docs/specs/2026-08-23-player-
+  // moderation-master-detail-design.md. Tracks which characters are currently suspended, keyed by
+  // character_id, for the mock-only ban-by-character feature (Task 2/5).
+  suspendedCharacterIds: new Set(),
 };
 
 module.exports = { state, MOCK_OPERATOR_UUID };

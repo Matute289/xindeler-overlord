@@ -15,6 +15,8 @@ const mockRoutes = require('./src/routes/mock');
 const serverRoutes = require('./src/routes/server');
 const broadcastRoutes = require('./src/routes/broadcast');
 const pushRoutes = require('./src/routes/push');
+const playersDirectoryRoutes = require('./src/routes/playersDirectory').router;
+const playerDetailRoutes = require('./src/routes/playerDetail');
 const oracleEventsRoutes = require('./src/routes/oracleEvents');
 const oraclePresetsRoutes = require('./src/routes/oraclePresets');
 const oracleStageRoutes = require('./src/routes/oracleStage');
@@ -41,8 +43,14 @@ app.use('/api/v1', authRoutes);
 app.use('/api/v1/step-up', requireAuth, requireCsrf, stepUpRoutes);
 
 app.use('/api/v1/status', requireAuth, statusRoutes);
+// Order matters: /players/directory and /players/2fa/unlock must be mounted before the generic
+// /players/:segment route below, or Express would match the more specific paths against :segment
+// first (an Express app.use prefix match tries routers in registration order, and playersRoutes/
+// playerDetailRoutes have no way to know a still-unregistered, more-specific router exists).
+app.use('/api/v1/players/directory', requireAuth, playersDirectoryRoutes);
 app.use('/api/v1/players', requireAuth, playersRoutes);
 app.use('/api/v1/players/2fa/unlock', requireAuth, requireCsrf, requireStepUp, playerUnlockRoutes);
+app.use('/api/v1/players', requireAuth, playerDetailRoutes);
 app.use('/api/v1/logs', requireAuth, logsRoutes);
 app.use('/api/v1/chat', requireAuth, chatRoutes);
 app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);
