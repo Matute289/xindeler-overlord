@@ -10,6 +10,8 @@ import {
   OraclePresetsResponseSchema,
   PlayersResponseSchema,
   StatusSchema,
+  PlayerDirectoryResponseSchema,
+  PlayerDetailResponseSchema,
 } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
@@ -77,6 +79,27 @@ export function createReadApi(http: HttpClient) {
         '/api/v1/admin/operators',
         { method: 'GET' },
         OperatorsResponseSchema,
+      );
+    },
+
+    getPlayerDirectory(cursor?: string, limit?: number, state?: string) {
+      const params = new URLSearchParams();
+      if (cursor !== undefined) params.set('cursor', cursor);
+      if (limit !== undefined) params.set('limit', String(limit));
+      if (state !== undefined) params.set('state', state);
+      const query = params.toString();
+      return http.requestWithRetry(
+        `/api/v1/players/directory${query ? `?${query}` : ''}`,
+        { method: 'GET' },
+        PlayerDirectoryResponseSchema,
+      );
+    },
+
+    getPlayerDetail(reference: string) {
+      return http.requestWithRetry(
+        `/api/v1/players/${encodeURIComponent(reference)}`,
+        { method: 'GET' },
+        PlayerDetailResponseSchema,
       );
     },
   };

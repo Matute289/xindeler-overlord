@@ -51,6 +51,92 @@ export type Status = z.infer<typeof StatusSchema>;
 export type Player = string;
 export const PlayersResponseSchema = z.array(z.string());
 
+// GET /players/directory (ZG-57/O-02) — the full account directory, online and offline, one row
+// per xindeler-auth account. `reference` is opaque: never parse it, never derive anything from
+// it, only ever pass it back verbatim as a path segment or as the next page's `cursor` input.
+// Confirmed against xindeler-zuul's real `development` branch source (server/src/players.rs,
+// `PlayerDirectoryRow`/`PlayerDirectoryResponse`) — not yet deployed to production (see that
+// repo's ZG-60), but this is the real, current intended contract.
+export const PlayerDirectoryRowSchema = z.object({
+  reference: z.string(),
+  display_username: z.string(),
+  account_state: z.string(),
+  online: z.boolean(),
+  position: z.tuple([z.number(), z.number(), z.number()]).nullable(),
+  character_id: z.number().nullable(),
+});
+export type PlayerDirectoryRow = z.infer<typeof PlayerDirectoryRowSchema>;
+
+export const PlayerDirectoryResponseSchema = z.object({
+  players: z.array(PlayerDirectoryRowSchema),
+  next_cursor: z.string().nullable(),
+});
+export type PlayerDirectoryResponse = z.infer<typeof PlayerDirectoryResponseSchema>;
+
+// One row per moderation flag on an account — part of GET /players/{segment}'s `moderation.flags`.
+export const PlayerFlagSchema = z.object({
+  id: z.number(),
+  color: z.string(),
+  reason: z.string(),
+  issued_by_operator_uuid: z.string(),
+  issued_at: z.number(),
+  decay_at: z.number().nullable(),
+  ban_until: z.number().nullable(),
+  revoked_at: z.number().nullable(),
+  revoked_by_operator_uuid: z.string().nullable(),
+});
+export type PlayerFlag = z.infer<typeof PlayerFlagSchema>;
+
+export const AdminPlayerViewSchema = z.object({
+  username: z.string(),
+  display_username: z.string(),
+  email: z.string().nullable(),
+  email_verified: z.boolean(),
+  account_state: z.string(),
+  flags: z.array(PlayerFlagSchema),
+});
+export type AdminPlayerView = z.infer<typeof AdminPlayerViewSchema>;
+
+// Passthrough unrecognized keys (the mock sends `suspended`, which isn't part of the confirmed
+// real contract yet) so Task 5's UI can read the mock's suspend status for local testing, even
+// though a real backend that never sends it will still validate fine.
+export const CharacterSummarySchema = z
+  .object({
+    character_id: z.number(),
+    name: z.string(),
+    level: z.number(),
+    class: z.string(),
+    location: z
+      .object({
+        site: z.string().nullable(),
+        kingdom: z.string().nullable(),
+        continent: z.string().nullable(),
+      })
+      .nullable(),
+  })
+  .passthrough();
+export type CharacterSummary = z.infer<typeof CharacterSummarySchema>;
+
+export const PlayerDetailResponseSchema = z.object({
+  moderation: AdminPlayerViewSchema.nullable(),
+  characters: z.array(CharacterSummarySchema).nullable(),
+});
+export type PlayerDetailResponse = z.infer<typeof PlayerDetailResponseSchema>;
+
+export const BanPlayerResponseSchema = z.object({
+  account: AdminPlayerViewSchema.nullable(),
+  connection: z.record(z.string(), z.unknown()).nullable(),
+  outcome: z.enum(['success', 'banned_account_only', 'banned_connection_only', 'failed']),
+});
+export type BanPlayerResponse = z.infer<typeof BanPlayerResponseSchema>;
+
+export const UnbanPlayerResponseSchema = z.object({
+  account: AdminPlayerViewSchema.nullable(),
+  connection_unbanned: z.boolean(),
+  outcome: z.enum(['success', 'unbanned_account_only', 'unbanned_connection_only', 'failed']),
+});
+export type UnbanPlayerResponse = z.infer<typeof UnbanPlayerResponseSchema>;
+
 export const LogLineSchema = z.object({
   ts: z.string(),
   level: z.string(),
