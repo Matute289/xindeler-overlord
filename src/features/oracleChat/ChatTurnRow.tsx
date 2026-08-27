@@ -33,8 +33,11 @@ export const ChatTurnRow = memo(function ChatTurnRow({
     setTimeout(() => setCopied(false), 1500);
   }
 
+  // px-6 to line up with OracleChatScreen's px-6 header/thread chips and its composer — this
+  // screen is px-6 throughout, unlike ChatScreen.tsx which is px-4 throughout (2026-08-27
+  // tablet review).
   return (
-    <View className="border-b border-steel-dark px-4 py-2 dark:border-night-steel-dark">
+    <View className="border-b border-steel-dark px-6 py-2 dark:border-night-steel-dark">
       <Text
         className="text-accent-cyan dark:text-night-accent-cyan"
         style={{ fontFamily: fonts.semibold }}
