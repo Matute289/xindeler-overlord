@@ -114,3 +114,62 @@ npm test
 
 Run the app on **at least two** of the three targets for any UI change. Platform-conditional code is
 ~10–20% of this app by design; a change that looks right on web is not verified.
+
+## 7. Automating a real iOS Simulator (Claude-in-Chrome can't help here)
+
+`claude-in-chrome`'s browser-automation tools only drive Chrome tabs — they cannot tap or type on a
+native iOS Simulator window. `xcrun simctl` has no tap/text-input command either (screenshot/
+install/launch only), and macOS Accessibility-based UI scripting (AppleScript `System Events`,
+`cliclick`) is blocked for a headless/CLI process without the user granting Accessibility permission
+by hand in System Settings first.
+
+**Working method (found 2026-08-27, verifying OC-35 sub-part 2 natively):** `idb`/`idb_companion`
+(Facebook's iOS Simulator control tool, already installed on this Mac) drives the simulator directly
+through CoreSimulator's own APIs — no Accessibility permission needed. The installed `idb` Python CLI
+(`fb-idb` 1.1.7) is broken under Python 3.14 (`asyncio.get_event_loop()` throws before argument
+parsing even runs). Work around it with a one-line wrapper that pre-creates a loop:
+
+```bash
+cat > /tmp/idb.sh << 'EOF'
+#!/bin/bash
+python3 -c "
+import asyncio, sys
+asyncio.set_event_loop(asyncio.new_event_loop())
+sys.argv = ['idb'] + sys.argv[1:]
+from idb.cli.main import main
+main()
+" "$@"
+EOF
+chmod +x /tmp/idb.sh
+```
+
+Then, after booting a simulator normally (`xcrun simctl boot <udid>`):
+
+```bash
+/tmp/idb.sh connect <udid>
+/tmp/idb.sh ui describe-all --udid <udid>        # dump the AX tree with each element's frame
+/tmp/idb.sh ui tap <x> <y> --udid <udid>
+/tmp/idb.sh ui text "..." --udid <udid>
+/tmp/idb.sh screenshot --udid <udid> out.png
+```
+
+Sharp edges:
+
+- **Coordinates are logical points, not screenshot pixels.** An iPhone 17 screenshot is 1206×2622px
+  at 3x scale, so the point space is 402×874 — divide screenshot pixel coordinates by 3. Getting this
+  wrong doesn't error, it just silently taps the wrong (or no) element. Prefer `ui describe-all` /
+  `ui describe-point` for exact element frames over eyeballing a screenshot.
+- **`idb ui text` with nothing actually focused doesn't error** — the physical keystrokes fall
+  through to app-level keyboard shortcuts instead. In this Expo/RN dev-client app that toggled the
+  "Tap something to inspect it" element inspector overlay, which survives a plain relaunch and only
+  clears after a full `xcrun simctl uninstall` + reinstall. Confirm a field is actually focused
+  (cursor visible in a screenshot, or `describe-point` shows the expected `AXTextField`) before
+  sending `ui text`.
+- **`"enabled": false` / trait `NotEnabled` in `describe-point`/`describe-all`** means the tap
+  coordinates were right but the control is legitimately disabled (e.g. gated on another field being
+  non-empty) — don't assume a coordinate miss.
+- **`idb_companion`'s domain-socket connection drops silently sometimes** (`Connection lost` /
+  `Errno 61 Connection refused` on the next call) — re-run `idb.sh connect <udid>` and retry.
+- Screenshot after any tap that might open a destructive-action sheet before assuming success — a
+  slightly-off tap on a "Confirmar"/"Cancelar" pair can silently hit the wrong one (or neither) and
+  looks identical to "nothing happened" until you check.
