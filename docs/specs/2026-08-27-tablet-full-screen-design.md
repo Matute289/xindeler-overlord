@@ -31,9 +31,11 @@ CSS 3, Expo Router. No new dependencies.
 - Android and web must not be affected by the iOS config change (`supportsTablet` is
   `ios`-scoped in `app.config.ts`).
 - No per-screen bespoke width logic — the max-width cap lives in exactly one place (`Screen.tsx`,
-  `src/ui/Screen.tsx`), which every one of the 13 routes under `app/(tabs)/` already wraps its
-  feature screen component with (confirmed: every `app/(tabs)/*.tsx` route file is a thin
-  `<Screen><FeatureScreen /></Screen>` wrapper — zero feature screens import `Screen` directly).
+  `src/ui/Screen.tsx`), which reaches every route that renders through it: the 13 routes under
+  `app/(tabs)/` (confirmed: every `app/(tabs)/*.tsx` route file is a thin
+  `<Screen><FeatureScreen /></Screen>` wrapper — zero feature screens import `Screen` directly) plus
+  the 3 `(auth)` routes that also wrap with `Screen` (`login.tsx`, `totp.tsx`, `environment.tsx`) —
+  16 routes total.
 - This is explicitly **not** a tablet-specific redesign: no new multi-column/master-detail layouts,
   no per-content-type width tiers. One shared cap, applied uniformly, tuned by eye against the real
   simulator.

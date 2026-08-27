@@ -5,9 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useBreakpoint } from '@/ui/useBreakpoint';
 
-// A starting point, not a final number — tuned by eye against a real iPad Simulator in this
-// plan's own verification task (docs/specs/2026-08-27-tablet-full-screen-design.md). Only ever
-// applied at the 'wide' breakpoint; the 'phone' path below never references this.
+// Confirmed by eye on a real iPad Pro 13" Simulator (both portrait and landscape) and a wide web
+// window (docs/specs/2026-08-27-tablet-full-screen-design.md). Only ever applied at the 'wide'
+// breakpoint; the 'phone' path below never references this. Note: on iPad portrait, `SidebarLayout`'s
+// content pane (device width minus its 220px sidebar) is already narrower than 960px on every
+// current iPad model, so the cap is a no-op there — it only visibly centers content on genuinely
+// wide layouts (landscape iPad, iPad Pro, wide web windows).
 const WIDE_CONTENT_MAX_WIDTH = 960;
 
 export function Screen({ children }: { children: ReactNode }) {

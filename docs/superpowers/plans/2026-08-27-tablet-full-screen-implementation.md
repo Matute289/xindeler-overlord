@@ -130,8 +130,9 @@ before committing and flag it in the task report rather than committing blindly.
 - Consumes: `useBreakpoint()` from `src/ui/useBreakpoint.ts` (already exists, exports
   `'phone' | 'wide'`, unmodified by this task).
 - Produces: `Screen`'s existing exported signature (`{ children: ReactNode }`) is unchanged — every
-  one of the 13 routes under `app/(tabs)/*.tsx` that already does `<Screen><FeatureScreen /></Screen>`
-  needs zero changes to pick this up.
+  route that already does `<Screen><FeatureScreen /></Screen>` needs zero changes to pick this up:
+  the 13 routes under `app/(tabs)/*.tsx` plus the 3 `(auth)` routes (`login.tsx`, `totp.tsx`,
+  `environment.tsx`) — 16 routes total.
 
 - [ ] **Step 1: Add the wide-breakpoint max-width wrapper**
 
