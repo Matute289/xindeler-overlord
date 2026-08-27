@@ -193,7 +193,9 @@ export function OracleChatScreen() {
         />
       </View>
 
-      <View className="gap-2 border-t border-steel-dark px-4 py-3 dark:border-night-steel-dark">
+      {/* px-6, matching this screen's header/thread chips (and ChatTurnRow) — at px-4 the
+          composer's field and Enviar button hung 8px wider than the title above them. */}
+      <View className="gap-2 border-t border-steel-dark px-6 py-3 dark:border-night-steel-dark">
         <TextField
           label="Mensaje"
           value={draftText}

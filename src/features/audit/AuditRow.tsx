@@ -9,8 +9,11 @@ export const AuditLogRow = memo(function AuditLogRow({ row }: { row: AuditRow })
   const isError = row.outcome !== 'success';
   const payloadText = Object.keys(row.payload).length > 0 ? JSON.stringify(row.payload) : null;
 
+  // px-6, not px-4: AuditScreen's own header is px-6, so a px-4 row left every entry's text
+  // hanging 8px outside the "Auditoría" title above it — visible at any width, obvious on iPad
+  // (2026-08-27 tablet review). Matches PlayerDirectoryRow, the repo's other px-6 list row.
   return (
-    <View className="border-b border-steel-dark px-4 py-2 dark:border-night-steel-dark">
+    <View className="border-b border-steel-dark px-6 py-2 dark:border-night-steel-dark">
       <View className="flex-row items-center gap-2">
         <View
           className={`rounded-full px-2 py-0.5 ${
