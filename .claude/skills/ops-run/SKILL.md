@@ -173,20 +173,48 @@ Sharp edges:
 - Screenshot after any tap that might open a destructive-action sheet before assuming success — a
   slightly-off tap on a "Confirmar"/"Cancelar" pair can silently hit the wrong one (or neither) and
   looks identical to "nothing happened" until you check.
-- **No CLI-scriptable way to rotate the Simulator (found 2026-08-27, tablet full-screen work).**
-  The Simulator app itself has a working rotate button/menu (`Hardware > Rotate Left/Right`,
-  `⌘←`/`⌘→`) — a human can just click it. What's missing is a way to trigger that *without* a human:
-  neither `xcrun simctl` nor `idb` has a rotate command, and AppleScript `System Events` (which
-  could simulate the menu click) needs Accessibility permission granted to whatever process runs
-  these shell commands, which isn't granted by default in this environment (see §7's own intro — same
-  root cause as the tap/type problem this whole section solves, `idb` just doesn't cover rotation).
-  If you need to see a real landscape render without a human at the keyboard, the only workaround
-  found so far is a temporary edit to the *already-built app bundle's* `Info.plist`
-  (`UISupportedInterfaceOrientations~ipad`) to force the orientation, reinstall, screenshot, then
-  revert and reinstall again — messy, and RN `Modal` throws a harmless dev-only red box
-  ("presented with 0x2 orientations mask but the application only supports 0x18") while forced this
-  way, which is an artifact of the hack, not a real bug. If Accessibility permission is ever granted
-  to this process, prefer scripting the real rotate menu over this hack.
+- **Rotating the Simulator by script (updated 2026-08-27 — Accessibility permission now granted to
+  this shell's host process, iTerm2, on this machine).** Neither `xcrun simctl` nor `idb` has a
+  rotate command — the working method is AppleScript `System Events` clicking the real menu, which
+  needs Accessibility permission (System Settings → Privacy & Security → Accessibility → add the
+  terminal app running these commands → toggle on → restart it). With that granted:
+
+  ```bash
+  osascript -e 'tell application "Simulator" to activate'
+  osascript -e 'tell application "System Events" to tell process "Simulator" to click menu item "Landscape Left" of menu "Orientation" of menu item "Orientation" of menu "Device" of menu bar 1'
+  ```
+
+  The menu is called **`Device`** in current Xcode (not `Hardware`, which is what older docs/muscle
+  memory call it), and the reliable command is the **`Orientation` submenu**
+  (`Portrait` / `Landscape Left` / `Landscape Right` / `Portrait Upside Down`), not the top-level
+  `Rotate Left`/`Rotate Right` items — in testing, `Rotate Left`/`Right` sometimes only rotated the
+  Simulator's own window chrome without the app content following, while the `Orientation` submenu's
+  explicit targets worked reliably. If a menu path errors with "can't get menu ... of process", list
+  what's actually there first rather than guessing: `osascript -e 'tell application "System Events"
+  to tell process "Simulator" to get name of every menu bar item of menu bar 1'` (and drill into a
+  submenu the same way) — menu names/paths can differ across Xcode versions.
+
+  **Multiple Simulator windows are easy to mix up.** If more than one device is booted, `window 1` in
+  a `System Events` query isn't guaranteed to be the one you mean — list them
+  (`get name of every window` on the `Simulator` process) and address the one you want by its exact
+  name (e.g. `window "iPad Pro 13-inch (M5) – iOS 26.5"`), not by index.
+
+  **Screenshotting a just-rotated Simulator is unreliable — verify by eye instead.** Both
+  `xcrun simctl io ... screenshot` and a `screencapture -R` cropped to the Simulator window's
+  `System Events` bounds produced visually wrong/contradictory results in testing (portrait-looking
+  captures, or content rendered sideways within a portrait-shaped canvas) even though the device was
+  confirmed — by a human looking at the actual window — to be correctly showing landscape. Don't
+  trust an automated landscape screenshot from this pipeline without a live human check; if no human
+  is available, prefer reading UI state via `idb ui describe-all` (frame coordinates reflect the
+  real current layout) over a screenshot for verifying orientation-dependent layout.
+
+  Before this permission was granted, the only workaround for a real landscape render was a temporary
+  edit to the *already-built app bundle's* `Info.plist` (`UISupportedInterfaceOrientations~ipad`) to
+  force the orientation, reinstall, screenshot, then revert and reinstall again — messy, and RN
+  `Modal` throws a harmless dev-only red box ("presented with 0x2 orientations mask but the
+  application only supports 0x18") while forced this way, an artifact of the hack, not a real bug.
+  Superseded by the method above now that the permission exists in this environment, but if you're
+  running elsewhere without that permission, it's the fallback.
 
 ## 8. Testing against a real Android emulator (AVD)
 
