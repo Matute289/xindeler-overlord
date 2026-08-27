@@ -14,20 +14,41 @@ import { Pressable } from '@/ui/Pressable';
 // authenticated-only `(tabs)` group and is unreachable while logged out).
 export function EnvironmentBadge({
   linkHref = '/more',
+  // For the one screen (login) that renders full-bleed background art behind this badge
+  // instead of the app's usual flat surface — swaps the opaque bar for a floating pill so the
+  // art shows through underneath, while still absorbing the same top safe-area inset either way
+  // (that's `SafeAreaView`'s job here, unrelated to which variant is showing).
+  overlay = false,
 }: {
   linkHref?: '/more' | '/environment';
+  overlay?: boolean;
 } = {}) {
   const { environment } = useEnvironment();
 
   return (
-    <SafeAreaView edges={['top']} className="bg-bg-surface dark:bg-night-bg-surface">
+    <SafeAreaView
+      edges={['top']}
+      className={
+        overlay ? 'absolute inset-x-0 top-0 z-10' : 'bg-bg-surface dark:bg-night-bg-surface'
+      }
+    >
       <Link href={linkHref} asChild>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Entorno activo: ${environment.label}. Tocá para cambiarlo.`}
-          className="items-center border-b border-steel-dark px-4 py-1 dark:border-night-steel-dark"
+          className={
+            overlay
+              ? 'mt-2 items-center self-center rounded-full bg-black/40 px-3 py-1'
+              : 'items-center border-b border-steel-dark px-4 py-1 dark:border-night-steel-dark'
+          }
         >
-          <Text className="text-xs uppercase text-accent-cyan dark:text-night-accent-cyan">
+          <Text
+            className={
+              overlay
+                ? 'text-xs uppercase text-night-accent-cyan'
+                : 'text-xs uppercase text-accent-cyan dark:text-night-accent-cyan'
+            }
+          >
             {environment.label}
           </Text>
         </Pressable>
