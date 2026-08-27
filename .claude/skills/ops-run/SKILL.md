@@ -173,3 +173,47 @@ Sharp edges:
 - Screenshot after any tap that might open a destructive-action sheet before assuming success — a
   slightly-off tap on a "Confirmar"/"Cancelar" pair can silently hit the wrong one (or neither) and
   looks identical to "nothing happened" until you check.
+- **No CLI-scriptable way to rotate the Simulator (found 2026-08-27, tablet full-screen work).**
+  The Simulator app itself has a working rotate button/menu (`Hardware > Rotate Left/Right`,
+  `⌘←`/`⌘→`) — a human can just click it. What's missing is a way to trigger that *without* a human:
+  neither `xcrun simctl` nor `idb` has a rotate command, and AppleScript `System Events` (which
+  could simulate the menu click) needs Accessibility permission granted to whatever process runs
+  these shell commands, which isn't granted by default in this environment (see §7's own intro — same
+  root cause as the tap/type problem this whole section solves, `idb` just doesn't cover rotation).
+  If you need to see a real landscape render without a human at the keyboard, the only workaround
+  found so far is a temporary edit to the *already-built app bundle's* `Info.plist`
+  (`UISupportedInterfaceOrientations~ipad`) to force the orientation, reinstall, screenshot, then
+  revert and reinstall again — messy, and RN `Modal` throws a harmless dev-only red box
+  ("presented with 0x2 orientations mask but the application only supports 0x18") while forced this
+  way, which is an artifact of the hack, not a real bug. If Accessibility permission is ever granted
+  to this process, prefer scripting the real rotate menu over this hack.
+
+## 8. Testing against a real Android emulator (AVD)
+
+Creating a tablet-sized (or any custom-profile) AVD doesn't need a new system-image download — the
+already-installed `system-images;android-36;google_apis;arm64-v8a` (see §0) works with any device
+profile, since screen size is a device-profile choice independent of the image:
+
+```bash
+export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
+$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager list device | grep -iB2 "pixel_tablet\|tablet"
+echo "no" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager create avd \
+  -n xindeler-ops-tablet-test \
+  -k "system-images;android-36;google_apis;arm64-v8a" \
+  -d "pixel_tablet"
+$ANDROID_SDK_ROOT/emulator/emulator -avd xindeler-ops-tablet-test &
+```
+
+Two gotchas found running the app against a fresh emulator (2026-08-27, tablet full-screen work):
+
+- **The emulator's `localhost` is not the host machine's `localhost`.** `mock.baseUrl` in
+  `src/config/environments.ts` is hardcoded to `http://localhost:4000`, which resolves to the
+  *emulator's own* loopback, not the Mac running `npm run mock-gateway` — a well-known
+  Android-emulator networking fact, not a bug in this app. Fix with a port-forward, no app changes:
+  `adb reverse tcp:4000 tcp:4000`.
+- **Android's autofill overlay can steal a tap during login.** The username/password fields can
+  trigger a system autofill suggestion popup that intercepts the next tap instead of the field
+  underneath it. If a login attempt behaves as if a tap landed somewhere else, check for this before
+  assuming a coordinate/`idb`-equivalent-for-Android problem — disable autofill for the test session
+  (Settings → System → Languages & input → Advanced → Autofill service → None) or dismiss the popup
+  explicitly before the next tap.
