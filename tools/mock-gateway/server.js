@@ -84,7 +84,8 @@ app.use('/api/v1/chat', requireAuth, chatRoutes);
 app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);
 app.use('/api/v1/audit', requireAuth, requireStepUp, auditRoutes);
 app.use('/api/v1/admin/operators', requireAuth, requireSuperuser, adminOperatorsRoutes);
-app.use('/api/v1/stream', requireAuth, streamRoutes);
+// OC-63: matches xindeler-zuul's real mount point (`server/src/web.rs`), not `/api/v1/stream`.
+app.use('/api/v1/stream/status', requireAuth, streamRoutes);
 app.use('/api/v1/server', requireAuth, requireCsrf, serverRoutes);
 app.use('/api/v1/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
 app.use('/api/v1/push', requireAuth, requireCsrf, pushRoutes);

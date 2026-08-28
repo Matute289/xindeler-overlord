@@ -24,22 +24,66 @@ export const LoginResponseSchema = z.object({
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
-export const StatusSchema = z.object({
-  service: z.enum(['active', 'inactive', 'failed']),
-  health: z.boolean(),
+// Mirrors xindeler-zuul's real `GET /status` response (`server/src/status.rs`'s
+// `StatusResponse`/`EngineInfo`/`RestartStatus`, confirmed against that repo's source, ZG-63,
+// 2026-08-27/28) -- not the flat `service`/`health`/`chunk_count` shape this schema used to have.
+// That shape was speculative: written against this repo's own `tools/mock-gateway` (which was in
+// turn written against `docs/reference/gateway-api-contract.md`'s own guess, §8: "Exact status
+// field names -- this doc guesses") before xindeler-zuul existed, and never actually ratified
+// against it -- same class of bug OC-59/OC-62 already found and fixed elsewhere in this contract.
+// `chunk_count` in particular has no real path from xindeler-zuul at all: the engine's
+// `chunks_count`/`chonks_count`/`chunk_groups_count` are Prometheus-only gauges
+// (`server/src/metrics.rs`), never surfaced through `ServerInfoDto`/`/ui_api/v1/info`, so xindeler-
+// zuul has nothing to mirror even if it wanted to -- dropped from the UI entirely (`StatusScreen.tsx`)
+// rather than faked.
+export const EngineInfoSchema = z.object({
   version: z.string(),
-  started_at: z.string().nullable(),
-  uptime_secs: z.number(),
-  players_online: z.number(),
-  tick_time_ms: z.number().nullable(),
+  player_count: z.number(),
+  shutdown_pending_secs: z.number().nullable(),
   entity_count: z.number(),
-  chunk_count: z.number(),
-  pending_shutdown: z
-    .object({
-      seconds_left: z.number(),
-      reason: z.string(),
-    })
-    .nullable(),
+  tick_time_ms: z.number(),
+  uptime_secs: z.number(),
+  shutdown_reason: z.string().nullable(),
+});
+export type EngineInfo = z.infer<typeof EngineInfoSchema>;
+
+// Mirrors xindeler-zuul's `RestartOutcome` (`server/src/lifecycle.rs`) -- internally tagged on
+// `state`, snake_case variant names, `#[serde(tag = "state", rename_all = "snake_case")]`.
+export const RestartOutcomeSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('in_progress') }),
+  z.object({ state: z.literal('started') }),
+  z.object({ state: z.literal('timed_out_waiting_for_shutdown') }),
+  // Deliberately no error detail on either failure variant -- xindeler-zuul's own doc comment on
+  // `RestartOutcome::StartFailed` explains why: the underlying error is raw stderr from a
+  // privileged `sudo` wrapper, which can contain internal paths/sudoers-policy detail, and this
+  // struct is readable by any session-only (not necessarily stepped-up) operator.
+  z.object({ state: z.literal('start_failed') }),
+  z.object({ state: z.literal('failed_to_record_intent_to_start') }),
+]);
+export type RestartOutcome = z.infer<typeof RestartOutcomeSchema>;
+
+export const RestartStatusSchema = z.object({
+  operator_uuid: z.string(),
+  // Unix seconds, when the restart was requested -- not when `outcome` last changed, and not the
+  // engine's own uptime/started-at (that lives on `info.uptime_secs` instead, there is no
+  // `info.started_at` -- xindeler-zuul never sends one, derive it from `uptime_secs` in the UI if
+  // ever needed).
+  started_at: z.number(),
+  outcome: RestartOutcomeSchema,
+});
+export type RestartStatus = z.infer<typeof RestartStatusSchema>;
+
+export const StatusSchema = z.object({
+  // `systemctl is-active`'s raw vocabulary -- also `activating`/`deactivating`/`reloading`, plus
+  // `"unknown"` (xindeler-zuul's own fallback when the check itself fails), never a closed enum.
+  // The previous 3-value `z.enum(['active','inactive','failed'])` failed to parse on every single
+  // restart, which always passes through one of the values outside that set.
+  game_server: z.string(),
+  // `null` whenever the engine can't be reached -- no secret configured, the engine down, or the
+  // request itself failed. `game_server` above is the only signal that still works in that case.
+  info: EngineInfoSchema.nullable(),
+  // `null` until a restart has been attempted at least once since the gateway process started.
+  restart: RestartStatusSchema.nullable(),
 });
 export type Status = z.infer<typeof StatusSchema>;
 
@@ -189,14 +233,6 @@ export const OracleEventsResponseSchema = z.object({
   oracle_enabled: z.boolean(),
 });
 export type OracleEventsResponse = z.infer<typeof OracleEventsResponseSchema>;
-
-// Stream-only — the `lifecycle` SSE event has no equivalent REST response to
-// already own its schema, unlike `status`/`log`/`chat`/`audit`.
-export const LifecycleEventSchema = z.object({
-  state: z.enum(['running', 'draining', 'stopped', 'starting']),
-  seconds_left: z.number().optional(),
-});
-export type LifecycleEvent = z.infer<typeof LifecycleEventSchema>;
 
 export const DmEventSchema = z.object({
   kind: z.enum(['spawn', 'weather']),
