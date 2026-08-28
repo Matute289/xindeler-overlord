@@ -4,8 +4,8 @@ import { FlatList, Text, View } from 'react-native';
 
 import type { ChatMessage } from '@/api/schemas';
 import { useEnvironment } from '@/config/EnvironmentContext';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
-import { gatewayErrorMessage } from '@/features/connectivity/gatewayErrorMessage';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
+import { zuulErrorMessage } from '@/features/connectivity/zuulErrorMessage';
 import { Empty } from '@/ui/Empty';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { fonts } from '@/ui/theme';
@@ -60,7 +60,7 @@ export function ChatScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Chat" error={query.error} />;
+      return <ZuulErrorEmpty title="Chat" error={query.error} />;
     }
     return <Empty title="Chat" message="Cargando…" />;
   }
@@ -79,7 +79,7 @@ export function ChatScreen() {
       {query.error && (
         <View className="items-center bg-danger px-4 py-1 dark:bg-night-danger">
           <Text className="text-xs text-white">
-            {gatewayErrorMessage(environment.id, query.error)}
+            {zuulErrorMessage(environment.id, query.error)}
           </Text>
         </View>
       )}

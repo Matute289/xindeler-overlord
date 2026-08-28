@@ -59,11 +59,11 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         if (err instanceof Error && err.name === 'AbortError') {
           throw new ApiError('timeout', 'La solicitud tardó demasiado', 0);
         }
-        throw new ApiError('network_error', 'No se pudo conectar con el gateway', 0);
+        throw new ApiError('network_error', 'No se pudo conectar con Zuul', 0);
       }
 
       if (!response.ok) {
-        // The real gateway sends a plain-text body (not this doc's own JSON envelope) for many
+        // The real Zuul sends a plain-text body (not this doc's own JSON envelope) for many
         // error responses -- confirmed 2026-08-15 (OC-54) and again during OC-59's own
         // investigation (OC-57's admin routes, OC-59's audit/broadcast routes). A `Response`
         // body can only be consumed once, so read it as text first and attempt to parse THAT as
@@ -87,7 +87,7 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         const trimmed = rawText.trim().slice(0, MAX_RAW_ERROR_LEN);
         throw new ApiError(
           'unknown_error',
-          trimmed.length > 0 ? trimmed : `Error inesperado del gateway (${response.status})`,
+          trimmed.length > 0 ? trimmed : `Error inesperado de Zuul (${response.status})`,
           response.status,
         );
       }
@@ -100,7 +100,10 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
       if (json === PARSE_FAILED) {
         throw new ApiError(
           'invalid_response',
-          'La respuesta del gateway no tiene el formato esperado',
+          // Ghostbusters reference (Matías's request), quiet enough to still read fine to anyone
+          // who's never seen the movie: "dogs and cats living together" is Peter Venkman's line
+          // for total chaos — an apt aside for exactly the moment a response stops making sense.
+          "La respuesta de Zuul no tiene el formato esperado (esto sí que es 'perros y gatos viviendo juntos')",
           response.status,
         );
       }
@@ -111,7 +114,10 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
       if (!result.success) {
         throw new ApiError(
           'invalid_response',
-          'La respuesta del gateway no tiene el formato esperado',
+          // Ghostbusters reference (Matías's request), quiet enough to still read fine to anyone
+          // who's never seen the movie: "dogs and cats living together" is Peter Venkman's line
+          // for total chaos — an apt aside for exactly the moment a response stops making sense.
+          "La respuesta de Zuul no tiene el formato esperado (esto sí que es 'perros y gatos viviendo juntos')",
           response.status,
         );
       }

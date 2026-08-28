@@ -6,7 +6,7 @@ import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
 import type { OracleTarget, OracleTriggerResponse } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { usePlayersQuery } from '@/features/players/usePlayersQuery';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
@@ -169,7 +169,7 @@ export function OracleDryRunScreen() {
     if (!target) {
       // Operator-facing Spanish, not an internal debug string: the only way to actually reach
       // this throw is the selected player going offline DURING the step-up wait (the button is
-      // disabled otherwise), and this message renders verbatim through `gatewayErrorMessage`/
+      // disabled otherwise), and this message renders verbatim through `zuulErrorMessage`/
       // `ActionError`. Same text as the `selectedPlayerOffline` banner below, deliberately.
       throw new Error('Este jugador ya no está conectado.');
     }
@@ -257,7 +257,7 @@ export function OracleDryRunScreen() {
   }
   if (playersQuery.data === undefined) {
     if (playersQuery.error) {
-      return <GatewayErrorEmpty title="Vista previa" error={playersQuery.error} />;
+      return <ZuulErrorEmpty title="Vista previa" error={playersQuery.error} />;
     }
     return <Empty title="Vista previa" message="Cargando…" />;
   }
@@ -432,7 +432,7 @@ export function OracleDryRunScreen() {
                     The way back is the ordinary one — pick a target / re-run "Probar disparo",
                     both of which go through `clearResult()` and start a fresh, honest preview.
                     The underlying `ActionError` still renders here so the actual failure ("No se
-                    pudo conectar con el gateway", a 5xx, …) stays visible as context. */}
+                    pudo conectar con Zuul", a 5xx, …) stays visible as context. */}
                 {!result.fireOutcomeUnknown && (
                   <>
                     <Text className="text-xs text-danger dark:text-night-danger">

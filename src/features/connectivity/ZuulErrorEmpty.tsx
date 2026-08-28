@@ -1,13 +1,13 @@
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { Empty } from '@/ui/Empty';
 
-import { gatewayErrorMessage, isLikelyVpnDown } from './gatewayErrorMessage';
+import { zuulErrorMessage, isLikelyVpnDown } from './zuulErrorMessage';
 import { VpnSettingsButton } from './VpnSettingsButton';
 
-export function GatewayErrorEmpty({ title, error }: { title: string; error: Error }) {
+export function ZuulErrorEmpty({ title, error }: { title: string; error: Error }) {
   const { environment } = useEnvironment();
   return (
-    <Empty title={title} message={gatewayErrorMessage(environment.id, error)}>
+    <Empty title={title} message={zuulErrorMessage(environment.id, error)}>
       {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
     </Empty>
   );

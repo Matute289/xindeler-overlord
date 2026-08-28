@@ -13,7 +13,7 @@ import type {
   StageOracleEventResponse,
 } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
@@ -226,7 +226,7 @@ export function OracleComposerScreen() {
   if (eventsQuery.data === undefined || presetsQuery.data === undefined) {
     const error = eventsQuery.error ?? presetsQuery.error;
     if (error) {
-      return <GatewayErrorEmpty title="Componer evento" error={error} />;
+      return <ZuulErrorEmpty title="Componer evento" error={error} />;
     }
     return <Empty title="Componer evento" message="Cargando…" />;
   }
@@ -411,8 +411,8 @@ export function OracleComposerScreen() {
         {stageAction.error && <ActionError error={stageAction.error} />}
         {stageResult !== null && !stageResult.loaded && (
           <Text className="mt-2 text-center text-xs text-danger dark:text-night-danger">
-            El evento se guardó en etapa pero el gateway no lo cargó — puede no haberse podido
-            parsear. Revisá los valores antes de reintentar.
+            El evento se guardó en etapa pero Zuul no lo cargó — puede no haberse podido parsear.
+            Revisá los valores antes de reintentar.
           </Text>
         )}
         {stageResult !== null && stageResult.loaded && stageResult.diff.length > 0 && (
@@ -421,7 +421,7 @@ export function OracleComposerScreen() {
               <Text
                 key={entry.field}
                 className="text-xs text-warning dark:text-night-warning"
-              >{`El gateway ajustó: ${entry.field} ${String(entry.from)} → ${String(entry.to)}`}</Text>
+              >{`Zuul ajustó: ${entry.field} ${String(entry.from)} → ${String(entry.to)}`}</Text>
             ))}
             <Pressable
               onPress={() => router.push('/oracle')}

@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { useEnvironment } from '@/config/EnvironmentContext';
-import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
+import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { AuthBackdrop } from '@/ui/AuthBackdrop';
 import { Button } from '@/ui/Button';
@@ -43,7 +43,7 @@ export default function TotpScreen() {
       // No manual navigation on success — AuthContext's status flip to 'authenticated'
       // is what Stack.Protected reacts to; the app switches to (tabs) on its own.
     } catch (err) {
-      setError(isApiError(err) ? err : new Error('No se pudo conectar con el gateway'));
+      setError(isApiError(err) ? err : new Error('No se pudo conectar con Zuul'));
       setLoading(false);
     }
   }
@@ -116,7 +116,7 @@ export default function TotpScreen() {
             {error && (
               <>
                 <Text className="text-center text-sm text-night-danger">
-                  {gatewayErrorMessage(environment.id, error)}
+                  {zuulErrorMessage(environment.id, error)}
                 </Text>
                 {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
               </>

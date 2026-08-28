@@ -6,7 +6,7 @@ import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useApi } from '@/api/ApiContext';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
@@ -128,7 +128,7 @@ export function OracleEventsScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="ORACLE" error={query.error} />;
+      return <ZuulErrorEmpty title="ORACLE" error={query.error} />;
     }
     return <Empty title="ORACLE" message="Cargando…" />;
   }
@@ -216,8 +216,8 @@ export function OracleEventsScreen() {
             className="text-xs text-steel-muted dark:text-night-steel-muted"
             style={{ fontFamily: fonts.regular }}
           >
-            El chat todavía no tiene implementación en el gateway real — solo responde contra el
-            entorno Mock (falta Bedrock del lado del gateway).
+            El chat todavía no tiene implementación en Zuul real — solo responde contra el entorno
+            Mock (falta Bedrock del lado de Zuul).
           </Text>
         </View>
       )}
@@ -235,7 +235,7 @@ export function OracleEventsScreen() {
             style={{ fontFamily: fonts.regular }}
           >
             Si un evento queda acá mucho tiempo, puede seguir en curso o haber fallado el parseo —
-            hoy el gateway no distingue entre ambos casos.
+            hoy Zuul no distingue entre ambos casos.
           </Text>
         </View>
       )}

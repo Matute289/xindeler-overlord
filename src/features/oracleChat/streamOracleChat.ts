@@ -102,7 +102,7 @@ export async function* streamOracleChat(
       if (signal.aborted) {
         throw new ApiError('aborted', 'La respuesta se canceló', 0);
       }
-      throw new ApiError('network_error', 'No se pudo conectar con el gateway', 0);
+      throw new ApiError('network_error', 'No se pudo conectar con Zuul', 0);
     }
     // Headers are in — that's progress; the deadline now covers the stream body instead.
     armTimeout(IDLE_TIMEOUT_MS);
@@ -121,7 +121,7 @@ export async function* streamOracleChat(
       }
       throw new ApiError(
         'unknown_error',
-        `Error inesperado del gateway (${response.status})`,
+        `Error inesperado de Zuul (${response.status})`,
         response.status,
       );
     }
@@ -129,7 +129,7 @@ export async function* streamOracleChat(
     if (!response.body) {
       throw new ApiError(
         'invalid_response',
-        'La respuesta del gateway no tiene el formato esperado',
+        'La respuesta de Zuul no tiene el formato esperado',
         response.status,
       );
     }
@@ -167,13 +167,19 @@ export async function* streamOracleChat(
       // `StreamClient.ts` does on its own read-loop failure — a swallowed read error was
       // exactly what made this path undiagnosable before.
       if (timedOut) {
-        throw new ApiError('timeout', 'La respuesta del gateway se quedó sin avanzar', 0);
+        // Ghostbusters reference (Matías's request) — Slimer being the one universally-known
+        // slow-moving ghost makes this read fine even without the reference.
+        throw new ApiError(
+          'timeout',
+          'La respuesta de Zuul se quedó sin avanzar (ni Slimer es tan lento)',
+          0,
+        );
       }
       if (signal.aborted) {
         throw new ApiError('aborted', 'La respuesta se canceló', 0);
       }
       console.warn('[oracle-chat] stream read loop ended', error);
-      throw new ApiError('network_error', 'Se cortó la conexión con el gateway', 0);
+      throw new ApiError('network_error', 'Se cortó la conexión con Zuul', 0);
     }
   } finally {
     if (timeoutId !== null) clearTimeout(timeoutId);

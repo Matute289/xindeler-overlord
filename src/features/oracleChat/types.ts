@@ -7,7 +7,7 @@ export type ChatTurn = {
   status: 'streaming' | 'complete' | 'failed';
   draft: DmEvent | null;
   // The actual error that failed this turn, kept so the row can render it through the app-wide
-  // `gatewayErrorMessage`/`ActionError` pattern (VPN diagnosis included) instead of a hardcoded
+  // `zuulErrorMessage`/`ActionError` pattern (VPN diagnosis included) instead of a hardcoded
   // string that tells the operator nothing. Always `null` unless `status === 'failed'`.
   error: Error | null;
   // `null` for operator turns (they have no tier). Set once, when an assistant turn is created,
