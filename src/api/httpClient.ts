@@ -176,6 +176,51 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
     }
   }
 
+  // ZG-35: a dedicated, minimal path for the one route that isn't JSON at all —
+  // `GET /push/web/vapid-public-key` returns the raw base64url VAPID key as a plain-text body
+  // (or a plain-text error, same shape `push.rs`'s existing Expo routes already use, not
+  // `oracle.rs`'s newer `{error:{code,message}}` envelope). `request()`'s own success path always
+  // calls `response.json()`, which would throw on this route's real body — a separate function
+  // rather than another `RequestOptions` flag threaded through every JSON-shaped branch above.
+  async function requestText(path: string, options: { timeoutMs?: number } = {}): Promise<string> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    try {
+      const authHeader = await deps.getAuthHeader();
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}${path}`, {
+          method: 'GET',
+          headers: { ...(authHeader ?? {}) },
+          credentials: 'include',
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new ApiError('timeout', 'La solicitud tardó demasiado', 0);
+        }
+        throw new ApiError('network_error', 'No se pudo conectar con Zuul', 0);
+      }
+      const rawText = (await response.text().catch(() => '')).trim();
+      if (!response.ok) {
+        // 503 means Web Push isn't configured server-side yet (no VAPID key generated) — a real,
+        // expected state until an operator sets it up, not a genuine error the operator needs
+        // alarming language for.
+        let code = 'unknown_error';
+        if (response.status === 401) code = 'unauthorized';
+        else if (response.status === 503) code = 'not_configured';
+        throw new ApiError(
+          code,
+          rawText.length > 0 ? rawText : `Error inesperado de Zuul (${response.status})`,
+          response.status,
+        );
+      }
+      return rawText;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   async function requestWithRetry<T>(
     path: string,
     options: RequestOptions,
@@ -203,5 +248,5 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
     throw lastError;
   }
 
-  return { request, requestWithRetry };
+  return { request, requestWithRetry, requestText };
 }

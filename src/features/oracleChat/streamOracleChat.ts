@@ -55,7 +55,7 @@ export type StreamOracleChatDeps = {
 // invisible to both.
 export async function* streamOracleChat(
   baseUrl: string,
-  body: { message: string; thread_id: string },
+  body: { message: string; thread_id: string; overrideBudget: boolean },
   signal: AbortSignal,
   deps: StreamOracleChatDeps,
 ): AsyncGenerator<OracleChatStreamEvent> {
@@ -99,7 +99,18 @@ export async function* streamOracleChat(
         // same reasoning `writeApi.ts`'s `fireOracleEvent` hardcodes `dry_run: false` instead of
         // taking a `boolean` parameter — there is exactly one real value, so making it a
         // parameter is a footgun with no upside.
-        body: JSON.stringify({ ...body, tier: 'bedrock' }),
+        // ZG-32: `override_budget` -- real Zuul rejects with `429 budget_exceeded` once the
+        // configured monthly cap is hit, unless this is `true`, and even then only lets the call
+        // through if this session has an active step-up window (`403` otherwise). Unlike `tier`,
+        // this genuinely varies per call (a normal send is always `false`; the override retry
+        // path in `useOracleChatThreads.ts` is the only caller that ever sends `true`), so it
+        // stays a real parameter rather than being hardcoded.
+        body: JSON.stringify({
+          message: body.message,
+          thread_id: body.thread_id,
+          tier: 'bedrock',
+          override_budget: body.overrideBudget,
+        }),
         signal: controller.signal,
       });
     } catch {

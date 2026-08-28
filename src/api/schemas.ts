@@ -261,8 +261,8 @@ export type OracleEventsResponse = z.infer<typeof OracleEventsResponseSchema>;
 // side, so an entirely empty `{}` is a valid `DmEvent` — every field here is optional to match,
 // with `DEFAULT_DM_EVENT` below spelling out what the server fills in for anything omitted.
 // `spawn_count`/`spawn_radius`/`transition_secs`/`ai_behavior_override`'s known-values bounds
-// (ZG-68 — `presets.rs`'s own `bounds` module) are NOT enforced server-side yet, only documented
-// there for its own tests, but the composer form still uses them as sane UI limits.
+// (`presets.rs`'s own `bounds` module) ARE enforced server-side as of ZG-68 (`invalid_dm_event`,
+// `400`, on any violation) -- these were speculative client-side-only limits before that landed.
 export const WeatherEffectSchema = z.enum(['Clear', 'Cloudy', 'Rain', 'Storm']);
 export type WeatherEffect = z.infer<typeof WeatherEffectSchema>;
 
@@ -272,6 +272,11 @@ export const SPAWN_RADIUS_BOUNDS = { min: 0, max: 400 } as const;
 export const TRANSITION_SECS_BOUNDS = { min: 0, max: 3600 } as const;
 export const MAX_DM_EVENT_STRING_LEN = 4096;
 export const MAX_ENTITY_TEMPLATES = 64;
+// ZG-70: the *everyday* operational ceiling (tighter than `SPAWN_COUNT_BOUNDS.max`'s hard `200`,
+// which no override can ever bypass) -- a `spawn_count` above this needs `high_impact_override:
+// true` on `POST /oracle/stage` plus an active step-up window, or the real gateway rejects it
+// with `412 high_impact_override_required`.
+export const SPAWN_COUNT_OPERATIONAL_CAP = 50;
 
 export const DmEventSchema = z.object({
   dimension_config: z
@@ -322,18 +327,24 @@ export const DEFAULT_DM_EVENT = {
 export const OracleChatTokenSchema = z.object({ text: z.string() });
 export type OracleChatToken = z.infer<typeof OracleChatTokenSchema>;
 
-// ZG-67: matches the real `GET /oracle/budget`, confirmed directly by the xindeler-zuul session
-// that shipped it (PR #98) -- no `tier_breakdown` (there is only one tier, Bedrock; a client-
-// invented `local` tier never existed server-side at all, see `OracleChatScreen.tsx`'s own
-// comment), separate input/output token counts (not one combined figure), and `monthly_cap_usd`/
-// `bedrock_configured` -- the latter is what actually distinguishes "no AWS account configured
-// yet" (the real state in every environment until ZG-29 unblocks) from a genuine zero-usage month.
+// ZG-67/ZG-32: matches the real `GET /oracle/budget`, confirmed directly against
+// `xindeler-zuul/server/src/oracle.rs`'s `BudgetResponse` -- no `tier_breakdown` (there is only
+// one tier, Bedrock; a client-invented `local` tier never existed server-side at all, see
+// `OracleChatScreen.tsx`'s own comment), separate input/output token counts (not one combined
+// figure), `monthly_cap_usd`/`bedrock_configured` (the latter distinguishes "no AWS account
+// configured yet" from a genuine zero-usage month), and (ZG-32) `alert_level` -- the graduated
+// 50%/80%/100%-of-cap response `bedrock::alert_level` computes server-side, `"ok"` whenever no cap
+// is configured.
+export const OracleBudgetAlertLevelSchema = z.enum(['ok', 'warning', 'critical', 'exceeded']);
+export type OracleBudgetAlertLevel = z.infer<typeof OracleBudgetAlertLevelSchema>;
+
 export const OracleBudgetResponseSchema = z.object({
   month_to_date_input_tokens: z.number(),
   month_to_date_output_tokens: z.number(),
   month_to_date_cost_usd: z.number(),
   monthly_cap_usd: z.number().nullable(),
   bedrock_configured: z.boolean(),
+  alert_level: OracleBudgetAlertLevelSchema,
 });
 export type OracleBudgetResponse = z.infer<typeof OracleBudgetResponseSchema>;
 

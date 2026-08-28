@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
@@ -12,6 +12,7 @@ import {
   MAX_DM_EVENT_STRING_LEN,
   MAX_ENTITY_TEMPLATES,
   SPAWN_COUNT_BOUNDS,
+  SPAWN_COUNT_OPERATIONAL_CAP,
   SPAWN_RADIUS_BOUNDS,
   TRANSITION_SECS_BOUNDS,
 } from '@/api/schemas';
@@ -21,6 +22,7 @@ import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
+import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
 import { MultiChipPicker } from '@/ui/MultiChipPicker';
 import { Pressable } from '@/ui/Pressable';
@@ -176,9 +178,10 @@ export function OracleComposerScreen() {
   const resolvedEntityTemplates = resolveEntityTemplates(entityTemplates, availableTemplates);
 
   // Single source of truth for "is this form stageable": returns the request body only when
-  // every numeric field genuinely parses within its real bounds (OC-72: `presets.rs`'s own
-  // `bounds` module — not server-enforced yet per ZG-68, but still the sane range to hold the
-  // form to), `null` otherwise. No casts and no `??` fallbacks on the numeric fields — a missing
+  // every numeric field genuinely parses within its real bounds (OC-72/ZG-68: `presets.rs`'s own
+  // `bounds` module, actually enforced server-side as of ZG-68 -- these aren't just sane UI
+  // limits anymore, a violation is a real `400 invalid_dm_event`), `null` otherwise. No casts and
+  // no `??` fallbacks on the numeric fields — a missing
   // or unparseable value refuses to build an event rather than silently substituting a default
   // the operator never chose. String fields DO fall back to their real server-side default when
   // blank (`DmEvent`'s every field carries `#[serde(default)]`), since an empty text field is an
@@ -241,15 +244,35 @@ export function OracleComposerScreen() {
     };
   }
 
+  // OC-74/ZG-70: read at call time (not captured at closure-creation time), same `useRef` pattern
+  // `OracleDryRunScreen.tsx`'s own `playersRef` established for exactly this reason -- `run()`'s
+  // stable closure otherwise can't see a value set by `handleConfirmOverride` right before it's
+  // invoked.
+  const highImpactOverrideRef = useRef(false);
+
   const stageAction = useDestructiveAction((idempotencyKey) => {
     const dmEvent = buildDmEvent();
     // Unreachable while the button is disabled — but the invariant lives in the type system here,
     // not only in a prop: an invalid form refuses to produce a write, it does not stage a guess.
     if (dmEvent === null) throw new Error('invalid form state');
-    return api.write.stageOracleEvent(stagedId, dmEvent, idempotencyKey);
+    return api.write.stageOracleEvent(
+      stagedId,
+      dmEvent,
+      highImpactOverrideRef.current,
+      idempotencyKey,
+    );
   });
 
   const canStage = stagedId !== '' && buildDmEvent() !== null && !stageAction.pending;
+  // ZG-70: above this, real Zuul rejects the stage outright with `412
+  // high_impact_override_required` unless `high_impact_override: true` accompanies it -- and even
+  // then only lets it through with an active step-up window. Computed from the raw text (not
+  // `buildDmEvent()`'s already-validated `spawnCount`) so the warning/gate shows even while the
+  // field is otherwise invalid or empty.
+  const spawnCountValue = parseNumeric(spawnCountText);
+  const needsHighImpactOverride =
+    spawnCountValue !== null && spawnCountValue > SPAWN_COUNT_OPERATIONAL_CAP;
+  const [confirmOverride, setConfirmOverride] = useState(false);
 
   // Shared by `applyPreset` and the draft-apply block above — sets every field that's actually
   // part of a `DmEvent`. `id` stays out of this on purpose: a preset's collision-avoiding id is
@@ -306,13 +329,34 @@ export function OracleComposerScreen() {
   // result.
   async function handleStage() {
     if (!canStage) return;
+    // ZG-70: a spawn_count above the operational cap needs an explicit, typed confirmation before
+    // the request even goes out — same "know it's consequential before you send it" precedent
+    // `OracleDryRunScreen.tsx`'s Fire gate already set, not just a retry-after-rejection flow.
+    if (needsHighImpactOverride && !highImpactOverrideRef.current) {
+      setConfirmOverride(true);
+      return;
+    }
+    await doStage();
+  }
+
+  async function doStage() {
     const result = await stageAction.run();
+    // Reset regardless of outcome — a later, unrelated stage attempt (a different id, a spawn
+    // count back under the cap) must not silently inherit an override the operator confirmed for
+    // a completely different request.
+    highImpactOverrideRef.current = false;
     if (result === null) return;
     // This screen just dirtied `oracleEvents` itself (it holds that query for the entity-template
     // picker, `staleTime: 30_000`), so navigating to /oracle within 30s would otherwise show a
     // cache that predates the event we just staged.
     void queryClient.invalidateQueries({ queryKey: queryKeys.oracleEvents });
     router.push('/oracle');
+  }
+
+  function handleConfirmOverride() {
+    setConfirmOverride(false);
+    highImpactOverrideRef.current = true;
+    void doStage();
   }
 
   if (eventsQuery.data === undefined || presetsQuery.data === undefined) {
@@ -447,6 +491,11 @@ export function OracleComposerScreen() {
             onChangeText={setSpawnCountText}
             keyboardType="number-pad"
           />
+          {needsHighImpactOverride && (
+            <Text className="mt-1 text-xs text-warning dark:text-night-warning">
+              {`Supera el límite operacional habitual (${SPAWN_COUNT_OPERATIONAL_CAP}) — va a pedir confirmación y un step-up.`}
+            </Text>
+          )}
         </View>
         <View className="mt-4">
           <TextField
@@ -581,6 +630,13 @@ export function OracleComposerScreen() {
           />
         </View>
         {stageAction.error && <ActionError error={stageAction.error} />}
+        <ConfirmByTypingSheet
+          visible={confirmOverride}
+          word="OVERRIDE"
+          description={`La cantidad supera el límite operacional habitual (${SPAWN_COUNT_OPERATIONAL_CAP}) — confirmá para guardarlo igual (va a pedir un step-up).`}
+          onConfirm={handleConfirmOverride}
+          onCancel={() => setConfirmOverride(false)}
+        />
         <View className="h-12" />
       </ScrollView>
     </KeyboardAvoidingView>

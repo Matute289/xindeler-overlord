@@ -1,4 +1,4 @@
-import { Linking, Text, View } from 'react-native';
+import { Linking, Platform, Text, View } from 'react-native';
 
 import { Button } from '@/ui/Button';
 import { Pressable } from '@/ui/Pressable';
@@ -18,8 +18,13 @@ export function PushNotificationsSettings() {
         >
           Notificaciones push
         </Text>
+        {/* ZG-35: web IS supported now (via Web Push) -- `unsupported` here means THIS specific
+            browser lacks `PushManager` (e.g. Safari on iOS outside a home-screen-installed PWA),
+            not "web in general." */}
         <Text className="mt-1 text-sm text-steel-muted dark:text-night-steel-muted">
-          No disponible en la versión web.
+          {Platform.OS === 'web'
+            ? 'Este navegador no soporta notificaciones push.'
+            : 'No disponible en este dispositivo.'}
         </Text>
       </View>
     );
@@ -46,17 +51,23 @@ export function PushNotificationsSettings() {
       {status.state === 'denied' && (
         <>
           <Text className="text-sm text-steel-muted dark:text-night-steel-muted">
-            El sistema operativo bloqueó los permisos de notificación. Activalos manualmente en la
-            configuración del teléfono.
+            {Platform.OS === 'web'
+              ? 'El navegador bloqueó los permisos de notificación. Activalos manualmente desde la configuración del sitio (el ícono junto a la URL).'
+              : 'El sistema operativo bloqueó los permisos de notificación. Activalos manualmente en la configuración del teléfono.'}
           </Text>
-          <Pressable onPress={() => Linking.openSettings()} accessibilityRole="button">
-            <Text
-              className="text-accent-cyan dark:text-night-accent-cyan"
-              style={{ fontFamily: fonts.semibold }}
-            >
-              Abrir configuración
-            </Text>
-          </Pressable>
+          {/* `Linking.openSettings()` opens the OS settings app -- native-only, no web
+              equivalent (a browser's own per-site permission UI isn't reachable by URL/intent
+              the same way). */}
+          {Platform.OS !== 'web' && (
+            <Pressable onPress={() => Linking.openSettings()} accessibilityRole="button">
+              <Text
+                className="text-accent-cyan dark:text-night-accent-cyan"
+                style={{ fontFamily: fonts.semibold }}
+              >
+                Abrir configuración
+              </Text>
+            </Pressable>
+          )}
         </>
       )}
 
@@ -64,7 +75,9 @@ export function PushNotificationsSettings() {
         <>
           <Text className="text-sm text-steel-muted dark:text-night-steel-muted">Activas.</Text>
           <Text className="text-sm text-steel-muted dark:text-night-steel-muted">
-            El envío real depende de las credenciales push de EAS, todavía no configuradas.
+            {Platform.OS === 'web'
+              ? 'El envío real depende de que Zuul tenga configurada una clave VAPID.'
+              : 'El envío real depende de las credenciales push de EAS, todavía no configuradas.'}
           </Text>
           <Pressable onPress={() => void disable()} accessibilityRole="button" disabled={loading}>
             <Text
