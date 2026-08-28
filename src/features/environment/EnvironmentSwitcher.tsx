@@ -1,12 +1,24 @@
+import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { useEnvironment } from '@/config/EnvironmentContext';
-import { ENVIRONMENTS } from '@/config/environments';
+import { ENVIRONMENTS, type EnvironmentId } from '@/config/environments';
 import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
 export function EnvironmentSwitcher() {
   const { environment, setEnvironment } = useEnvironment();
+
+  async function handleSelect(id: EnvironmentId) {
+    await setEnvironment(id);
+    // This screen is always reached by pushing it from EnvironmentBadge (never the initial
+    // route of its stack) — picking an environment is a complete action, so return to wherever
+    // the operator came from instead of leaving them stranded here with no way back. Reported by
+    // Matías: after choosing an environment, nothing brought him back to the login screen.
+    // Awaited so a persist failure (setEnvironment's own revert-on-failure path) resolves before
+    // navigating away, not after.
+    router.back();
+  }
 
   return (
     <View className="flex-1 px-6 pt-8">
@@ -28,7 +40,7 @@ export function EnvironmentSwitcher() {
           return (
             <Pressable
               key={env.id}
-              onPress={() => setEnvironment(env.id)}
+              onPress={() => handleSelect(env.id)}
               accessibilityRole="radio"
               accessibilityState={{ selected: active }}
               accessibilityLabel={`${env.label}, ${env.baseUrl}`}

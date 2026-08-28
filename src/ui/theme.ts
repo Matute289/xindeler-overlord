@@ -4,7 +4,7 @@ import { useColorScheme } from 'react-native';
 // Keep these hex values in sync with tailwind.config.js's theme.extend.colors.
 // NativeWind's Tailwind config runs as plain CommonJS outside Metro and can't
 // import this file, so the same values are declared in both places on purpose.
-const darkColors = {
+export const darkColors = {
   background: '#0B0F14',
   surface: '#131B24',
   accent: '#3AD6FF',

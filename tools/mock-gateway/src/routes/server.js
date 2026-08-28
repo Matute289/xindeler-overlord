@@ -6,6 +6,10 @@ const { sendError } = require('../errors');
 
 const router = express.Router();
 
+// OC-69: the real gateway's success responses for every action in this file are empty bodies —
+// `204 No Content` for all of these, `202 Accepted` for `/restart` below (confirmed against
+// `xindeler-zuul/server/src/lifecycle.rs`) — not `200 {ok: true}`. Matched here so local testing
+// actually exercises the same no-body path the client has to handle against production.
 router.post('/start', requireStepUp, (req, res) => {
   scenarios.startServer();
   recordAudit({
@@ -15,7 +19,7 @@ router.post('/start', requireStepUp, (req, res) => {
     payload: {},
     outcome: 'success',
   });
-  res.json({ ok: true });
+  res.status(204).end();
 });
 
 router.post('/stop', requireStepUp, (req, res) => {
@@ -38,7 +42,7 @@ router.post('/stop', requireStepUp, (req, res) => {
     payload: { mode, seconds, reason },
     outcome: 'success',
   });
-  res.json({ ok: true });
+  res.status(204).end();
 });
 
 router.post('/restart', requireStepUp, (req, res) => {
@@ -54,7 +58,7 @@ router.post('/restart', requireStepUp, (req, res) => {
     payload: { seconds, reason },
     outcome: 'success',
   });
-  res.json({ ok: true });
+  res.status(202).end();
 });
 
 router.post('/cancel_shutdown', requireStepUp, (req, res) => {
@@ -77,7 +81,7 @@ router.post('/cancel_shutdown', requireStepUp, (req, res) => {
     payload: {},
     outcome: 'success',
   });
-  res.json({ ok: true });
+  res.status(204).end();
 });
 
 router.post('/disconnect_all', requireStepUp, (req, res) => {
@@ -93,7 +97,7 @@ router.post('/disconnect_all', requireStepUp, (req, res) => {
     payload: {},
     outcome: 'success',
   });
-  res.json({ ok: true });
+  res.status(204).end();
 });
 
 module.exports = router;

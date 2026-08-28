@@ -19,18 +19,17 @@ function clearTimers() {
   }
 }
 
+// OC-67: the real gateway's `GET /logs` returns raw text lines, no structured `{ts,level,target,
+// message}` object (confirmed against `xindeler-zuul`'s real `console.rs`/`ListLogs` source) --
+// formatted here the same way a `tracing`-style line reads, and no `broadcast('log', ...)`
+// anymore either, matching that there is no `log` SSE event server-side (only `status`, see
+// OC-65).
 function pushLogLine(override) {
   const template =
     override || logLineTemplates[Math.floor(Math.random() * logLineTemplates.length)];
-  const line = {
-    ts: new Date().toISOString(),
-    level: template.level,
-    target: template.target,
-    message: template.message,
-  };
+  const line = `${new Date().toISOString()} ${template.level.toUpperCase()} ${template.target}: ${template.message}`;
   state.logBuffer.push(line);
   if (state.logBuffer.length > 500) state.logBuffer.shift();
-  broadcast('log', line);
   return line;
 }
 
@@ -43,44 +42,33 @@ function startLogGenerator() {
   state.logGeneratorTimer = setInterval(pushLogLine, rateMs);
 }
 
+// OC-63: shape matches xindeler-zuul's real `GET /status` (`server/src/status.rs`'s
+// `StatusResponse`/`EngineInfo`) -- `game_server` is `systemctl is-active`'s raw vocabulary, `info`
+// is `null` whenever the engine itself is unreachable (which "stopped"/"starting" both are, on a
+// real server -- there is no engine process to ask yet). No `chunk_count`: the real gateway has no
+// path to it either, see `src/api/schemas.ts`'s comment on `EngineInfoSchema`.
 function statusSnapshot() {
-  if (
-    state.scenario === 'down' ||
-    state.lifecyclePhase === 'stopped' ||
-    state.lifecyclePhase === 'starting'
-  ) {
-    return {
-      service: 'inactive',
-      health: false,
-      version: '0.1.0-mock',
-      started_at: null,
-      uptime_secs: 0,
-      players_online: 0,
-      tick_time_ms: null,
-      entity_count: 0,
-      chunk_count: 0,
-      pending_shutdown: null,
-    };
+  if (state.scenario === 'down' || state.lifecyclePhase === 'stopped') {
+    return { game_server: 'inactive', info: null, restart: null };
   }
-  const base = {
-    service: 'active',
-    health: true,
+  if (state.lifecyclePhase === 'starting') {
+    return { game_server: 'activating', info: null, restart: null };
+  }
+
+  const info = {
     version: '0.1.0-mock',
-    started_at: new Date(state.serverStartedAt).toISOString(),
-    uptime_secs: Math.floor((Date.now() - state.serverStartedAt) / 1000),
-    players_online: players.length,
+    player_count: players.length,
+    shutdown_pending_secs: null,
     tick_time_ms: 45 + Math.floor(Math.random() * 10),
     entity_count: 1200 + Math.floor(Math.random() * 50),
-    chunk_count: 340 + Math.floor(Math.random() * 20),
-    pending_shutdown: null,
+    uptime_secs: Math.floor((Date.now() - state.serverStartedAt) / 1000),
+    shutdown_reason: null,
   };
   if (state.lifecyclePhase === 'draining' && state.drainingCountdown) {
-    base.pending_shutdown = {
-      seconds_left: state.drainingCountdown.secondsLeft,
-      reason: state.shutdownReason || 'Restart solicitado',
-    };
+    info.shutdown_pending_secs = state.drainingCountdown.secondsLeft;
+    info.shutdown_reason = state.shutdownReason || 'Restart solicitado';
   }
-  return base;
+  return { game_server: 'active', info, restart: null };
 }
 
 function beginGracefulStop({ seconds, reason, autoRestart }) {
@@ -100,7 +88,6 @@ function beginGracefulStop({ seconds, reason, autoRestart }) {
   state.drainingCountdown = { secondsLeft: seconds, timer: null };
   state.lifecyclePhase = 'draining';
   state.shutdownReason = reason || null;
-  broadcast('lifecycle', { state: 'draining', seconds_left: seconds });
   broadcast('status', statusSnapshot());
 
   state.drainingCountdown.timer = setInterval(() => {
@@ -109,10 +96,6 @@ function beginGracefulStop({ seconds, reason, autoRestart }) {
 
     if (state.drainingCountdown.secondsLeft > 0) {
       state.lifecyclePhase = 'draining';
-      broadcast('lifecycle', {
-        state: 'draining',
-        seconds_left: state.drainingCountdown.secondsLeft,
-      });
       broadcast('status', statusSnapshot());
       return;
     }
@@ -127,7 +110,6 @@ function beginGracefulStop({ seconds, reason, autoRestart }) {
         state.logGeneratorTimer = null;
       }
     }
-    broadcast('lifecycle', { state: 'stopped' });
     broadcast('status', statusSnapshot());
 
     if (!autoRestart) return; // stays stopped until POST /server/start
@@ -135,14 +117,12 @@ function beginGracefulStop({ seconds, reason, autoRestart }) {
     state.recoveryTimers = [];
     const startingTimer = setTimeout(() => {
       state.lifecyclePhase = 'starting';
-      broadcast('lifecycle', { state: 'starting' });
       broadcast('status', statusSnapshot());
       const runningTimer = setTimeout(() => {
         state.scenario = 'normal';
         state.recoveryTimers = null;
         state.lifecyclePhase = 'running';
         state.shutdownReason = null;
-        broadcast('lifecycle', { state: 'running' });
         broadcast('status', statusSnapshot());
       }, 1500);
       state.recoveryTimers.push(runningTimer);
@@ -193,9 +173,6 @@ function setScenario(name, params) {
   }
 
   broadcast('status', statusSnapshot());
-  if (name !== 'draining') {
-    broadcast('lifecycle', name === 'down' ? { state: 'stopped' } : { state: 'running' });
-  }
 }
 
 function stopImmediately(reason) {
@@ -203,7 +180,6 @@ function stopImmediately(reason) {
   state.scenario = 'down';
   state.lifecyclePhase = 'stopped';
   state.shutdownReason = reason || null;
-  broadcast('lifecycle', { state: 'stopped' });
   broadcast('status', statusSnapshot());
 }
 
@@ -211,14 +187,12 @@ function startServer() {
   if (state.lifecyclePhase === 'running') return; // already running, no-op success
   clearTimers();
   state.lifecyclePhase = 'starting';
-  broadcast('lifecycle', { state: 'starting' });
   broadcast('status', statusSnapshot());
   const runningTimer = setTimeout(() => {
     state.scenario = 'normal';
     startLogGenerator();
     state.lifecyclePhase = 'running';
     state.shutdownReason = null;
-    broadcast('lifecycle', { state: 'running' });
     broadcast('status', statusSnapshot());
   }, 1500);
   state.recoveryTimers = [runningTimer];
@@ -235,7 +209,6 @@ function cancelShutdown() {
   startLogGenerator();
   state.lifecyclePhase = 'running';
   state.shutdownReason = null;
-  broadcast('lifecycle', { state: 'running' });
   broadcast('status', statusSnapshot());
 }
 

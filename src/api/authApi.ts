@@ -12,10 +12,24 @@ export function createAuthApi(http: HttpClient) {
     // bare-path precedent below. No token/expires_at in the response — the session lives entirely
     // in an HttpOnly cookie; native's own way of using a bearer credential is OC-58 (blocked on
     // xindeler-zuul's ZG-52), not this method.
-    login(username: string, password: string, totpCode: string) {
+    // `authTotpCode`: ZG-61 — a second, unrelated TOTP code an operator's own xindeler-auth
+    // account may have enabled (entirely separate from `totpCode`, the operator's Zuul
+    // enrollment). Omitted from the body entirely when not provided, matching the real
+    // gateway's `Option<String>` field — sending `auth_totp_code: undefined` would still
+    // serialize as present-with-null in some JSON.stringify paths, so this builds the body
+    // conditionally rather than always including the key.
+    login(username: string, password: string, totpCode: string, authTotpCode?: string) {
       return http.request(
         '/api/v1/login',
-        { method: 'POST', body: { username, password, totp_code: totpCode } },
+        {
+          method: 'POST',
+          body: {
+            username,
+            password,
+            totp_code: totpCode,
+            ...(authTotpCode ? { auth_totp_code: authTotpCode } : {}),
+          },
+        },
         LoginResponseSchema,
       );
     },

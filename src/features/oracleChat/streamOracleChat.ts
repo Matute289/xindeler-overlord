@@ -55,7 +55,7 @@ export type StreamOracleChatDeps = {
 // invisible to both.
 export async function* streamOracleChat(
   baseUrl: string,
-  body: { message: string; thread_id: string; tier: 'local' | 'bedrock' },
+  body: { message: string; thread_id: string; overrideBudget: boolean },
   signal: AbortSignal,
   deps: StreamOracleChatDeps,
 ): AsyncGenerator<OracleChatStreamEvent> {
@@ -92,7 +92,25 @@ export async function* streamOracleChat(
           ...(authHeader ?? {}),
         },
         credentials: 'include',
-        body: JSON.stringify(body),
+        // ZG-67: `tier: 'bedrock'` is the ONLY valid value on the real gateway (`400
+        // unsupported_tier` for anything else, confirmed by the session that shipped it) --
+        // there is no local tier and never was one (CLAUDE.md's own Q6: Bedrock-exclusive, not
+        // even as a first pass). Hardcoded here rather than exposed as a caller-supplied field,
+        // same reasoning `writeApi.ts`'s `fireOracleEvent` hardcodes `dry_run: false` instead of
+        // taking a `boolean` parameter — there is exactly one real value, so making it a
+        // parameter is a footgun with no upside.
+        // ZG-32: `override_budget` -- real Zuul rejects with `429 budget_exceeded` once the
+        // configured monthly cap is hit, unless this is `true`, and even then only lets the call
+        // through if this session has an active step-up window (`403` otherwise). Unlike `tier`,
+        // this genuinely varies per call (a normal send is always `false`; the override retry
+        // path in `useOracleChatThreads.ts` is the only caller that ever sends `true`), so it
+        // stays a real parameter rather than being hardcoded.
+        body: JSON.stringify({
+          message: body.message,
+          thread_id: body.thread_id,
+          tier: 'bedrock',
+          override_budget: body.overrideBudget,
+        }),
         signal: controller.signal,
       });
     } catch {
@@ -102,7 +120,7 @@ export async function* streamOracleChat(
       if (signal.aborted) {
         throw new ApiError('aborted', 'La respuesta se canceló', 0);
       }
-      throw new ApiError('network_error', 'No se pudo conectar con el gateway', 0);
+      throw new ApiError('network_error', 'No se pudo conectar con Zuul', 0);
     }
     // Headers are in — that's progress; the deadline now covers the stream body instead.
     armTimeout(IDLE_TIMEOUT_MS);
@@ -121,7 +139,7 @@ export async function* streamOracleChat(
       }
       throw new ApiError(
         'unknown_error',
-        `Error inesperado del gateway (${response.status})`,
+        `Error inesperado de Zuul (${response.status})`,
         response.status,
       );
     }
@@ -129,7 +147,7 @@ export async function* streamOracleChat(
     if (!response.body) {
       throw new ApiError(
         'invalid_response',
-        'La respuesta del gateway no tiene el formato esperado',
+        'La respuesta de Zuul no tiene el formato esperado',
         response.status,
       );
     }
@@ -167,13 +185,20 @@ export async function* streamOracleChat(
       // `StreamClient.ts` does on its own read-loop failure — a swallowed read error was
       // exactly what made this path undiagnosable before.
       if (timedOut) {
-        throw new ApiError('timeout', 'La respuesta del gateway se quedó sin avanzar', 0);
+        // Ghostbusters reference (Matías's request, verified verbatim in his own script PDF,
+        // line 1323): Venkman's line right after the Sedgewick Hotel ghost hits him — fits a
+        // stream that just went quiet and gross-surprise-stopped-making-sense either way.
+        throw new ApiError(
+          'timeout',
+          'La respuesta de Zuul se quedó sin avanzar (¿nos habrán baboseado?)',
+          0,
+        );
       }
       if (signal.aborted) {
         throw new ApiError('aborted', 'La respuesta se canceló', 0);
       }
       console.warn('[oracle-chat] stream read loop ended', error);
-      throw new ApiError('network_error', 'Se cortó la conexión con el gateway', 0);
+      throw new ApiError('network_error', 'Se cortó la conexión con Zuul', 0);
     }
   } finally {
     if (timeoutId !== null) clearTimeout(timeoutId);

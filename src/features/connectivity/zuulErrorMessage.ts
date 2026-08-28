@@ -3,7 +3,9 @@ import type { EnvironmentId } from '@/config/environments';
 
 const VPN_SUSPECT_CODES = new Set(['network_error', 'timeout']);
 
-export const VPN_DOWN_MESSAGE = 'No llego al gateway — ¿está la VPN prendida?';
+// The parenthetical is a deliberate, quiet Ghostbusters reference (Matías's request) — meant to
+// read fine to anyone who's never seen the movie, and land as a wink for anyone who has.
+export const VPN_DOWN_MESSAGE = 'No llego a Zuul — ¿está la VPN prendida? (¿A quién vas a llamar?)';
 
 export function isLikelyVpnDown(environmentId: EnvironmentId, error: Error): boolean {
   return (
@@ -14,6 +16,6 @@ export function isLikelyVpnDown(environmentId: EnvironmentId, error: Error): boo
   );
 }
 
-export function gatewayErrorMessage(environmentId: EnvironmentId, error: Error): string {
+export function zuulErrorMessage(environmentId: EnvironmentId, error: Error): string {
   return isLikelyVpnDown(environmentId, error) ? VPN_DOWN_MESSAGE : error.message;
 }

@@ -11,6 +11,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: 'com.xindeler.overlord',
+    supportsTablet: true,
     config: {
       usesNonExemptEncryption: false,
     },

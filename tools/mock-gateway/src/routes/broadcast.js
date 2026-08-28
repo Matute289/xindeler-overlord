@@ -1,6 +1,5 @@
 const express = require('express');
 const { state } = require('../state');
-const { broadcast } = require('../sse');
 const { recordAudit } = require('../audit');
 const { sendError } = require('../errors');
 
@@ -16,10 +15,16 @@ router.post('/', (req, res) => {
     return sendError(res, 429, 'rate_limited', 'Esperá unos segundos antes de enviar otro mensaje');
   }
   state.lastBroadcastAt = Date.now();
-  const chatEntry = { author: '[Sistema]', message: msg, ts: new Date().toISOString() };
+  // OC-67: matches the real `ChatMessage` shape (`{time, parties, content}`) — a system broadcast
+  // doesn't map to any of the real `ChatParties` enum's variants (all of them carry a real
+  // `PlayerInfo`), so this is this mock's own reasonable stand-in, not a confirmed real shape.
+  const chatEntry = {
+    time: new Date().toISOString(),
+    parties: { System: null },
+    content: msg,
+  };
   state.chatHistory.push(chatEntry);
   if (state.chatHistory.length > 500) state.chatHistory.shift();
-  broadcast('chat', chatEntry);
   recordAudit({
     operatorUuid: req.operatorUuid,
     operatorUsername: req.operator,

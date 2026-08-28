@@ -23,6 +23,9 @@ const state = {
   streamClients: new Set(), // Set<express.Response> currently open on /api/v1/stream
   auditLog: [], // { id, operator_uuid, operator_username, action, payload, outcome, created_at }
   pushTokens: [], // { operator, expoPushToken, platform, createdAt }
+  // ZG-35: { operator, endpoint, p256dh, auth, createdAt } — mirrors `pushTokens` above, one row
+  // per (operator, endpoint), matching real Zuul's `web_push_subscriptions` table.
+  webPushSubscriptions: [],
   oracleEnabled: true,
   oracleEvents: new Map(), // id -> { dm_event, status: 'staging' | 'loaded', stagedAt }
   lastBroadcastAt: 0,
@@ -39,6 +42,10 @@ const state = {
       added_at: Math.floor(Date.now() / 1000),
     },
   ],
+  // EXPECTED SHAPE, NOT CONFIRMED against a real backend — see docs/specs/2026-08-23-player-
+  // moderation-master-detail-design.md. Tracks which characters are currently suspended, keyed by
+  // character_id, for the mock-only ban-by-character feature (Task 2/5).
+  suspendedCharacterIds: new Set(),
 };
 
 module.exports = { state, MOCK_OPERATOR_UUID };

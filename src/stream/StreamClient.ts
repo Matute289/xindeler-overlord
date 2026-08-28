@@ -1,13 +1,7 @@
 import type { ZodType } from 'zod';
 
-import {
-  AuditRowSchema,
-  ChatMessageSchema,
-  LifecycleEventSchema,
-  LogLineSchema,
-  StatusSchema,
-} from '../api/schemas';
-import type { AuditRow, ChatMessage, LifecycleEvent, LogLine, Status } from '../api/schemas';
+import { AuditRowSchema, ChatMessageSchema, LogLineSchema, StatusSchema } from '../api/schemas';
+import type { AuditRow, ChatMessage, LogLine, Status } from '../api/schemas';
 import { parseSseStream } from './sseParser';
 
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -15,11 +9,14 @@ const BACKOFF_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
 
 export type StreamStatus = 'connecting' | 'open' | 'reconnecting';
 
+// OC-63: there is no `lifecycle` SSE event on the real gateway -- it never existed there, only in
+// this repo's own speculative contract/mock. `status` (pushed on every change) already carries
+// `game_server`/`info.shutdown_pending_secs`/`info.shutdown_reason`, which is everything
+// `useLifecycleState` needs; see that hook for how it derives the four `LifecycleState` values.
 export type StreamEventMap = {
   status: Status;
   log: LogLine;
   chat: ChatMessage;
-  lifecycle: LifecycleEvent;
   audit: AuditRow;
 };
 
@@ -29,7 +26,6 @@ const STREAM_SCHEMAS: { [E in StreamEventName]: ZodType<StreamEventMap[E]> } = {
   status: StatusSchema,
   log: LogLineSchema,
   chat: ChatMessageSchema,
-  lifecycle: LifecycleEventSchema,
   audit: AuditRowSchema,
 };
 

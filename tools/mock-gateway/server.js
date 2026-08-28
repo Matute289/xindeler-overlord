@@ -15,6 +15,14 @@ const mockRoutes = require('./src/routes/mock');
 const serverRoutes = require('./src/routes/server');
 const broadcastRoutes = require('./src/routes/broadcast');
 const pushRoutes = require('./src/routes/push');
+const pushWebRoutes = require('./src/routes/pushWeb');
+const playersDirectoryRoutes = require('./src/routes/playersDirectory').router;
+const playerDetailRoutes = require('./src/routes/playerDetail');
+const playerFlagRoutes = require('./src/routes/playerFlag');
+const playerKickRoutes = require('./src/routes/playerKick');
+const playerBanRoutes = require('./src/routes/playerBan');
+const playerUnbanRoutes = require('./src/routes/playerUnban');
+const playerCharacterSuspendRoutes = require('./src/routes/playerCharacterSuspend');
 const oracleEventsRoutes = require('./src/routes/oracleEvents');
 const oraclePresetsRoutes = require('./src/routes/oraclePresets');
 const oracleStageRoutes = require('./src/routes/oracleStage');
@@ -41,16 +49,51 @@ app.use('/api/v1', authRoutes);
 app.use('/api/v1/step-up', requireAuth, requireCsrf, stepUpRoutes);
 
 app.use('/api/v1/status', requireAuth, statusRoutes);
+// Order matters: /players/directory and /players/2fa/unlock must be mounted before the generic
+// /players/:segment route below, or Express would match the more specific paths against :segment
+// first (an Express app.use prefix match tries routers in registration order, and playersRoutes/
+// playerDetailRoutes have no way to know a still-unregistered, more-specific router exists).
+app.use('/api/v1/players/directory', requireAuth, playersDirectoryRoutes);
 app.use('/api/v1/players', requireAuth, playersRoutes);
 app.use('/api/v1/players/2fa/unlock', requireAuth, requireCsrf, requireStepUp, playerUnlockRoutes);
+app.use(
+  '/api/v1/players/:segment/flags',
+  requireAuth,
+  requireCsrf,
+  requireStepUp,
+  playerFlagRoutes,
+);
+app.use('/api/v1/players/:segment/kick', requireAuth, requireCsrf, playerKickRoutes);
+app.use('/api/v1/players/:segment/ban', requireAuth, requireCsrf, requireStepUp, playerBanRoutes);
+app.use(
+  '/api/v1/players/:segment/unban',
+  requireAuth,
+  requireCsrf,
+  requireStepUp,
+  playerUnbanRoutes,
+);
+app.use(
+  '/api/v1/players/:segment/characters',
+  requireAuth,
+  requireCsrf,
+  requireStepUp,
+  playerCharacterSuspendRoutes,
+);
+app.use('/api/v1/players', requireAuth, playerDetailRoutes);
 app.use('/api/v1/logs', requireAuth, logsRoutes);
 app.use('/api/v1/chat', requireAuth, chatRoutes);
 app.use('/api/v1/chronicle', requireAuth, chronicleRoutes);
 app.use('/api/v1/audit', requireAuth, requireStepUp, auditRoutes);
 app.use('/api/v1/admin/operators', requireAuth, requireSuperuser, adminOperatorsRoutes);
-app.use('/api/v1/stream', requireAuth, streamRoutes);
+// OC-63: matches xindeler-zuul's real mount point (`server/src/web.rs`), not `/api/v1/stream`.
+app.use('/api/v1/stream/status', requireAuth, streamRoutes);
 app.use('/api/v1/server', requireAuth, requireCsrf, serverRoutes);
-app.use('/api/v1/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
+// OC-68: matches xindeler-zuul's real route (`server/src/web.rs`), not `/api/v1/broadcast`.
+app.use('/api/v1/server/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
+// ZG-35: mounted before `/api/v1/push` even though Express would fall through correctly either
+// way (that router only matches `/register`/`/unregister`, never `/web/*`) -- more specific
+// prefix first reads clearer regardless.
+app.use('/api/v1/push/web', requireAuth, requireCsrf, pushWebRoutes);
 app.use('/api/v1/push', requireAuth, requireCsrf, pushRoutes);
 app.use('/api/v1/oracle/events', requireAuth, oracleEventsRoutes);
 app.use('/api/v1/oracle/presets', requireAuth, oraclePresetsRoutes);
@@ -86,17 +129,19 @@ setInterval(() => {
   broadcast('status', statusSnapshot());
 }, 5000);
 
+// OC-65: no `broadcast('chat', ...)` here anymore — there is no `chat` SSE event server-side,
+// only `status` (see `StreamClient.ts`). Still appends to `state.chatHistory` so the REST
+// bootstrap (`GET /chat/history`) keeps producing fresh-looking data on each fetch.
 let chatIndex = 0;
 setInterval(() => {
   if (state.scenario === 'down') return; // no chat activity while the server is "down"
   const message = {
     ...chatMessages[chatIndex % chatMessages.length],
-    ts: new Date().toISOString(),
+    time: new Date().toISOString(),
   };
   chatIndex += 1;
   state.chatHistory.push(message);
   if (state.chatHistory.length > 500) state.chatHistory.shift();
-  broadcast('chat', message);
 }, 15000);
 
 setScenario('normal');

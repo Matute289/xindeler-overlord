@@ -2,12 +2,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/api/ApiContext';
-import type { LogLine } from '@/api/schemas';
 import { queryKeys } from '@/api/queryClient';
 import { useAuthErrorRouting } from '@/auth/useAuthErrorRouting';
 import { useStreamEvent, useStreamStatus } from '@/stream/StreamContext';
 
-const BOOTSTRAP_LIMIT = 200;
+// OC-67: the real gateway hardcodes a 30-line cap in its `ListLogs` handler and ignores any
+// `limit` query param entirely (`xindeler-new-horizon/server-cli/src/main.rs`, no `Query`
+// extractor on the gateway side either) — asking for more than that never returns more than that,
+// so this now matches what the backend actually offers instead of a number the client made up.
+const BOOTSTRAP_LIMIT = 30;
 const MAX_BUFFERED_LOGS = 500;
 const FLUSH_INTERVAL_MS = 150;
 
@@ -25,7 +28,10 @@ let nextLogSeq = 0;
 // every flush and defeating `LogRow`'s memoization. `_seq` is a monotonic client-side sequence
 // number stamped once per line, at the two points a line ever enters the buffer (bootstrap fetch,
 // stream push) — never reassigned afterward.
-export type SequencedLogLine = LogLine & { _seq: number };
+// OC-67: `line` is a bare string (the real gateway sends raw text lines, no structured fields —
+// see `LogLineSchema`'s own comment). `_seq` still exists for the same reason it always did: a
+// stable `FlatList` key that survives `.slice(-MAX_BUFFERED_LOGS)` trimming the oldest entries.
+export type SequencedLogLine = { line: string; _seq: number };
 
 // Module-level, not an inline arrow in the `useQuery` call: TanStack's `select` memoization
 // requires the SAME function reference across renders to skip re-running it (it compares
@@ -56,7 +62,7 @@ export function useLogsQuery() {
     // stamp-once operation.
     queryFn: async () => {
       const rows = await api.read.getLogs(BOOTSTRAP_LIMIT);
-      return rows.map((row): SequencedLogLine => ({ ...row, _seq: nextLogSeq++ }));
+      return rows.map((line): SequencedLogLine => ({ line, _seq: nextLogSeq++ }));
     },
     // Cap enforcement lives here so both writers (this bootstrap fetch and the flush effect's
     // setQueryData below) share one chokepoint — previously only the flush path capped at
@@ -86,8 +92,12 @@ export function useLogsQuery() {
   // lines in a ref (mutating a ref triggers no re-render) and flush them on a fixed interval.
   const pendingLines = useRef<SequencedLogLine[]>([]);
 
+  // OC-65: this never actually fires against the real gateway today — there is no `log` SSE
+  // event server-side, only `status` (see `StreamClient.ts`'s own comment). Left wired up rather
+  // than ripped out: harmless (a subscription with no publisher), and the flush/buffer machinery
+  // below is worth keeping in place for if/when a real live-log push mechanism ever exists.
   useStreamEvent('log', (line) => {
-    pendingLines.current.push({ ...line, _seq: nextLogSeq++ });
+    pendingLines.current.push({ line, _seq: nextLogSeq++ });
   });
 
   useEffect(() => {

@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useStreamStatus } from '@/stream/StreamContext';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
@@ -32,13 +32,12 @@ function formatUptime(seconds: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-function formatStartedAt(startedAt: string | null): string {
-  if (!startedAt) return '—';
-  const date = new Date(startedAt);
-  // StatusSchema only validates `z.string().nullable()`, nothing about date-ness — a malformed
-  // value makes `new Date(x)` an Invalid Date, and formatting that throws a RangeError. No
-  // ErrorBoundary exists anywhere in this app, so an unguarded throw here would unmount the whole
-  // app rather than just show a bad timestamp.
+// OC-63: xindeler-zuul's real `EngineInfo` has no `started_at` field at all (`info.uptime_secs`
+// is the only timing data it sends) -- derived here instead of on the gateway, which is a purely
+// cosmetic "when did this happen" convenience, not something worth a wire-format request.
+function formatStartedAt(uptimeSecs: number | null): string {
+  if (uptimeSecs === null) return '—';
+  const date = new Date(Date.now() - uptimeSecs * 1000);
   if (Number.isNaN(date.getTime())) return '—';
   return dateTimeFormat.format(date);
 }
@@ -222,12 +221,16 @@ export function StatusScreen() {
   }
 
   // Finding 4: disconnect-all produces no lifecycle change, so a legitimate confirmed tap
-  // otherwise leaves zero feedback. `run()`'s boolean return is used rather than reading
-  // `disconnectAllAction.error` right after the await — that reads a stale, pre-call value from
-  // this closure, not the fresh post-call state.
+  // otherwise leaves zero feedback. `run()`'s resolved value is used (via `!== null`) rather than
+  // reading `disconnectAllAction.error` right after the await — that reads a stale, pre-call value
+  // from this closure, not the fresh post-call state.
+  // OC-71: `!== null`, not a truthy check — `disconnectAll()` resolves to `void` (real Zuul sends
+  // `204 No Content`, no body), so a successful call resolves `undefined`, which a bare `if (ok)`
+  // would misclassify as failure. `run()`'s own contract is `null` for failure/cancel, anything
+  // else (including `undefined`) for success.
   async function handleDisconnectAll() {
-    const ok = await disconnectAllAction.run();
-    if (ok) {
+    const result = await disconnectAllAction.run();
+    if (result !== null) {
       setDisconnectedAt(Date.now());
       setTimeout(() => setDisconnectedAt(null), 4000);
     }
@@ -239,13 +242,15 @@ export function StatusScreen() {
   // bootstrap-retry failure must not blank a screen that already has something to show.
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Status" error={query.error} />;
+      return <ZuulErrorEmpty title="Status" error={query.error} />;
     }
     return <Empty title="Status" message="Cargando…" />;
   }
 
   const status = query.data;
-  const isUp = status.service === 'active' && status.health;
+  // OC-63: there is no `health` field on the real gateway -- the equivalent signal is whether the
+  // engine actually answered (`info !== null`), same as `status.rs`'s own doc comment on `info`.
+  const isUp = status.game_server === 'active' && status.info !== null;
 
   function handleSheetConfirm() {
     // Finding 8: re-check the precondition the operator saw when they tapped the button is still
@@ -284,24 +289,25 @@ export function StatusScreen() {
       {state === 'draining' && (
         <View className="mt-4 items-center rounded-lg bg-danger px-4 py-3 dark:bg-night-danger">
           <Text className="text-white" style={{ fontFamily: fonts.semibold }}>
-            {`Deteniéndose en ${lifecycle?.secondsLeft ?? status.pending_shutdown?.seconds_left ?? '—'}s${
-              status.pending_shutdown?.reason ? ` — ${status.pending_shutdown.reason}` : ''
+            {`Deteniéndose en ${lifecycle?.secondsLeft ?? status.info?.shutdown_pending_secs ?? '—'}s${
+              status.info?.shutdown_reason ? ` — ${status.info.shutdown_reason}` : ''
             }`}
           </Text>
         </View>
       )}
 
       <View className="mt-6">
-        <StatRow label="Versión" value={status.version} />
-        <StatRow label="Uptime" value={formatUptime(status.uptime_secs)} />
-        <StatRow label="Jugadores" value={String(status.players_online)} />
-        <StatRow
-          label="Tick time"
-          value={status.tick_time_ms !== null ? `${status.tick_time_ms} ms` : '—'}
-        />
-        <StatRow label="Entidades" value={String(status.entity_count)} />
-        <StatRow label="Chunks" value={String(status.chunk_count)} />
-        <StatRow label="Iniciado" value={formatStartedAt(status.started_at)} />
+        {/* OC-63: every stat below is `info`-sourced -- `null` whenever the engine itself can't be
+            reached, which `game_server` alone can't distinguish from "reachable but the value is
+            zero." No "Chunks" row: xindeler-zuul has no path from the engine's real chunk gauges
+            (Prometheus-only, `server/src/metrics.rs`) to `EngineInfo` -- see the schema's own
+            comment for why this isn't faked instead of dropped. */}
+        <StatRow label="Versión" value={status.info?.version ?? '—'} />
+        <StatRow label="Uptime" value={status.info ? formatUptime(status.info.uptime_secs) : '—'} />
+        <StatRow label="Jugadores" value={status.info ? String(status.info.player_count) : '—'} />
+        <StatRow label="Tick time" value={status.info ? `${status.info.tick_time_ms} ms` : '—'} />
+        <StatRow label="Entidades" value={status.info ? String(status.info.entity_count) : '—'} />
+        <StatRow label="Iniciado" value={formatStartedAt(status.info?.uptime_secs ?? null)} />
 
         {/* OC-47: styled as a StatRow-shaped row (same border-b/label convention as the rows
             above) with a pill control matching FollowTailToggle's existing on/off pill pattern

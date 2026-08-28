@@ -2,8 +2,10 @@ import * as Clipboard from 'expo-clipboard';
 import { memo, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { isApiError } from '@/api';
 import type { ChatMessage, DmEvent } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
+import { describeChatMessage } from '@/features/chat/describeChatMessage';
 import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
@@ -12,6 +14,7 @@ import type { ChatTurn } from './types';
 export const ChatTurnRow = memo(function ChatTurnRow({
   turn,
   onRetry,
+  onOverrideRetry,
   onApply,
 }: {
   turn: ChatTurn;
@@ -19,6 +22,12 @@ export const ChatTurnRow = memo(function ChatTurnRow({
   // `() => retryTurn(threadId, turn.id)` arrow is rebuilt on every `renderItem` call, which made
   // this component's `memo()` a no-op. The screen hands down one stable callback instead.
   onRetry: (turnId: string) => void;
+  // ZG-32: a plain retry after `budget_exceeded` would fail identically every time — the budget
+  // is still exceeded, nothing about a bare retry changes that. Offered instead of the plain
+  // retry button for exactly this one failure reason; the screen owns the confirm-by-typing gate
+  // before this actually fires (spending past a configured cap deserves the same explicit
+  // confirmation `OracleComposerScreen.tsx`'s own high-impact-override gate requires).
+  onOverrideRetry: (turnId: string) => void;
   onApply: (draft: DmEvent) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -26,6 +35,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
   // arrived is a truncated fragment. Rendering it identically to a completed reply (and letting
   // it be copied out of the app) contradicts the hook's own failure classification.
   const failed = turn.status === 'failed';
+  const budgetExceeded = isApiError(turn.error) && turn.error.code === 'budget_exceeded';
 
   async function handleCopy() {
     await Clipboard.setStringAsync(turn.text);
@@ -33,17 +43,18 @@ export const ChatTurnRow = memo(function ChatTurnRow({
     setTimeout(() => setCopied(false), 1500);
   }
 
+  // px-6 to line up with OracleChatScreen's px-6 header/thread chips and its composer — this
+  // screen is px-6 throughout, unlike ChatScreen.tsx which is px-4 throughout (2026-08-27
+  // tablet review).
   return (
-    <View className="border-b border-steel-dark px-4 py-2 dark:border-night-steel-dark">
+    <View className="border-b border-steel-dark px-6 py-2 dark:border-night-steel-dark">
       <Text
         className="text-accent-cyan dark:text-night-accent-cyan"
         style={{ fontFamily: fonts.semibold }}
       >
-        {turn.role === 'operator'
-          ? 'Operador'
-          : turn.tier === 'bedrock'
-            ? 'ORACLE (Bedrock)'
-            : 'ORACLE'}
+        {/* ZG-67: no more `tier` -- Bedrock is the only tier that ever existed server-side, so
+            there is nothing left to distinguish an assistant turn by. */}
+        {turn.role === 'operator' ? 'Operador' : 'ORACLE'}
       </Text>
       {turn.contextSnippets && turn.contextSnippets.length > 0 && (
         <View className="mt-1 rounded-lg border border-steel-dark p-2 dark:border-night-steel-dark">
@@ -53,15 +64,18 @@ export const ChatTurnRow = memo(function ChatTurnRow({
           >
             Contexto citado (chat de jugadores, no confiable)
           </Text>
-          {turn.contextSnippets.map((snippet: ChatMessage, index: number) => (
-            <Text
-              key={index}
-              className="mt-0.5 text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular, flexShrink: 1 }}
-            >
-              {`${snippet.author}: ${snippet.message}`}
-            </Text>
-          ))}
+          {turn.contextSnippets.map((snippet: ChatMessage, index: number) => {
+            const { speaker, text } = describeChatMessage(snippet);
+            return (
+              <Text
+                key={index}
+                className="mt-0.5 text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.regular, flexShrink: 1 }}
+              >
+                {`${speaker}: ${text}`}
+              </Text>
+            );
+          })}
         </View>
       )}
       {!failed && (
@@ -83,7 +97,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
             </Text>
           )}
           <Pressable
-            onPress={() => onRetry(turn.id)}
+            onPress={() => (budgetExceeded ? onOverrideRetry(turn.id) : onRetry(turn.id))}
             accessibilityRole="button"
             className="mt-1 items-center"
           >
@@ -91,7 +105,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
               className="text-accent-cyan dark:text-night-accent-cyan"
               style={{ fontFamily: fonts.semibold }}
             >
-              Reintentar
+              {budgetExceeded ? 'Reintentar anulando el presupuesto' : 'Reintentar'}
             </Text>
           </Pressable>
         </View>
@@ -105,25 +119,31 @@ export const ChatTurnRow = memo(function ChatTurnRow({
           >
             Propuesta recibida (borrador)
           </Text>
-          <Text
-            className="mt-1 text-steel-light dark:text-night-steel-light"
-            style={{ fontFamily: fonts.regular }}
-          >
-            {`kind: ${turn.draft.kind}`}
-          </Text>
-          {turn.draft.template_id && (
-            <Text
-              className="text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular }}
-            >
-              {`template_id: ${turn.draft.template_id}`}
-            </Text>
-          )}
+          {/* OC-72: real `DmEvent` has no `kind` — `spawning_rules`/`atmosphere` both always
+              apply, they're not mutually exclusive alternatives. Summarizes the fields an
+              operator would actually want a glance at before tapping Aplicar. */}
+          {turn.draft.spawning_rules?.entity_templates &&
+            turn.draft.spawning_rules.entity_templates.length > 0 && (
+              <Text
+                className="mt-1 text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.regular }}
+              >
+                {`templates: ${turn.draft.spawning_rules.entity_templates.join(', ')}`}
+              </Text>
+            )}
           <Text
             className="text-steel-light dark:text-night-steel-light"
             style={{ fontFamily: fonts.regular }}
           >
-            {`intensity: ${turn.draft.intensity}  radio: ${turn.draft.radius}`}
+            {`cantidad: ${turn.draft.spawning_rules?.spawn_count ?? 0}  radio: ${
+              turn.draft.spawning_rules?.spawn_radius ?? 0
+            }`}
+          </Text>
+          <Text
+            className="text-steel-light dark:text-night-steel-light"
+            style={{ fontFamily: fonts.regular }}
+          >
+            {`clima: ${turn.draft.atmosphere?.weather_effect ?? 'Clear'}`}
           </Text>
           <Pressable
             onPress={() => onApply(turn.draft as DmEvent)}

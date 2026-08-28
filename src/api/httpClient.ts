@@ -22,6 +22,16 @@ type RequestOptions = {
   // `useDestructiveAction`'s retry-once-on-403 step-up flow) has no way to make the two attempts
   // share one idempotency key, since a fresh one was generated inside every `request()` call.
   idempotencyKey?: string;
+  // OC-70: opt-in for the handful of routes whose body genuinely carries useful, schema-shaped
+  // data even on a non-2xx response — confirmed real for `POST /players/{segment}/ban`/`/unban`,
+  // whose `outcome: 'failed'` case ships on a `502` (`xindeler-zuul/server/src/players.rs`) but
+  // still serializes the same `BanPlayerResponse`/`UnbanPlayerResponse` shape as every other
+  // outcome. Without this, that body never reaches the caller's own `outcome`-based UI copy — it
+  // gets treated as a generic transport error before ever being read. Deliberately per-call, not
+  // global: most non-2xx bodies are genuinely just errors, and blindly parsing all of them against
+  // `responseSchema` would risk masking a real failure as a false "success" for routes that were
+  // never designed with this dual meaning.
+  parseNonOkBodyAsData?: boolean;
 };
 
 export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
@@ -59,11 +69,11 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         if (err instanceof Error && err.name === 'AbortError') {
           throw new ApiError('timeout', 'La solicitud tardó demasiado', 0);
         }
-        throw new ApiError('network_error', 'No se pudo conectar con el gateway', 0);
+        throw new ApiError('network_error', 'No se pudo conectar con Zuul', 0);
       }
 
       if (!response.ok) {
-        // The real gateway sends a plain-text body (not this doc's own JSON envelope) for many
+        // The real Zuul sends a plain-text body (not this doc's own JSON envelope) for many
         // error responses -- confirmed 2026-08-15 (OC-54) and again during OC-59's own
         // investigation (OC-57's admin routes, OC-59's audit/broadcast routes). A `Response`
         // body can only be consumed once, so read it as text first and attempt to parse THAT as
@@ -75,6 +85,15 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         } catch {
           envelopeCandidate = null;
         }
+        // OC-70: checked before the error-envelope path below — a route that opted in and whose
+        // body genuinely matches its own success shape gets returned as data, not thrown as an
+        // error, regardless of status code.
+        if (options.parseNonOkBodyAsData && responseSchema && envelopeCandidate !== null) {
+          const asData = responseSchema.safeParse(envelopeCandidate);
+          if (asData.success) {
+            return asData.data;
+          }
+        }
         const parsed = ErrorEnvelopeSchema.safeParse(envelopeCandidate);
         if (parsed.success) {
           throw new ApiError(parsed.data.error.code, parsed.data.error.message, response.status);
@@ -85,14 +104,42 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         // shouldn't render unbounded).
         const MAX_RAW_ERROR_LEN = 500;
         const trimmed = rawText.trim().slice(0, MAX_RAW_ERROR_LEN);
+        // OC-64: the real gateway's plain-text auth rejections carry no JSON code at all (see the
+        // comment above), so `AuthContext.handleAuthError`'s code-based check
+        // (`session_expired`/`unauthorized`/`invalid_csrf`) never fired against production --
+        // every session expiry/revocation fell through to `unknown_error` and left the app stuck
+        // showing `authenticated`. A 401 here always means "not logged in" server-side
+        // (`auth_extractor.rs`/`login.rs`), so it's safe to classify unconditionally.
+        // A 403's plain-text body still needs distinguishing: `require_step_up` (`lifecycle.rs`)
+        // sends "step-up required" for a normal, recoverable, non-auth-failure state that
+        // `useDestructiveAction` already handles by retrying on `status === 403` alone (never
+        // reads `code` for this) -- classifying it as `invalid_csrf` here would incorrectly log
+        // the operator out of an otherwise-healthy session. `authorize`'s own CSRF check sends
+        // "invalid csrf token", which genuinely does warrant one.
+        let code = 'unknown_error';
+        if (response.status === 401) {
+          code = 'unauthorized';
+        } else if (response.status === 403) {
+          const lower = trimmed.toLowerCase();
+          if (lower.includes('csrf')) {
+            code = 'invalid_csrf';
+          } else if (lower.includes('step-up') || lower.includes('step up')) {
+            code = 'step_up_required';
+          }
+        }
         throw new ApiError(
-          'unknown_error',
-          trimmed.length > 0 ? trimmed : `Error inesperado del gateway (${response.status})`,
+          code,
+          trimmed.length > 0 ? trimmed : `Error inesperado de Zuul (${response.status})`,
           response.status,
         );
       }
 
-      if (response.status === 204) {
+      // OC-69: `202` (only ever used for `POST /server/restart`, confirmed the sole real use of
+      // that status anywhere in `xindeler-zuul`) carries no body either, same as `204` -- without
+      // this, `restartServer()` (which used to pass a `{ok:true}`-shaped schema here) tried to
+      // parse an empty body, failed, and threw `invalid_response` on every restart the operator
+      // issued, even when the restart itself had genuinely just been accepted.
+      if (response.status === 204 || response.status === 202) {
         return undefined as T;
       }
 
@@ -100,7 +147,11 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
       if (json === PARSE_FAILED) {
         throw new ApiError(
           'invalid_response',
-          'La respuesta del gateway no tiene el formato esperado',
+          // Ghostbusters reference (Matías's request), quiet enough to still read fine to anyone
+          // who's never seen the movie: "dogs and cats living together" is Peter Venkman's line
+          // for total chaos — not found verbatim in Matías's own script PDF (likely an ad-lib,
+          // per Matías), but still one of the most widely recognized lines from the film.
+          "La respuesta de Zuul no tiene el formato esperado (esto sí que es 'perros y gatos viviendo juntos')",
           response.status,
         );
       }
@@ -111,11 +162,60 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
       if (!result.success) {
         throw new ApiError(
           'invalid_response',
-          'La respuesta del gateway no tiene el formato esperado',
+          // Ghostbusters reference (Matías's request), quiet enough to still read fine to anyone
+          // who's never seen the movie: "dogs and cats living together" is Peter Venkman's line
+          // for total chaos — not found verbatim in Matías's own script PDF (likely an ad-lib,
+          // per Matías), but still one of the most widely recognized lines from the film.
+          "La respuesta de Zuul no tiene el formato esperado (esto sí que es 'perros y gatos viviendo juntos')",
           response.status,
         );
       }
       return result.data;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // ZG-35: a dedicated, minimal path for the one route that isn't JSON at all —
+  // `GET /push/web/vapid-public-key` returns the raw base64url VAPID key as a plain-text body
+  // (or a plain-text error, same shape `push.rs`'s existing Expo routes already use, not
+  // `oracle.rs`'s newer `{error:{code,message}}` envelope). `request()`'s own success path always
+  // calls `response.json()`, which would throw on this route's real body — a separate function
+  // rather than another `RequestOptions` flag threaded through every JSON-shaped branch above.
+  async function requestText(path: string, options: { timeoutMs?: number } = {}): Promise<string> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    try {
+      const authHeader = await deps.getAuthHeader();
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}${path}`, {
+          method: 'GET',
+          headers: { ...(authHeader ?? {}) },
+          credentials: 'include',
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new ApiError('timeout', 'La solicitud tardó demasiado', 0);
+        }
+        throw new ApiError('network_error', 'No se pudo conectar con Zuul', 0);
+      }
+      const rawText = (await response.text().catch(() => '')).trim();
+      if (!response.ok) {
+        // 503 means Web Push isn't configured server-side yet (no VAPID key generated) — a real,
+        // expected state until an operator sets it up, not a genuine error the operator needs
+        // alarming language for.
+        let code = 'unknown_error';
+        if (response.status === 401) code = 'unauthorized';
+        else if (response.status === 503) code = 'not_configured';
+        throw new ApiError(
+          code,
+          rawText.length > 0 ? rawText : `Error inesperado de Zuul (${response.status})`,
+          response.status,
+        );
+      }
+      return rawText;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -148,5 +248,5 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
     throw lastError;
   }
 
-  return { request, requestWithRetry };
+  return { request, requestWithRetry, requestText };
 }

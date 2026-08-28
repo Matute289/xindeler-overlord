@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useStepUpGate } from '@/auth/useStepUpGate';
 import { Button } from '@/ui/Button';
 import { Empty } from '@/ui/Empty';
@@ -61,7 +61,7 @@ function AuditList({ onStepUpLapsed }: { onStepUpLapsed: () => void }) {
     try {
       // Inspect THIS refetch's own result rather than watching `query.error` generally —
       // the initial load's error path is already handled below (`query.data === undefined`
-      // renders `GatewayErrorEmpty`), and a plain `useEffect` on `query.error` would also fire
+      // renders `ZuulErrorEmpty`), and a plain `useEffect` on `query.error` would also fire
       // on every future mount of this component with the SAME cached error object still sitting
       // in the query cache (TanStack Query cache persists across this component's unmount when
       // the gate re-arms and later closes again), re-triggering the gate before its own fresh
@@ -103,7 +103,7 @@ function AuditList({ onStepUpLapsed }: { onStepUpLapsed: () => void }) {
   // any `errorUpdatedAt` from before that mount is leftover from a previous gate session and is
   // ignored; only a genuinely new error stamped AFTER this mount re-arms. `query.data !==
   // undefined` further scopes this to "already had a successful load, then a later refetch
-  // failed" — the very first fetch failing takes the separate `GatewayErrorEmpty` branch below
+  // failed" — the very first fetch failing takes the separate `ZuulErrorEmpty` branch below
   // instead. `handledErrorAtRef` is a last-mile guard against calling `onStepUpLapsed` twice for
   // the same error should this effect re-run before the resulting re-arm unmounts AuditList.
   // Captured lazily on this effect's first run (mount), not `useRef(Date.now())` — calling
@@ -135,7 +135,7 @@ function AuditList({ onStepUpLapsed }: { onStepUpLapsed: () => void }) {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Auditoría" error={query.error} />;
+      return <ZuulErrorEmpty title="Auditoría" error={query.error} />;
     }
     return <Empty title="Auditoría" message="Cargando…" />;
   }

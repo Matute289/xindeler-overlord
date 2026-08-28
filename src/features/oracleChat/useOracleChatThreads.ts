@@ -3,7 +3,10 @@ import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '@/api';
+import { useApi } from '@/api/ApiContext';
+import { establishStepUp } from '@/auth/establishStepUp';
 import { sessionStorage } from '@/auth/sessionStorage';
+import { isStepUpCancelled, useStepUpAuth } from '@/auth/StepUpContext';
 import { useAuthErrorRouting } from '@/auth/useAuthErrorRouting';
 import { useEnvironment } from '@/config/EnvironmentContext';
 
@@ -16,11 +19,11 @@ function makeThread(): ChatThread {
 
 // A stream that ended cleanly but never emitted a terminal `draft` told us nothing definitive.
 // It still gets a real error object rather than a bare status flip, so the row can surface it
-// through the same `gatewayErrorMessage` path as every other failure on this screen.
+// through the same `zuulErrorMessage` path as every other failure on this screen.
 function incompleteStreamError(): ApiError {
   return new ApiError(
     'incomplete_stream',
-    'La respuesta se cortó antes de completarse — el gateway nunca mandó el borrador final.',
+    'La respuesta se cortó antes de completarse — Zuul nunca mandó el borrador final.',
     0,
   );
 }
@@ -31,6 +34,8 @@ function toError(err: unknown): Error {
 
 export function useOracleChatThreads() {
   const { environment } = useEnvironment();
+  const api = useApi();
+  const { requestStepUp } = useStepUpAuth();
   const [threads, setThreads] = useState<ChatThread[]>(() => [makeThread()]);
   const [activeThreadId, setActiveThreadId] = useState(() => threads[0].id);
   const [sending, setSending] = useState(false);
@@ -92,8 +97,12 @@ export function useOracleChatThreads() {
       threadId: string,
       operatorText: string,
       assistantTurnId: string,
-      tier: 'local' | 'bedrock',
+      overrideBudget: boolean,
     ) => {
+      // ZG-32: step-up for `overrideBudget` is established by the caller (`retryTurn`) BEFORE the
+      // turn gets reset to `streaming` — see that function's own comment for why establishing it
+      // here instead would leave a cancelled-prompt turn stuck mid-reset. This function just
+      // forwards the already-decided flag.
       // Defensive: a previous controller that is somehow still live is superseded rather than
       // left dangling on a request nobody is reading any more.
       abortRef.current?.abort();
@@ -105,7 +114,7 @@ export function useOracleChatThreads() {
       try {
         for await (const event of streamOracleChat(
           environment.baseUrl,
-          { message: operatorText, thread_id: threadId, tier },
+          { message: operatorText, thread_id: threadId, overrideBudget },
           controller.signal,
           {
             getAuthHeader: () => sessionStorage.getAuthHeader(),
@@ -164,7 +173,7 @@ export function useOracleChatThreads() {
   );
 
   const send = useCallback(
-    async (threadId: string, text: string, tier: 'local' | 'bedrock') => {
+    async (threadId: string, text: string) => {
       const trimmed = text.trim();
       if (trimmed.length === 0 || sendingRef.current) return;
 
@@ -175,7 +184,6 @@ export function useOracleChatThreads() {
         status: 'complete',
         draft: null,
         error: null,
-        tier: null,
         contextSnippets: null,
       };
       const assistantTurn: ChatTurn = {
@@ -185,7 +193,6 @@ export function useOracleChatThreads() {
         status: 'streaming',
         draft: null,
         error: null,
-        tier,
         contextSnippets: null,
       };
       setThreads((prev) =>
@@ -196,21 +203,40 @@ export function useOracleChatThreads() {
         ),
       );
 
-      await runAssistantTurn(threadId, trimmed, assistantTurn.id, tier);
+      // A brand-new message is never sent with an override already in hand — an override only
+      // ever follows a `budget_exceeded` failure on a previous attempt of the SAME message, via
+      // `retryTurn` below.
+      await runAssistantTurn(threadId, trimmed, assistantTurn.id, false);
     },
     [runAssistantTurn],
   );
 
   const retryTurn = useCallback(
-    async (threadId: string, assistantTurnId: string) => {
+    async (threadId: string, assistantTurnId: string, overrideBudget = false) => {
       if (sendingRef.current) return;
       const thread = threadsRef.current.find((t) => t.id === threadId);
       const index = thread?.turns.findIndex((t) => t.id === assistantTurnId) ?? -1;
       if (!thread || index <= 0) return;
       const operatorTurn = thread.turns[index - 1];
-      const assistantTurn = thread.turns[index];
       if (operatorTurn.role !== 'operator') return;
-      const tier = assistantTurn.tier ?? 'local';
+
+      // ZG-32: established BEFORE the turn resets to `streaming` below, not inside
+      // `runAssistantTurn` — a cancelled step-up prompt must leave the turn exactly as it was
+      // (still showing its prior `budget_exceeded` error and retry button), not stuck mid-reset.
+      // `forceFresh: true` for the same reason `OracleDryRunScreen.tsx`'s Fire uses
+      // `forceFreshStepUp` — an unrelated earlier action's still-cached code must not silently
+      // authorize spending real money past a configured cap.
+      if (overrideBudget) {
+        try {
+          await establishStepUp(() => requestStepUp({ forceFresh: true }), api.auth.stepUp);
+        } catch (err) {
+          if (isStepUpCancelled(err)) return;
+          const error = toError(err);
+          updateTurn(threadId, assistantTurnId, (turn) => ({ ...turn, status: 'failed', error }));
+          setLastError(error);
+          return;
+        }
+      }
 
       updateTurn(threadId, assistantTurnId, (turn) => ({
         ...turn,
@@ -220,9 +246,9 @@ export function useOracleChatThreads() {
         error: null,
         contextSnippets: null,
       }));
-      await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId, tier);
+      await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId, overrideBudget);
     },
-    [runAssistantTurn],
+    [runAssistantTurn, api.auth, requestStepUp],
   );
 
   return { threads, activeThreadId, setActiveThreadId, createThread, send, retryTurn, sending };

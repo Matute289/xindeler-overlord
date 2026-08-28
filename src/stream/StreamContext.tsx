@@ -23,7 +23,11 @@ export function StreamProvider({ children }: { children: ReactNode }) {
 
   const client = useMemo(
     () =>
-      createStreamClient(`${environment.baseUrl}/api/v1/stream`, {
+      // OC-63: the real gateway mounts this at `/api/v1/stream/status`, not `/api/v1/stream` --
+      // confirmed against xindeler-zuul's real router (`server/src/web.rs`). The old URL 404'd
+      // outright against production (a clean JSON 404, not even an SSE response), which is why
+      // Matías saw a stuck "Reconectando..." banner regardless of the wire-format fix ZG-63 made.
+      createStreamClient(`${environment.baseUrl}/api/v1/stream/status`, {
         getAuthHeader: () => sessionStorage.getAuthHeader(),
         fetchImpl: expoFetch.bind(globalThis),
         onUnauthorized: () => {
