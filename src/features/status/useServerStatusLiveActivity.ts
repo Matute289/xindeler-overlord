@@ -20,14 +20,17 @@ function deriveState(
   if (!status || !lifecycle) return null;
   return {
     lifecycleState: lifecycle.state,
-    playersOnline: status.players_online,
+    // OC-63: `status.players_online` never existed on the real gateway -- this is
+    // `info.player_count`, falling back to 0 (same as `ServerStatusActivityState.playersOnline`'s
+    // existing non-nullable `number` type already required before this fix) when the engine
+    // itself is unreachable.
+    playersOnline: status.info?.player_count ?? 0,
     // Only 'draining' has a meaningful countdown — `lifecycle.secondsLeft` is itself only
-    // populated for that state (see useLifecycleState.ts), with `status.pending_shutdown` as a
-    // fallback for the brief window where `live` hasn't landed yet but a derived guess already
-    // shows 'draining' from the bootstrap snapshot.
+    // populated for that state (see useLifecycleState.ts), with `status.info.shutdown_pending_secs`
+    // as a fallback for the brief window before a fresh `lifecycle` value has been derived.
     drainSecondsLeft:
       lifecycle.state === 'draining'
-        ? (lifecycle.secondsLeft ?? status.pending_shutdown?.seconds_left ?? null)
+        ? (lifecycle.secondsLeft ?? status.info?.shutdown_pending_secs ?? null)
         : null,
   };
 }

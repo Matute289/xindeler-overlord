@@ -5,6 +5,8 @@ const { statusSnapshot } = require('../scenarios');
 
 const router = express.Router();
 
+// OC-63: no `lifecycle` event -- the real gateway never had one, only `status` (confirmed against
+// xindeler-zuul's real source). The client derives lifecycle state entirely from `status` now.
 router.get('/', (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -15,15 +17,6 @@ router.get('/', (req, res) => {
 
   registerClient(res);
   writeEventTo(res, 'status', statusSnapshot());
-  let lifecycleEvent;
-  if (state.lifecyclePhase === 'stopped' || state.lifecyclePhase === 'starting') {
-    lifecycleEvent = { state: state.lifecyclePhase };
-  } else if (state.lifecyclePhase === 'draining' && state.drainingCountdown) {
-    lifecycleEvent = { state: 'draining', seconds_left: state.drainingCountdown.secondsLeft };
-  } else {
-    lifecycleEvent = { state: 'running' };
-  }
-  writeEventTo(res, 'lifecycle', lifecycleEvent);
 
   const pingTimer = setInterval(() => {
     res.write(': ping\n\n');
