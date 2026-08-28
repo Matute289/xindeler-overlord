@@ -9,7 +9,6 @@ import type {
   UnbanPlayerResponse,
 } from './schemas';
 import {
-  StageOracleEventResponseSchema,
   OracleTriggerResponseSchema,
   AdminPlayerViewSchema,
   BanPlayerResponseSchema,
@@ -180,12 +179,15 @@ export function createWriteApi(http: HttpClient) {
       });
     },
 
-    stageOracleEvent(id: string, dmEvent: DmEvent, idempotencyKey?: string) {
-      return http.request(
-        '/api/v1/oracle/stage',
-        { method: 'POST', body: { id, dm_event: dmEvent }, idempotencyKey },
-        StageOracleEventResponseSchema,
-      );
+    // OC-72/ZG-66: `event_id`/`dm_event`, not `id`/`dm_event` -- and no response schema, since
+    // real Zuul's success is `204 No Content` (see the removed `StageOracleEventResponseSchema`'s
+    // own comment in `schemas.ts`).
+    stageOracleEvent(eventId: string, dmEvent: DmEvent, idempotencyKey?: string): Promise<void> {
+      return http.request('/api/v1/oracle/stage', {
+        method: 'POST',
+        body: { event_id: eventId, dm_event: dmEvent },
+        idempotencyKey,
+      });
     },
 
     // `dryRun: true` is the TypeScript literal type, not `boolean` — deliberate, final-review
