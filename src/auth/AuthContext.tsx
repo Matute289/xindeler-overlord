@@ -32,8 +32,9 @@ type AuthContextValue = {
   beginLogin: (username: string, password: string) => void;
   // Fires the one real request the real gateway actually expects (username + password + TOTP
   // together). On failure, does NOT clear the pending credentials — a wrong code should only
-  // need retyping the code, not the whole form again.
-  completeLogin: (totpCode: string) => Promise<void>;
+  // need retyping the code, not the whole form again. `authTotpCode` (ZG-61): the operator's
+  // own xindeler-auth-account 2FA code, if they have that enabled — unrelated to `totpCode`.
+  completeLogin: (totpCode: string, authTotpCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   // Clearing the session here only resets auth *state* (status/operator/sessionStorage) —
   // it does not cancel any in-flight requests still carrying the now-invalid token/cookie.
@@ -128,12 +129,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const completeLogin = useCallback(
-    async (totpCode: string) => {
+    async (totpCode: string, authTotpCode?: string) => {
       const pending = pendingCredentials.current;
       if (!pending) {
         throw new Error('completeLogin called with no pending credentials');
       }
-      const result = await api.auth.login(pending.username, pending.password, totpCode);
+      const result = await api.auth.login(
+        pending.username,
+        pending.password,
+        totpCode,
+        authTotpCode,
+      );
       await sessionStorage.save({
         operatorUuid: result.operator_uuid,
         operatorUsername: result.operator_username,
