@@ -27,11 +27,12 @@ export function StreamStatusBanner() {
   return (
     <View className="items-center bg-danger px-4 py-1 dark:bg-night-danger">
       <Text className="text-xs uppercase text-white">
-        {/* Ghostbusters reference (Matías's request) — the exact banner he first flagged as
-            saying "Gateway" instead of "Zuul". "Cruzando los haces" reads as ordinary technical
-            flavor to anyone who's never seen the movie, and lands as the reference for anyone
-            who has. */}
-        {vpnDown ? VPN_DOWN_MESSAGE : 'Reconectando con Zuul — cruzando los haces…'}
+        {/* Ghostbusters reference (Matías's request, verified against his own script PDF) — the
+            exact banner he first flagged as saying "Gateway" instead of "Zuul". Spengler's
+            warning at the Sedgewick Hotel ("Don't cross the beams" / "Don't cross them! Watch
+            it!") — "no crucen los rayos" reads as ordinary technical flavor to anyone who's
+            never seen the movie, and lands as the reference for anyone who has. */}
+        {vpnDown ? VPN_DOWN_MESSAGE : 'Reconectando con Zuul — no crucen los rayos…'}
       </Text>
     </View>
   );

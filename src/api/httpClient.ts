@@ -102,7 +102,8 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
           'invalid_response',
           // Ghostbusters reference (Matías's request), quiet enough to still read fine to anyone
           // who's never seen the movie: "dogs and cats living together" is Peter Venkman's line
-          // for total chaos — an apt aside for exactly the moment a response stops making sense.
+          // for total chaos — not found verbatim in Matías's own script PDF (likely an ad-lib,
+          // per Matías), but still one of the most widely recognized lines from the film.
           "La respuesta de Zuul no tiene el formato esperado (esto sí que es 'perros y gatos viviendo juntos')",
           response.status,
         );
@@ -116,7 +117,8 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
           'invalid_response',
           // Ghostbusters reference (Matías's request), quiet enough to still read fine to anyone
           // who's never seen the movie: "dogs and cats living together" is Peter Venkman's line
-          // for total chaos — an apt aside for exactly the moment a response stops making sense.
+          // for total chaos — not found verbatim in Matías's own script PDF (likely an ad-lib,
+          // per Matías), but still one of the most widely recognized lines from the film.
           "La respuesta de Zuul no tiene el formato esperado (esto sí que es 'perros y gatos viviendo juntos')",
           response.status,
         );

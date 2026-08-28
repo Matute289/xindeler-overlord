@@ -167,11 +167,12 @@ export async function* streamOracleChat(
       // `StreamClient.ts` does on its own read-loop failure — a swallowed read error was
       // exactly what made this path undiagnosable before.
       if (timedOut) {
-        // Ghostbusters reference (Matías's request) — Slimer being the one universally-known
-        // slow-moving ghost makes this read fine even without the reference.
+        // Ghostbusters reference (Matías's request, verified verbatim in his own script PDF,
+        // line 1323): Venkman's line right after the Sedgewick Hotel ghost hits him — fits a
+        // stream that just went quiet and gross-surprise-stopped-making-sense either way.
         throw new ApiError(
           'timeout',
-          'La respuesta de Zuul se quedó sin avanzar (ni Slimer es tan lento)',
+          'La respuesta de Zuul se quedó sin avanzar (¿nos habrán baboseado?)',
           0,
         );
       }
