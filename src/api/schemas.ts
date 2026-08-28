@@ -87,13 +87,21 @@ export const StatusSchema = z.object({
 });
 export type Status = z.infer<typeof StatusSchema>;
 
-// The real gateway's `GET /players` returns a bare array of online player names (confirmed
-// against xindeler-zuul's real merged source, `server/src/console.rs`/`engine.rs`'s
-// `fetch_players` — `Option<Vec<String>>`, own test asserts `["Jugadora","Jugador2"]`) — no
-// uuid, no object wrapper. There is currently no endpoint anywhere that resolves a player name to
-// a uuid; ZG-57 (xindeler-zuul, not yet built) tracks adding one.
-export type Player = string;
-export const PlayersResponseSchema = z.array(z.string());
+// OC-66: real `GET /players` (`xindeler-zuul/server/src/console.rs`'s `players` handler +
+// `engine.rs`'s `PlayerOnlineView`, confirmed by directly reading both) is `Option<Vec<
+// PlayerOnlineView>>` — `null` when the engine can't be reached (same "null, not an error"
+// philosophy as `GET /status`'s own `info`), and each entry is `{alias, position, character_id}`,
+// NOT a bare name string. `position`/`character_id` are `None`/`null` for a connected player with
+// no position/active character yet (e.g. still at character select) — never absent, never an
+// error on their own. `uuid` is deliberately never included here (bulk, session-only listing) —
+// there is still no endpoint that resolves a player name to a uuid.
+export const PlayerOnlineViewSchema = z.object({
+  alias: z.string(),
+  position: z.tuple([z.number(), z.number(), z.number()]).nullable(),
+  character_id: z.number().nullable(),
+});
+export type PlayerOnlineView = z.infer<typeof PlayerOnlineViewSchema>;
+export const PlayersResponseSchema = z.array(PlayerOnlineViewSchema).nullable();
 
 // GET /players/directory (ZG-57/O-02) — the full account directory, online and offline, one row
 // per xindeler-auth account. `reference` is opaque: never parse it, never derive anything from
@@ -181,28 +189,40 @@ export const UnbanPlayerResponseSchema = z.object({
 });
 export type UnbanPlayerResponse = z.infer<typeof UnbanPlayerResponseSchema>;
 
-export const LogLineSchema = z.object({
-  ts: z.string(),
-  level: z.string(),
-  target: z.string(),
-  message: z.string(),
-});
+// OC-67: the real gateway's `GET /logs` returns a bare array of raw text lines (confirmed against
+// `xindeler-zuul/server/src/console.rs`'s `logs` handler, which forwards `Vec<String>` straight
+// from the engine's `ListLogs` — no structured `ts`/`level`/`target`/`message` object anywhere).
+// The previous object shape was speculative, from before this app's own `docs/reference/gateway-
+// api-contract.md` was ever checked against the real engine. There is also no server-side
+// concept of "level" to filter on — `LevelFilter` (removed, see `LogsScreen.tsx`) was built
+// against data that never existed.
+export const LogLineSchema = z.string();
 export type LogLine = z.infer<typeof LogLineSchema>;
 export const LogsResponseSchema = z.array(LogLineSchema);
 
-// Shape is the mock gateway's own choice, not something the contract specifies — the real
-// gateway's /chat/v1/history may differ; adjust when that's known.
+// OC-67: the real gateway's `GET /chat/history` (not `/chat` — see `readApi.ts`) returns
+// `{time, parties, content}[]` (confirmed against `xindeler-new-horizon/server/src/chat.rs`'s
+// `ChatMessage`), not the flat `{author, message, ts}` this schema used to have. `parties` is a
+// 13-variant tagged enum (`ChatParties` — Say/Tell/Group/Region/Kill/etc, several carrying a
+// `PlayerInfo{uuid,alias}` or a list of them) and `content` is the engine's own localized-message
+// type (`common_i18n::Content` — the same system the game client itself uses to resolve chat
+// text into a player's language), not a plain string. Modeling either fully is real, separate
+// scope (porting/approximating that i18n resolution client-side) — deliberately left loose
+// (`z.unknown()`) rather than guessed at, so this doesn't become another invented-shape bug. See
+// `ChatScreen.tsx` for how it renders this today (a JSON-ish fallback, not resolved prose) and the
+// backlog row this was found under for the follow-up this still needs.
 export const ChatMessageSchema = z.object({
-  author: z.string(),
-  message: z.string(),
-  ts: z.string(),
+  time: z.string(),
+  parties: z.unknown(),
+  content: z.unknown(),
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 export const ChatResponseSchema = z.array(ChatMessageSchema);
 
-// No known shape yet — Phase 3 (ORACLE chronicle) doesn't exist, mock or real. Validates "an
-// array," nothing more. Tighten once OC-29+ defines the real shape.
-export const ChronicleResponseSchema = z.array(z.record(z.string(), z.unknown()));
+// OC-67: the real gateway's `GET /chronicle` returns a bare array of strings (confirmed against
+// `xindeler-zuul/server/src/console.rs`'s `chronicle` handler and `xindeler-new-horizon`'s
+// `ListChronicle` message, both `Vec<String>`) — not an array of arbitrary objects.
+export const ChronicleResponseSchema = z.array(z.string());
 
 export const AuditRowSchema = z.object({
   id: z.number(),
@@ -220,17 +240,15 @@ export const AuditRowSchema = z.object({
 export type AuditRow = z.infer<typeof AuditRowSchema>;
 export const AuditResponseSchema = z.array(AuditRowSchema);
 
-export const EntityTemplateSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
-export type EntityTemplate = z.infer<typeof EntityTemplateSchema>;
-
+// OC-71: matches the real `GET /oracle/events` response, added to xindeler-zuul in ZG-64 and
+// confirmed directly by that repo's own session — plain id strings for both arrays (no separate
+// staged/loaded distinction, no per-template display name, no `oracle_enabled` at all — there is
+// no engine-side way to read that back). The previous shape (`EntityTemplateSchema`
+// objects, staged/loaded split, an enabled flag) was speculative, invented before this route
+// existed anywhere.
 export const OracleEventsResponseSchema = z.object({
-  staged: z.array(z.string()),
-  loaded: z.array(z.string()),
-  entity_templates: z.array(EntityTemplateSchema),
-  oracle_enabled: z.boolean(),
+  dm_events: z.array(z.string()),
+  entity_templates: z.array(z.string()),
 });
 export type OracleEventsResponse = z.infer<typeof OracleEventsResponseSchema>;
 
@@ -257,30 +275,66 @@ export const OracleBudgetResponseSchema = z.object({
 });
 export type OracleBudgetResponse = z.infer<typeof OracleBudgetResponseSchema>;
 
+// OC-71: matches the real `GET /oracle/presets` (`xindeler-zuul/server/src/presets.rs`) --
+// `title` (not `name`) plus a `summary` the old schema didn't model at all, wrapped in an
+// object alongside `entity_templates` (not a bare array).
 export const OraclePresetSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  title: z.string(),
+  summary: z.string(),
   dm_event: DmEventSchema,
 });
 export type OraclePreset = z.infer<typeof OraclePresetSchema>;
-export const OraclePresetsResponseSchema = z.array(OraclePresetSchema);
+export const OraclePresetsResponseSchema = z.object({
+  events: z.array(OraclePresetSchema),
+  entity_templates: z.array(z.string()),
+});
+export type OraclePresetsResponse = z.infer<typeof OraclePresetsResponseSchema>;
 
-export const OracleTargetSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('player'), alias: z.string() }),
-  z.object({ type: z.literal('coords'), x: z.number(), y: z.number(), z: z.number() }),
+// OC-71: `kind`, not `type` -- matches xindeler-zuul's real `OracleTarget`
+// (`#[serde(tag = "kind", rename_all = "snake_case")]`, `server/src/engine.rs`). Sending `type`
+// against the real gateway would fail Axum's own `Json` extraction on the request side, before
+// this response schema is even relevant.
+export const OracleTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('player'), alias: z.string() }),
+  z.object({ kind: z.literal('coords'), x: z.number(), y: z.number(), z: z.number() }),
 ]);
 export type OracleTarget = z.infer<typeof OracleTargetSchema>;
 
-export const OracleTriggerResponseSchema = z.object({
-  would_spawn: z.number(),
-  bodies: z.array(z.string()),
-  resolved_pos: z.unknown(),
-  nearest_player_dist: z.number(),
-});
+// OC-71: matches the real `POST /oracle/trigger` response exactly (`xindeler-zuul/server/src/
+// engine.rs`'s `OracleTriggerResponse`, `#[serde(tag = "kind", rename_all = "snake_case")]`) --
+// a tagged union, not the flat `{would_spawn, bodies, resolved_pos, nearest_player_dist}` shape
+// this used to have. `bodies`/`distance_to_nearest_player` only exist on a dry-run preview -- a
+// real fire (`triggered`) never carries them, which is exactly why a successful Fire used to be
+// unparseable and show as "couldn't confirm" to the operator (see the dry-run screen's own
+// safety-classification comment for why that mattered).
+export const OracleTriggerResponseSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('triggered'),
+    event_id: z.string(),
+    at: z.tuple([z.number(), z.number(), z.number()]),
+    requested: z.number(),
+    spawned: z.number(),
+    clamped: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal('preview'),
+    event_id: z.string(),
+    at: z.tuple([z.number(), z.number(), z.number()]),
+    requested: z.number(),
+    spawned: z.number(),
+    clamped: z.boolean(),
+    bodies: z.array(z.string()),
+    distance_to_nearest_player: z.number().nullable(),
+  }),
+]);
 export type OracleTriggerResponse = z.infer<typeof OracleTriggerResponseSchema>;
 
-export const OracleEnabledResponseSchema = z.object({ enabled: z.boolean() });
-export type OracleEnabledResponse = z.infer<typeof OracleEnabledResponseSchema>;
+// OC-71: no `OracleEnabledResponseSchema` — confirmed by directly reading `oracle.rs`'s `enabled`
+// handler, real Zuul's success response is `204 No Content` (no body at all), never
+// `{enabled: boolean}`. There is no engine-side way to read the current on/off state back — see
+// `writeApi.ts`'s `setOracleEnabled` and `OracleEventsScreen.tsx`'s own comment on why the
+// operator-facing label can't claim to know it.
 
 export const DmEventDiffEntrySchema = z.object({
   field: z.string(),

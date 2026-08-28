@@ -36,6 +36,9 @@ export function useChatQuery() {
   // contract — the mock pushes at most one message every 15s. A synchronous append per event is
   // the right scope here; OC-20's buffer-and-flush exists specifically for a rate this event
   // doesn't have, and using it anyway would be solving a problem this screen doesn't need solved.
+  // OC-65: this never actually fires against the real gateway today — there is no `chat` SSE
+  // event server-side, only `status`. Left wired up (harmless, no publisher) rather than ripped
+  // out, same treatment as `useLogsQuery`'s own `log` subscription.
   useStreamEvent('chat', (message) => {
     queryClient.setQueryData(queryKey, (old: ChatMessage[] | undefined) => [
       ...(old ?? []),

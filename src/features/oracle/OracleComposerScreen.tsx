@@ -6,12 +6,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 import { useApi } from '@/api/ApiContext';
 import { queryKeys } from '@/api/queryClient';
 import { DmEventSchema } from '@/api/schemas';
-import type {
-  DmEvent,
-  EntityTemplate,
-  OraclePreset,
-  StageOracleEventResponse,
-} from '@/api/schemas';
+import type { DmEvent, OraclePreset, StageOracleEventResponse } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
@@ -63,10 +58,10 @@ function parseDraftParam(raw: string | undefined): DmEvent | null {
 // rejected once it does.
 function resolveTemplateId(
   templateId: string | undefined | null,
-  templates: EntityTemplate[],
+  templates: string[],
 ): string | null {
   if (!templateId) return null;
-  return templates.some((template) => template.id === templateId) ? templateId : null;
+  return templates.includes(templateId) ? templateId : null;
 }
 
 export function OracleComposerScreen() {
@@ -232,15 +227,15 @@ export function OracleComposerScreen() {
   }
 
   const templates = eventsQuery.data.entity_templates;
-  const filteredPresets = presetsQuery.data.filter((preset) =>
-    preset.name.toLowerCase().includes(search.toLowerCase()),
+  const filteredPresets = presetsQuery.data.events.filter((preset: OraclePreset) =>
+    preset.title.toLowerCase().includes(search.toLowerCase()),
   );
   // The gateway's stage route overwrites by id with no conflict check, so a hand-typed id can
   // silently replace an existing event (the preset-clone path already avoids this by appending a
   // timestamp). A warning, not a validation error — staging stays allowed.
-  const idCollision =
-    stagedId !== '' &&
-    (eventsQuery.data.staged.includes(stagedId) || eventsQuery.data.loaded.includes(stagedId));
+  // OC-71: `dm_events`, not a `staged`/`loaded` split — real `/oracle/events` returns one flat
+  // list, confirmed via the peer session's ZG-64 report; Zuul doesn't expose that distinction.
+  const idCollision = stagedId !== '' && eventsQuery.data.dm_events.includes(stagedId);
 
   return (
     <KeyboardAvoidingView
@@ -279,7 +274,7 @@ export function OracleComposerScreen() {
               className="text-steel-light dark:text-night-steel-light"
               style={{ fontFamily: fonts.regular }}
             >
-              {preset.name}
+              {preset.title}
             </Text>
             <Pressable onPress={() => applyPreset(preset, Date.now())} accessibilityRole="button">
               <Text
@@ -342,7 +337,7 @@ export function OracleComposerScreen() {
               Template
             </Text>
             <ChipPicker
-              options={templates.map((template) => ({ value: template.id, label: template.name }))}
+              options={templates.map((template) => ({ value: template, label: template }))}
               selected={resolvedTemplateId}
               onSelect={setTemplateId}
             />

@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import type { ChatMessage, DmEvent } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
+import { describeChatMessage } from '@/features/chat/describeChatMessage';
 import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
@@ -56,15 +57,18 @@ export const ChatTurnRow = memo(function ChatTurnRow({
           >
             Contexto citado (chat de jugadores, no confiable)
           </Text>
-          {turn.contextSnippets.map((snippet: ChatMessage, index: number) => (
-            <Text
-              key={index}
-              className="mt-0.5 text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular, flexShrink: 1 }}
-            >
-              {`${snippet.author}: ${snippet.message}`}
-            </Text>
-          ))}
+          {turn.contextSnippets.map((snippet: ChatMessage, index: number) => {
+            const { speaker, text } = describeChatMessage(snippet);
+            return (
+              <Text
+                key={index}
+                className="mt-0.5 text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.regular, flexShrink: 1 }}
+              >
+                {`${speaker}: ${text}`}
+              </Text>
+            );
+          })}
         </View>
       )}
       {!failed && (

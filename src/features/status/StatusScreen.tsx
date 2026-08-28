@@ -221,12 +221,16 @@ export function StatusScreen() {
   }
 
   // Finding 4: disconnect-all produces no lifecycle change, so a legitimate confirmed tap
-  // otherwise leaves zero feedback. `run()`'s boolean return is used rather than reading
-  // `disconnectAllAction.error` right after the await — that reads a stale, pre-call value from
-  // this closure, not the fresh post-call state.
+  // otherwise leaves zero feedback. `run()`'s resolved value is used (via `!== null`) rather than
+  // reading `disconnectAllAction.error` right after the await — that reads a stale, pre-call value
+  // from this closure, not the fresh post-call state.
+  // OC-71: `!== null`, not a truthy check — `disconnectAll()` resolves to `void` (real Zuul sends
+  // `204 No Content`, no body), so a successful call resolves `undefined`, which a bare `if (ok)`
+  // would misclassify as failure. `run()`'s own contract is `null` for failure/cancel, anything
+  // else (including `undefined`) for success.
   async function handleDisconnectAll() {
-    const ok = await disconnectAllAction.run();
-    if (ok) {
+    const result = await disconnectAllAction.run();
+    if (result !== null) {
       setDisconnectedAt(Date.now());
       setTimeout(() => setDisconnectedAt(null), 4000);
     }

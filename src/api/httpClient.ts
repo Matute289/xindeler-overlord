@@ -22,6 +22,16 @@ type RequestOptions = {
   // `useDestructiveAction`'s retry-once-on-403 step-up flow) has no way to make the two attempts
   // share one idempotency key, since a fresh one was generated inside every `request()` call.
   idempotencyKey?: string;
+  // OC-70: opt-in for the handful of routes whose body genuinely carries useful, schema-shaped
+  // data even on a non-2xx response — confirmed real for `POST /players/{segment}/ban`/`/unban`,
+  // whose `outcome: 'failed'` case ships on a `502` (`xindeler-zuul/server/src/players.rs`) but
+  // still serializes the same `BanPlayerResponse`/`UnbanPlayerResponse` shape as every other
+  // outcome. Without this, that body never reaches the caller's own `outcome`-based UI copy — it
+  // gets treated as a generic transport error before ever being read. Deliberately per-call, not
+  // global: most non-2xx bodies are genuinely just errors, and blindly parsing all of them against
+  // `responseSchema` would risk masking a real failure as a false "success" for routes that were
+  // never designed with this dual meaning.
+  parseNonOkBodyAsData?: boolean;
 };
 
 export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
@@ -75,6 +85,15 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         } catch {
           envelopeCandidate = null;
         }
+        // OC-70: checked before the error-envelope path below — a route that opted in and whose
+        // body genuinely matches its own success shape gets returned as data, not thrown as an
+        // error, regardless of status code.
+        if (options.parseNonOkBodyAsData && responseSchema && envelopeCandidate !== null) {
+          const asData = responseSchema.safeParse(envelopeCandidate);
+          if (asData.success) {
+            return asData.data;
+          }
+        }
         const parsed = ErrorEnvelopeSchema.safeParse(envelopeCandidate);
         if (parsed.success) {
           throw new ApiError(parsed.data.error.code, parsed.data.error.message, response.status);
@@ -85,14 +104,42 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         // shouldn't render unbounded).
         const MAX_RAW_ERROR_LEN = 500;
         const trimmed = rawText.trim().slice(0, MAX_RAW_ERROR_LEN);
+        // OC-64: the real gateway's plain-text auth rejections carry no JSON code at all (see the
+        // comment above), so `AuthContext.handleAuthError`'s code-based check
+        // (`session_expired`/`unauthorized`/`invalid_csrf`) never fired against production --
+        // every session expiry/revocation fell through to `unknown_error` and left the app stuck
+        // showing `authenticated`. A 401 here always means "not logged in" server-side
+        // (`auth_extractor.rs`/`login.rs`), so it's safe to classify unconditionally.
+        // A 403's plain-text body still needs distinguishing: `require_step_up` (`lifecycle.rs`)
+        // sends "step-up required" for a normal, recoverable, non-auth-failure state that
+        // `useDestructiveAction` already handles by retrying on `status === 403` alone (never
+        // reads `code` for this) -- classifying it as `invalid_csrf` here would incorrectly log
+        // the operator out of an otherwise-healthy session. `authorize`'s own CSRF check sends
+        // "invalid csrf token", which genuinely does warrant one.
+        let code = 'unknown_error';
+        if (response.status === 401) {
+          code = 'unauthorized';
+        } else if (response.status === 403) {
+          const lower = trimmed.toLowerCase();
+          if (lower.includes('csrf')) {
+            code = 'invalid_csrf';
+          } else if (lower.includes('step-up') || lower.includes('step up')) {
+            code = 'step_up_required';
+          }
+        }
         throw new ApiError(
-          'unknown_error',
+          code,
           trimmed.length > 0 ? trimmed : `Error inesperado de Zuul (${response.status})`,
           response.status,
         );
       }
 
-      if (response.status === 204) {
+      // OC-69: `202` (only ever used for `POST /server/restart`, confirmed the sole real use of
+      // that status anywhere in `xindeler-zuul`) carries no body either, same as `204` -- without
+      // this, `restartServer()` (which used to pass a `{ok:true}`-shaped schema here) tried to
+      // parse an empty body, failed, and threw `invalid_response` on every restart the operator
+      // issued, even when the restart itself had genuinely just been accepted.
+      if (response.status === 204 || response.status === 202) {
         return undefined as T;
       }
 

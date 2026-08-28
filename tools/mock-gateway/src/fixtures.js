@@ -113,11 +113,26 @@ const players = [
   },
 ];
 
+// OC-67: shape matches the real gateway's `ChatMessage` (`xindeler-new-horizon/server/src/chat.rs`
+// -- confirmed source, not guessed) -- `parties` is a tagged enum keyed by variant name (`Say`
+// here, the plain-chat case), each carrying a `PlayerInfo{uuid,alias}`. `content` is the engine's
+// own i18n-resolved type in reality; kept as a plain string here since this mock's own consumers
+// only ever display it as text (see `describeChatMessage.ts`'s `content` fallback, which also
+// accepts a bare string).
 const chatMessages = [
-  { author: 'Kaelith', message: 'alguien vio el faro nuevo?' },
-  { author: 'Voss', message: 'si, queda al norte del puerto' },
-  { author: 'Ember', message: 'gracias!' },
-  { author: 'Doran', message: 'cuidado con los lobos cerca del bosque' },
+  {
+    parties: { Say: { uuid: 'mock-kaelith', alias: 'Kaelith' } },
+    content: 'alguien vio el faro nuevo?',
+  },
+  {
+    parties: { Say: { uuid: 'mock-voss', alias: 'Voss' } },
+    content: 'si, queda al norte del puerto',
+  },
+  { parties: { Say: { uuid: 'mock-ember', alias: 'Ember' } }, content: 'gracias!' },
+  {
+    parties: { Say: { uuid: 'mock-doran', alias: 'Doran' } },
+    content: 'cuidado con los lobos cerca del bosque',
+  },
 ];
 
 // Two messages per turn, cycling through the pool round-robin — same deterministic-not-random
@@ -130,7 +145,7 @@ function nextContextSnippets() {
     chatMessages[(contextIndex + 1) % chatMessages.length],
   ];
   contextIndex = (contextIndex + 2) % chatMessages.length;
-  return snippets.map((snippet) => ({ ...snippet, ts: new Date().toISOString() }));
+  return snippets.map((snippet) => ({ ...snippet, time: new Date().toISOString() }));
 }
 
 const logLineTemplates = [
@@ -142,26 +157,30 @@ const logLineTemplates = [
   { level: 'info', target: 'xindeler::server', message: 'Guardado automático completado' },
 ];
 
-const entityTemplates = [
-  { id: 'tpl_wolf_pack', name: 'Manada de lobos' },
-  { id: 'tpl_bandit_camp', name: 'Campamento de bandidos' },
-  { id: 'tpl_storm_elemental', name: 'Elemental de tormenta' },
-];
+// OC-71: flat id strings, matching real `/oracle/events`'s `entity_templates` (confirmed via the
+// peer session's ZG-64 report) -- the real engine has no display-name field for a template, only
+// its id.
+const entityTemplates = ['tpl_wolf_pack', 'tpl_bandit_camp', 'tpl_storm_elemental'];
 
+// OC-71: `title`/`summary`, not `name` -- matches the real `OraclePreset` shape read directly from
+// `xindeler-zuul/server/src/presets.rs`.
 const oraclePresets = [
   {
     id: 'preset_wolf_ambush',
-    name: 'Emboscada de lobos',
+    title: 'Emboscada de lobos',
+    summary: 'Genera una manada de lobos cerca del objetivo.',
     dm_event: { kind: 'spawn', template_id: 'tpl_wolf_pack', intensity: 6, radius: 20 },
   },
   {
     id: 'preset_magic_storm',
-    name: 'Tormenta mágica',
+    title: 'Tormenta mágica',
+    summary: 'Guarda un evento de clima mágico (todavía no aplicado por el motor).',
     dm_event: { kind: 'weather', intensity: 8, radius: 50 },
   },
   {
     id: 'preset_bandit_raid',
-    name: 'Asalto de bandidos',
+    title: 'Asalto de bandidos',
+    summary: 'Genera un campamento de bandidos cerca del objetivo.',
     dm_event: { kind: 'spawn', template_id: 'tpl_bandit_camp', intensity: 5, radius: 30 },
   },
 ];

@@ -19,18 +19,17 @@ function clearTimers() {
   }
 }
 
+// OC-67: the real gateway's `GET /logs` returns raw text lines, no structured `{ts,level,target,
+// message}` object (confirmed against `xindeler-zuul`'s real `console.rs`/`ListLogs` source) --
+// formatted here the same way a `tracing`-style line reads, and no `broadcast('log', ...)`
+// anymore either, matching that there is no `log` SSE event server-side (only `status`, see
+// OC-65).
 function pushLogLine(override) {
   const template =
     override || logLineTemplates[Math.floor(Math.random() * logLineTemplates.length)];
-  const line = {
-    ts: new Date().toISOString(),
-    level: template.level,
-    target: template.target,
-    message: template.message,
-  };
+  const line = `${new Date().toISOString()} ${template.level.toUpperCase()} ${template.target}: ${template.message}`;
   state.logBuffer.push(line);
   if (state.logBuffer.length > 500) state.logBuffer.shift();
-  broadcast('log', line);
   return line;
 }
 

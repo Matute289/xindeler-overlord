@@ -5,7 +5,10 @@ import type { ChatMessage } from '@/api/schemas';
 import { formatTime } from '@/ui/formatTime';
 import { fonts } from '@/ui/theme';
 
+import { describeChatMessage } from './describeChatMessage';
+
 export const ChatMessageRow = memo(function ChatMessageRow({ message }: { message: ChatMessage }) {
+  const { speaker, text } = describeChatMessage(message);
   return (
     <View className="border-b border-steel-dark px-4 py-2 dark:border-night-steel-dark">
       <View className="flex-row items-baseline gap-2">
@@ -13,13 +16,13 @@ export const ChatMessageRow = memo(function ChatMessageRow({ message }: { messag
           className="text-accent-cyan dark:text-night-accent-cyan"
           style={{ fontFamily: fonts.semibold }}
         >
-          {message.author}
+          {speaker}
         </Text>
         <Text
           className="text-steel-muted dark:text-night-steel-muted"
           style={{ fontFamily: fonts.regular }}
         >
-          {formatTime(message.ts)}
+          {formatTime(message.time)}
         </Text>
       </View>
       <Text
@@ -31,7 +34,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({ message }: { messag
         // break for a single unbreakable token) kick in on every platform, not just web.
         style={{ fontFamily: fonts.regular, flexShrink: 1 }}
       >
-        {message.message}
+        {text}
       </Text>
     </View>
   );

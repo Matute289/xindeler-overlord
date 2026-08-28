@@ -23,14 +23,17 @@ router.post('/', (req, res) => {
   if (!target) {
     return sendError(res, 400, 'missing_target', 'target es requerido');
   }
-  // An unrecognized `target.type` must not fall through to being echoed back as `resolved_pos`
-  // with every check skipped. The client's zod discriminated union already prevents this on the
-  // write path, but this mock is the contract's executable spec — it should reject the shape
-  // itself, not rely on the only current caller happening to be well-behaved.
-  if (target.type !== 'player' && target.type !== 'coords') {
-    return sendError(res, 400, 'invalid_body', "target.type debe ser 'player' o 'coords'");
+  // OC-71: `target.kind`, not `target.type` -- matches the real `OracleTarget`'s
+  // `#[serde(tag = "kind", ...)]` (`xindeler-zuul/server/src/engine.rs`). An unrecognized `kind`
+  // must not fall through to being echoed back as a resolved position with every check skipped.
+  // The client's zod discriminated union already prevents this on the write path, but this mock is
+  // the contract's executable spec — it should reject the shape itself, not rely on the only
+  // current caller happening to be well-behaved.
+  if (target.kind !== 'player' && target.kind !== 'coords') {
+    return sendError(res, 400, 'invalid_body', "target.kind debe ser 'player' o 'coords'");
   }
-  if (target.type === 'player') {
+  let at;
+  if (target.kind === 'player') {
     const onlinePlayers = state.scenario === 'down' ? [] : players;
     if (!onlinePlayers.some((p) => p.alias === target.alias)) {
       return sendError(
@@ -40,18 +43,41 @@ router.post('/', (req, res) => {
         `El jugador '${target.alias}' no está conectado`,
       );
     }
+    // The mock's player fixtures carry no world position -- synthesize a plausible one rather than
+    // claiming a specific real coordinate this mock doesn't actually track.
+    at = [Math.round(Math.random() * 200 - 100), 64, Math.round(Math.random() * 200 - 100)];
+  } else {
+    at = [target.x, target.y, target.z];
   }
   const entry = state.oracleEvents.get(eventId);
   if (!entry || entry.status !== 'loaded') {
     return sendError(res, 404, 'event_not_found', `No hay un evento cargado con id '${eventId}'`);
   }
 
-  const result = {
-    would_spawn: 1 + Math.floor(Math.random() * 4),
-    bodies: ['wolf', 'wolf', 'wolf_alpha'].slice(0, 1 + Math.floor(Math.random() * 3)),
-    resolved_pos: target,
-    nearest_player_dist: Math.round(5 + Math.random() * 40),
-  };
+  // OC-71: `kind`-tagged (`triggered` | `preview`), matching the real `OracleTriggerResponse`
+  // (`xindeler-zuul/server/src/engine.rs`) -- `bodies`/`distance_to_nearest_player` only exist on
+  // `preview`, `triggered` never carries them.
+  const requested = 1 + Math.floor(Math.random() * 4);
+  const bodies = ['wolf', 'wolf', 'wolf_alpha'].slice(0, requested);
+  const result = dryRun
+    ? {
+        kind: 'preview',
+        event_id: eventId,
+        at,
+        requested,
+        spawned: requested,
+        clamped: false,
+        bodies,
+        distance_to_nearest_player: Math.round(5 + Math.random() * 40),
+      }
+    : {
+        kind: 'triggered',
+        event_id: eventId,
+        at,
+        requested,
+        spawned: requested,
+        clamped: false,
+      };
 
   if (!dryRun) {
     pushLogLine({
