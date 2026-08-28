@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FlatList, RefreshControl, Text, TextInput, View } from 'react-native';
 
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { Pressable } from '@/ui/Pressable';
 import { Empty } from '@/ui/Empty';
 import { fonts, useTheme } from '@/ui/theme';
@@ -35,7 +35,7 @@ export function PlayersScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Jugadores" error={query.error} />;
+      return <ZuulErrorEmpty title="Jugadores" error={query.error} />;
     }
     return <Empty title="Jugadores" message="Cargando…" />;
   }

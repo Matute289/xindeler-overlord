@@ -153,8 +153,8 @@ export function OracleChatScreen() {
             className="text-xs text-steel-muted dark:text-night-steel-muted"
             style={{ fontFamily: fonts.regular }}
           >
-            El chat todavía no tiene implementación en el gateway real — solo responde contra el
-            entorno Mock (falta Bedrock del lado del gateway).
+            El chat todavía no tiene implementación en Zuul real — solo responde contra el entorno
+            Mock (falta Bedrock del lado de Zuul).
           </Text>
         </View>
       )}

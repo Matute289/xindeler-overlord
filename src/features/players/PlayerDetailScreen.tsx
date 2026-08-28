@@ -9,7 +9,7 @@ import type {
   UnbanPlayerResponse,
 } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { Empty } from '@/ui/Empty';
@@ -186,7 +186,7 @@ export function PlayerDetailScreen({ reference }: { reference: string }) {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Jugador" error={query.error} />;
+      return <ZuulErrorEmpty title="Jugador" error={query.error} />;
     }
     return <Empty title="Jugador" message="Cargando…" />;
   }

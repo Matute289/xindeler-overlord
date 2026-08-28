@@ -5,7 +5,7 @@ import type { Operator } from '@/api/schemas';
 import { useApi } from '@/api/ApiContext';
 import { useAuth } from '@/auth/AuthContext';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useDestructiveAction } from '@/features/status/useDestructiveAction';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
@@ -82,7 +82,7 @@ export function OperatorsScreen() {
 
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Operadores" error={query.error} />;
+      return <ZuulErrorEmpty title="Operadores" error={query.error} />;
     }
     return <Empty title="Operadores" message="Cargando…" />;
   }

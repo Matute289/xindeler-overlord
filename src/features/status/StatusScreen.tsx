@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { useApi } from '@/api/ApiContext';
 import { ActionError } from '@/features/connectivity/ActionError';
-import { GatewayErrorEmpty } from '@/features/connectivity/GatewayErrorEmpty';
+import { ZuulErrorEmpty } from '@/features/connectivity/ZuulErrorEmpty';
 import { useStreamStatus } from '@/stream/StreamContext';
 import { Button } from '@/ui/Button';
 import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
@@ -239,7 +239,7 @@ export function StatusScreen() {
   // bootstrap-retry failure must not blank a screen that already has something to show.
   if (query.data === undefined) {
     if (query.error) {
-      return <GatewayErrorEmpty title="Status" error={query.error} />;
+      return <ZuulErrorEmpty title="Status" error={query.error} />;
     }
     return <Empty title="Status" message="Cargando…" />;
   }

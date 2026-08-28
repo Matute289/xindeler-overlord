@@ -16,11 +16,11 @@ function makeThread(): ChatThread {
 
 // A stream that ended cleanly but never emitted a terminal `draft` told us nothing definitive.
 // It still gets a real error object rather than a bare status flip, so the row can surface it
-// through the same `gatewayErrorMessage` path as every other failure on this screen.
+// through the same `zuulErrorMessage` path as every other failure on this screen.
 function incompleteStreamError(): ApiError {
   return new ApiError(
     'incomplete_stream',
-    'La respuesta se cortó antes de completarse — el gateway nunca mandó el borrador final.',
+    'La respuesta se cortó antes de completarse — Zuul nunca mandó el borrador final.',
     0,
   );
 }
