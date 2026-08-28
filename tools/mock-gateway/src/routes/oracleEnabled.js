@@ -5,6 +5,10 @@ const { recordAudit } = require('../audit');
 
 const router = express.Router();
 
+// OC-71: `204 No Content`, no body -- matches the real `POST /oracle/enabled` success response,
+// confirmed by directly reading `oracle.rs`'s `enabled` handler (its success arm is
+// `StatusCode::NO_CONTENT.into_response()`). `state.oracleEnabled` is still tracked internally
+// (oracleTrigger.js/oracleStage.js still gate on it) -- there just isn't a body reporting it back.
 router.post('/', (req, res) => {
   const { enabled } = req.body || {};
   if (typeof enabled !== 'boolean') {
@@ -18,7 +22,7 @@ router.post('/', (req, res) => {
     payload: { enabled },
     outcome: 'success',
   });
-  res.json({ enabled });
+  res.status(204).end();
 });
 
 module.exports = router;

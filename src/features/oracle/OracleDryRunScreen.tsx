@@ -17,30 +17,33 @@ import { Pressable } from '@/ui/Pressable';
 import { TextField } from '@/ui/TextField';
 import { fonts } from '@/ui/theme';
 
-// Gateway error codes that PROVE the fire never reached the spawn path, so nothing can have been
-// generated in the world. Sourced by reading the actual request path end to end, not guessed:
-// `tools/mock-gateway/src/middleware/auth.js` (`unauthorized`, `session_expired`),
-// `middleware/stepUp.js` (`step_up_required`, `invalid_totp`) — both run before the route handler is
-// entered at all — and `routes/oracleTrigger.js`, whose every remaining code (`oracle_disabled`,
-// `invalid_body`, `missing_target`, `target_player_offline`, `event_not_found`) is a synchronous
-// validation/lookup `return sendError(...)` that happens strictly BEFORE the `would_spawn`
-// computation and the `!dryRun` log-push/`recordAudit` block. Anything NOT on this list — a
-// `network_error`/`timeout` (the request may have been fully processed and only the response lost),
-// an `invalid_response` (the gateway answered, possibly after spawning, in a shape we can't parse),
-// an `unknown_error` (a non-envelope error body we can't classify), a 5xx, or any future gateway
-// code this client has never seen — is treated as INDETERMINATE. The allowlist direction is the
-// safety-critical part: unrecognized failures must fail toward "we don't know", never toward
-// "nothing happened", on the one action in this app with no undo.
+// OC-71: replaced with the REAL confirmed codes from `xindeler-zuul/server/src/oracle.rs`'s
+// `trigger` handler (peer session's ZG-64/65 report, cross-checked directly against the source
+// here) — the previous list was sourced from the mock gateway, which never matched production.
+// `invalid_event_id`/`invalid_coords` are synchronous validation, checked immediately after
+// `lifecycle::authorize` and strictly before any engine call. `preview_required` and
+// `fire_in_progress` are both pre-engine-call rejections too (no dry-run on file yet / another
+// fire already in flight for this event). `refused` is the engine's own "declined to spawn"
+// answer — still a definite no-spawn, just decided one hop later. `unauthorized`/`invalid_csrf`/
+// `step_up_required` (this client's own httpClient-synthesized codes for 401/403) are safe here
+// for the same reason: `AuthenticatedOperator`'s extractor and `lifecycle::authorize`'s CSRF/
+// step-up check both run before the handler reaches ANY of the above, confirmed by reading
+// `trigger`'s own top of function. `engine_unreachable` is deliberately NOT on this list — it's
+// the one code that means the engine call was attempted and its outcome is genuinely unknown, same
+// as it was before this list was corrected. Anything else — `network_error`/`timeout`, an
+// `invalid_response`, an `unknown_error`, a 5xx, or any future code this client has never seen — is
+// still treated as INDETERMINATE. The allowlist direction remains the safety-critical part:
+// unrecognized failures must fail toward "we don't know", never toward "nothing happened", on the
+// one action in this app with no undo.
 const DEFINITE_NO_SPAWN_ERROR_CODES = new Set([
   'unauthorized',
-  'session_expired',
+  'invalid_csrf',
   'step_up_required',
-  'invalid_totp',
-  'oracle_disabled',
-  'invalid_body',
-  'missing_target',
-  'target_player_offline',
-  'event_not_found',
+  'invalid_event_id',
+  'invalid_coords',
+  'preview_required',
+  'fire_in_progress',
+  'refused',
 ]);
 
 function isIndeterminateFireFailure(err: unknown): boolean {
@@ -64,25 +67,10 @@ function isOnline(players: string[], candidateAlias: string): boolean {
   return players.includes(candidateAlias);
 }
 
-function formatResolvedPos(pos: unknown): string {
-  if (
-    pos !== null &&
-    typeof pos === 'object' &&
-    'x' in pos &&
-    'y' in pos &&
-    'z' in pos &&
-    typeof (pos as Record<string, unknown>).x === 'number' &&
-    typeof (pos as Record<string, unknown>).y === 'number' &&
-    typeof (pos as Record<string, unknown>).z === 'number'
-  ) {
-    const p = pos as { x: number; y: number; z: number };
-    return `(${p.x}, ${p.y}, ${p.z})`;
-  }
-  // `JSON.stringify(undefined)` returns the value `undefined`, not a string — interpolated into a
-  // template literal that renders as the literal text "undefined". `resolved_pos` is typed
-  // `z.unknown()` precisely because the real gateway's shape isn't ratified, so an omitted field
-  // is plausible; `?? '—'` keeps that case honest.
-  return JSON.stringify(pos) ?? '—';
+// OC-71: `at` is a real, confirmed `[f32; 3]` tuple (`xindeler-zuul/server/src/engine.rs`'s
+// `OracleTriggerResponse`) — no longer `z.unknown()`, so no runtime shape-guessing is needed here.
+function formatAt(at: readonly [number, number, number]): string {
+  return `(${at[0]}, ${at[1]}, ${at[2]})`;
 }
 
 export function OracleDryRunScreen() {
@@ -134,13 +122,13 @@ export function OracleDryRunScreen() {
     if (mode === 'player') {
       if (alias === null) return null;
       if (!isOnline(onlinePlayers, alias)) return null;
-      return { type: 'player', alias };
+      return { kind: 'player', alias };
     }
     const x = parseNumeric(xText);
     const y = parseNumeric(yText);
     const z = parseNumeric(zText);
     if (x === null || y === null || z === null) return null;
-    return { type: 'coords', x, y, z };
+    return { kind: 'coords', x, y, z };
   }
 
   // `useDestructiveAction`'s `call` only actually fires after `await requestStepUp()` resolves —
@@ -159,9 +147,13 @@ export function OracleDryRunScreen() {
   // keep reading `playersQuery.data` directly rather than the ref, which would otherwise lag by
   // one render behind a just-landed refetch (the ref only updates in the `useEffect` below, which
   // runs after render commits).
+  // OC-66: real `GET /players` (`console.rs`'s `players` handler) resolves `PlayerOnlineView[] |
+  // null` (`null` when the engine can't be reached), not a bare alias array — every consumer in
+  // this file works with plain alias strings (`isOnline`/`buildTarget`/`ChipPicker`), so the
+  // `.alias` projection happens once, here, rather than threading the richer shape through.
   const playersRef = useRef<string[]>([]);
   useEffect(() => {
-    if (playersQuery.data) playersRef.current = playersQuery.data;
+    if (playersQuery.data) playersRef.current = playersQuery.data.map((player) => player.alias);
   }, [playersQuery.data]);
 
   const triggerAction = useDestructiveAction((idempotencyKey) => {
@@ -197,8 +189,9 @@ export function OracleDryRunScreen() {
       if (!result) {
         throw new Error('No hay una vista previa vigente.');
       }
-      if (result.target.type === 'player') {
-        const freshPlayers = (await playersQuery.refetch()).data ?? playersRef.current;
+      if (result.target.kind === 'player') {
+        const freshPlayers =
+          (await playersQuery.refetch()).data?.map((player) => player.alias) ?? playersRef.current;
         if (!isOnline(freshPlayers, result.target.alias)) {
           throw new Error('Este jugador ya no está conectado.');
         }
@@ -238,7 +231,11 @@ export function OracleDryRunScreen() {
     void handleFire();
   }
 
-  const onlinePlayers = playersQuery.data ?? [];
+  // `null` (the engine was unreachable) collapses to "no known online players", same as the
+  // undefined/still-loading case — there is no distinct "we don't know" state offered here, since
+  // an offline-player refusal at trigger/fire time is backstopped server-side regardless (see the
+  // comment on `fireAction` above).
+  const onlinePlayers = (playersQuery.data ?? []).map((player) => player.alias);
   const selectedPlayerOffline =
     mode === 'player' && alias !== null && !isOnline(onlinePlayers, alias);
   const canTrigger = buildTarget(onlinePlayers) !== null && !triggerAction.pending;
@@ -262,7 +259,10 @@ export function OracleDryRunScreen() {
     return <Empty title="Vista previa" message="Cargando…" />;
   }
 
-  const players = playersQuery.data;
+  // OC-66: `data` is `PlayerOnlineView[] | null` — `null` (engine unreachable) renders the same
+  // "sin jugadores conectados" empty state as a genuinely empty roster, same collapse as
+  // `onlinePlayers` above.
+  const players = playersQuery.data ?? [];
 
   return (
     <KeyboardAvoidingView
@@ -294,7 +294,7 @@ export function OracleDryRunScreen() {
           ) : (
             <View className="mt-2">
               <ChipPicker
-                options={players.map((alias) => ({ value: alias, label: alias }))}
+                options={players.map((player) => ({ value: player.alias, label: player.alias }))}
                 selected={alias}
                 onSelect={(value) => {
                   clearResult();
@@ -402,29 +402,50 @@ export function OracleDryRunScreen() {
                   exact phrasing as the thing distinguishing a preview from a real outcome, so a
                   completed fire must not reuse it. The unknown-outcome state keeps "generarían":
                   these numbers are still the DRY-RUN's projection — the fire's own response never
-                  came back — and the status line above says outright that we couldn't confirm. */}
+                  came back — and the status line above says outright that we couldn't confirm.
+                  OC-71: `spawned` (not `would_spawn`) — real Zuul's `Triggered`/`Preview` variants
+                  both carry it, meaning "how many actually/would spawn" depending on `kind`. */}
               {result.fired
-                ? `Se generaron: ${result.response.would_spawn}`
-                : `Se generarían: ${result.response.would_spawn}`}
+                ? `Se generaron: ${result.response.spawned}`
+                : `Se generarían: ${result.response.spawned}`}
             </Text>
-            <Text
-              className="mt-1 text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular }}
-            >
-              {`Criaturas: ${result.response.bodies.join(', ')}`}
-            </Text>
-            <Text
-              className="mt-1 text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular }}
-            >
-              {`Posición resuelta: ${formatResolvedPos(result.response.resolved_pos)}`}
-            </Text>
-            <Text
-              className="mt-1 text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular }}
-            >
-              {`Distancia al jugador más cercano: ${result.response.nearest_player_dist}`}
-            </Text>
+            {/* OC-71: `bodies`/`distance_to_nearest_player` only exist on the `preview` variant of
+                the real response — `triggered` (a completed Fire) never carries them. `!result.fired`
+                only ever holds a `preview` response (only `triggerOracleEvent`'s dry-run path sets
+                `result` while `fired` is false), so this narrows cleanly rather than needing a
+                runtime `kind` check. */}
+            {!result.fired && result.response.kind === 'preview' && (
+              <>
+                <Text
+                  className="mt-1 text-steel-light dark:text-night-steel-light"
+                  style={{ fontFamily: fonts.regular }}
+                >
+                  {`Criaturas: ${result.response.bodies.join(', ')}`}
+                </Text>
+                <Text
+                  className="mt-1 text-steel-light dark:text-night-steel-light"
+                  style={{ fontFamily: fonts.regular }}
+                >
+                  {`Posición resuelta: ${formatAt(result.response.at)}`}
+                </Text>
+                <Text
+                  className="mt-1 text-steel-light dark:text-night-steel-light"
+                  style={{ fontFamily: fonts.regular }}
+                >
+                  {`Distancia al jugador más cercano: ${
+                    result.response.distance_to_nearest_player ?? '—'
+                  }`}
+                </Text>
+              </>
+            )}
+            {result.fired && (
+              <Text
+                className="mt-1 text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.regular }}
+              >
+                {`Posición resuelta: ${formatAt(result.response.at)}`}
+              </Text>
+            )}
             {!result.fired && (
               <View className="mt-4">
                 {/* Fire is withdrawn once the outcome is unknown: the operator must go read the

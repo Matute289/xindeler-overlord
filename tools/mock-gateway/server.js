@@ -87,7 +87,8 @@ app.use('/api/v1/admin/operators', requireAuth, requireSuperuser, adminOperators
 // OC-63: matches xindeler-zuul's real mount point (`server/src/web.rs`), not `/api/v1/stream`.
 app.use('/api/v1/stream/status', requireAuth, streamRoutes);
 app.use('/api/v1/server', requireAuth, requireCsrf, serverRoutes);
-app.use('/api/v1/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
+// OC-68: matches xindeler-zuul's real route (`server/src/web.rs`), not `/api/v1/broadcast`.
+app.use('/api/v1/server/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
 app.use('/api/v1/push', requireAuth, requireCsrf, pushRoutes);
 app.use('/api/v1/oracle/events', requireAuth, oracleEventsRoutes);
 app.use('/api/v1/oracle/presets', requireAuth, oraclePresetsRoutes);
@@ -123,17 +124,19 @@ setInterval(() => {
   broadcast('status', statusSnapshot());
 }, 5000);
 
+// OC-65: no `broadcast('chat', ...)` here anymore — there is no `chat` SSE event server-side,
+// only `status` (see `StreamClient.ts`). Still appends to `state.chatHistory` so the REST
+// bootstrap (`GET /chat/history`) keeps producing fresh-looking data on each fetch.
 let chatIndex = 0;
 setInterval(() => {
   if (state.scenario === 'down') return; // no chat activity while the server is "down"
   const message = {
     ...chatMessages[chatIndex % chatMessages.length],
-    ts: new Date().toISOString(),
+    time: new Date().toISOString(),
   };
   chatIndex += 1;
   state.chatHistory.push(message);
   if (state.chatHistory.length > 500) state.chatHistory.shift();
-  broadcast('chat', message);
 }, 15000);
 
 setScenario('normal');

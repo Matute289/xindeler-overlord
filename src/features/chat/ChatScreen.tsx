@@ -86,7 +86,7 @@ export function ChatScreen() {
       <FlatList
         ref={flatListRef}
         data={messages}
-        keyExtractor={(message, index) => `${message.ts}-${message.author}-${index}`}
+        keyExtractor={(message, index) => `${message.time}-${index}`}
         renderItem={({ item }) => <ChatMessageRow message={item} />}
         onScroll={handleScroll}
         scrollEventThrottle={100}

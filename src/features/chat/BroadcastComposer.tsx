@@ -44,7 +44,11 @@ export function BroadcastComposer() {
             Así lo van a ver los jugadores:
           </Text>
           <ChatMessageRow
-            message={{ author: '[Sistema]', message: trimmed, ts: new Date().toISOString() }}
+            message={{
+              time: new Date().toISOString(),
+              parties: { System: null },
+              content: trimmed,
+            }}
           />
         </View>
       )}

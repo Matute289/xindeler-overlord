@@ -31,9 +31,20 @@ export function createReadApi(http: HttpClient) {
       return http.requestWithRetry(`/api/v1/logs${query}`, { method: 'GET' }, LogsResponseSchema);
     },
 
-    getChat(since?: string) {
-      const query = since !== undefined ? `?since=${encodeURIComponent(since)}` : '';
-      return http.requestWithRetry(`/api/v1/chat${query}`, { method: 'GET' }, ChatResponseSchema);
+    // OC-67: `/api/v1/chat` 404s against the real gateway -- the real route is `/chat/history`
+    // (`xindeler-zuul/server/src/web.rs`). Its query param is also `from_time_exclusive_rfc3339`,
+    // not `since` -- renamed here to match; still unused by any call site today
+    // (`useChatQuery.ts` never passes it), same as before this fix.
+    getChat(fromTimeExclusive?: string) {
+      const query =
+        fromTimeExclusive !== undefined
+          ? `?from_time_exclusive_rfc3339=${encodeURIComponent(fromTimeExclusive)}`
+          : '';
+      return http.requestWithRetry(
+        `/api/v1/chat/history${query}`,
+        { method: 'GET' },
+        ChatResponseSchema,
+      );
     },
 
     getChronicle(limit?: number) {

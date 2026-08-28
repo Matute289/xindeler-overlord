@@ -11,7 +11,6 @@ import type {
 import {
   StageOracleEventResponseSchema,
   OracleTriggerResponseSchema,
-  OracleEnabledResponseSchema,
   AdminPlayerViewSchema,
   BanPlayerResponseSchema,
   UnbanPlayerResponseSchema,
@@ -19,59 +18,50 @@ import {
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
-// `z.literal(true)` (not `z.boolean()`) is deliberate — safety-review finding 3, 2026-08-14. A
-// bare `z.boolean()` validates `{ ok: false }` just as happily as `{ ok: true }`, so a `200 { ok:
-// false }` response would pass schema validation and `useDestructiveAction.run()` (which treats
-// any non-throwing resolution as success) would report success for a call the gateway actually
-// rejected. Requiring the literal makes an `ok: false` response fail validation and throw an
-// `invalid_response` `ApiError`, correctly surfacing as a real error instead of silently reporting
-// success (this is exactly the failure mode OC-26's own "Desconectados" confirmation message would
-// be vulnerable to).
-const OkResponseSchema = z.object({ ok: z.literal(true) });
-
+// OC-71 (follow-on from OC-69): real Zuul sends `204 No Content` for all five of these — no JSON
+// body at all, confirmed via `grep "StatusCode::ACCEPTED\|StatusCode::NO_CONTENT"` in
+// `xindeler-zuul/server/src/lifecycle.rs`. `httpClient`'s 204 short-circuit (OC-69) returns
+// `undefined` BEFORE any `responseSchema` ever runs, so the `{ok: z.literal(true)}` schema this
+// used to pass here was already dead code against the real gateway — worse, it left every one of
+// these five methods typed as if they resolved to a genuinely truthy `{ok:true}` object, which is
+// exactly the kind of value a caller might (and, for `disconnectAll`, actually did — see
+// `StatusScreen.tsx`'s `handleDisconnectAll`) truthy-check for success. Since there is no body,
+// there is nothing to validate; success vs. failure is `useDestructiveAction.run()`'s own
+// `result !== null` contract, not a value read from the response.
 export function createWriteApi(http: HttpClient) {
   return {
-    startServer(idempotencyKey?: string) {
-      return http.request(
-        '/api/v1/server/start',
-        { method: 'POST', body: {}, idempotencyKey },
-        OkResponseSchema,
-      );
+    startServer(idempotencyKey?: string): Promise<void> {
+      return http.request('/api/v1/server/start', { method: 'POST', body: {}, idempotencyKey });
     },
 
     stopServer(
       body: { mode: 'graceful' | 'immediate'; seconds?: number; reason?: string },
       idempotencyKey?: string,
-    ) {
-      return http.request(
-        '/api/v1/server/stop',
-        { method: 'POST', body, idempotencyKey },
-        OkResponseSchema,
-      );
+    ): Promise<void> {
+      return http.request('/api/v1/server/stop', { method: 'POST', body, idempotencyKey });
     },
 
-    restartServer(body: { seconds: number; reason?: string }, idempotencyKey?: string) {
-      return http.request(
-        '/api/v1/server/restart',
-        { method: 'POST', body, idempotencyKey },
-        OkResponseSchema,
-      );
+    restartServer(
+      body: { seconds: number; reason?: string },
+      idempotencyKey?: string,
+    ): Promise<void> {
+      return http.request('/api/v1/server/restart', { method: 'POST', body, idempotencyKey });
     },
 
-    cancelShutdown(idempotencyKey?: string) {
-      return http.request(
-        '/api/v1/server/cancel_shutdown',
-        { method: 'POST', body: {}, idempotencyKey },
-        OkResponseSchema,
-      );
+    cancelShutdown(idempotencyKey?: string): Promise<void> {
+      return http.request('/api/v1/server/cancel_shutdown', {
+        method: 'POST',
+        body: {},
+        idempotencyKey,
+      });
     },
 
-    disconnectAll(idempotencyKey?: string) {
-      return http.request(
-        '/api/v1/server/disconnect_all',
-        { method: 'POST', body: {}, idempotencyKey },
-        OkResponseSchema,
-      );
+    disconnectAll(idempotencyKey?: string): Promise<void> {
+      return http.request('/api/v1/server/disconnect_all', {
+        method: 'POST',
+        body: {},
+        idempotencyKey,
+      });
     },
 
     unlockPlayer2fa(username: string, idempotencyKey?: string) {
@@ -115,9 +105,12 @@ export function createWriteApi(http: HttpClient) {
       },
       idempotencyKey?: string,
     ) {
+      // OC-70: the real gateway ships its `outcome: 'failed'` case on a 502 (still the same
+      // BanPlayerResponse body) — `parseNonOkBodyAsData` lets that reach the caller as normal
+      // data instead of being swallowed as a generic transport error.
       return http.request<BanPlayerResponse>(
         `/api/v1/players/${encodeURIComponent(segment)}/ban`,
-        { method: 'POST', body, idempotencyKey },
+        { method: 'POST', body, idempotencyKey, parseNonOkBodyAsData: true },
         BanPlayerResponseSchema,
       );
     },
@@ -127,9 +120,10 @@ export function createWriteApi(http: HttpClient) {
       body: { reason: string; target_username?: string },
       idempotencyKey?: string,
     ) {
+      // OC-70: same reasoning as `banPlayer` above — `outcome: 'failed'` ships on a 502.
       return http.request<UnbanPlayerResponse>(
         `/api/v1/players/${encodeURIComponent(segment)}/unban`,
-        { method: 'POST', body, idempotencyKey },
+        { method: 'POST', body, idempotencyKey, parseNonOkBodyAsData: true },
         UnbanPlayerResponseSchema,
       );
     },
@@ -161,8 +155,11 @@ export function createWriteApi(http: HttpClient) {
       );
     },
 
+    // OC-68: `/api/v1/broadcast` 404s against the real gateway -- the real route is
+    // `/server/broadcast` (`xindeler-zuul/server/src/web.rs`), alongside the other `/server/*`
+    // lifecycle actions.
     broadcastMessage(message: string, idempotencyKey?: string) {
-      return http.request<void>('/api/v1/broadcast', {
+      return http.request<void>('/api/v1/server/broadcast', {
         method: 'POST',
         body: { msg: message },
         idempotencyKey,
@@ -198,6 +195,13 @@ export function createWriteApi(http: HttpClient) {
     // Narrowed to the literal, any call site passing `false` is a compile error. OC-34 (fire)
     // adds a separate `fireOracleEvent` method below instead of widening this one — see its
     // comment.
+    // OC-71: real Zuul's `TriggerRequest` (`xindeler-zuul/server/src/engine.rs`) requires a
+    // `high_impact_override: bool` field this client never sent at all — hardcoded `false` here,
+    // not exposed as a parameter. What "high impact" means and when an operator should be able to
+    // flip it to `true` hasn't been designed yet (no UI in this app offers it); shipping `false`
+    // unconditionally matches every trigger this app has ever sent and keeps the one call site that
+    // matters (`fireOracleEvent` below) from being silently rejected once Zuul starts requiring the
+    // field at all. Revisit if/when high-impact events get their own operator-facing gate.
     triggerOracleEvent(
       eventId: string,
       target: OracleTarget,
@@ -206,7 +210,11 @@ export function createWriteApi(http: HttpClient) {
     ) {
       return http.request(
         '/api/v1/oracle/trigger',
-        { method: 'POST', body: { event_id: eventId, target, dry_run: dryRun }, idempotencyKey },
+        {
+          method: 'POST',
+          body: { event_id: eventId, target, dry_run: dryRun, high_impact_override: false },
+          idempotencyKey,
+        },
         OracleTriggerResponseSchema,
       );
     },
@@ -218,17 +226,28 @@ export function createWriteApi(http: HttpClient) {
     fireOracleEvent(eventId: string, target: OracleTarget, idempotencyKey?: string) {
       return http.request(
         '/api/v1/oracle/trigger',
-        { method: 'POST', body: { event_id: eventId, target, dry_run: false }, idempotencyKey },
+        {
+          method: 'POST',
+          body: { event_id: eventId, target, dry_run: false, high_impact_override: false },
+          idempotencyKey,
+        },
         OracleTriggerResponseSchema,
       );
     },
 
-    setOracleEnabled(enabled: boolean, idempotencyKey?: string) {
-      return http.request(
-        '/api/v1/oracle/enabled',
-        { method: 'POST', body: { enabled }, idempotencyKey },
-        OracleEnabledResponseSchema,
-      );
+    // OC-71: real Zuul sends `204 No Content` on success (confirmed by directly reading
+    // `oracle.rs`'s `enabled` handler — its success arm is `StatusCode::NO_CONTENT.into_response()`,
+    // no body) and a plain-text `502` on failure, never the `{enabled: boolean}` JSON body this
+    // used to expect — there is no engine-side way to read the current state back at all (see
+    // `useOracleEnabledQuery`/`OracleEventsScreen`'s own comments on why the enabled/disabled label
+    // can't be trusted). No `responseSchema` here for the same reason `startServer` etc. dropped
+    // theirs — nothing to validate.
+    setOracleEnabled(enabled: boolean, idempotencyKey?: string): Promise<void> {
+      return http.request('/api/v1/oracle/enabled', {
+        method: 'POST',
+        body: { enabled },
+        idempotencyKey,
+      });
     },
 
     addOperator(uuid: string, displayName: string | undefined, idempotencyKey?: string) {

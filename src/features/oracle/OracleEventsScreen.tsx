@@ -100,18 +100,21 @@ export function OracleEventsScreen() {
   // exactly what the operator asked for, and vice versa. `useDestructiveAction`'s `error` only
   // clears at the start of its own next `run()`, so the sibling action has to clear it explicitly
   // (final-review finding 4 — this was deferred once, before `reset()` existed).
+  // OC-71: `!== null`, not a truthy check — `setOracleEnabled()` resolves `void` (real Zuul sends
+  // `204 No Content`), so success resolves `undefined`, which `if (response)` would misclassify as
+  // failure. `run()`'s own contract is `null` for failure/cancel, anything else for success.
   async function handleConfirmEnable() {
     setConfirmEnable(false);
-    const response = await enableAction.run();
-    if (response) {
+    const result = await enableAction.run();
+    if (result !== null) {
       disableAction.reset();
       query.refetch();
     }
   }
 
   async function handleDisable() {
-    const response = await disableAction.run();
-    if (response) {
+    const result = await disableAction.run();
+    if (result !== null) {
       enableAction.reset();
       query.refetch();
     }
@@ -133,12 +136,12 @@ export function OracleEventsScreen() {
     return <Empty title="ORACLE" message="Cargando…" />;
   }
 
-  const {
-    staged,
-    loaded,
-    entity_templates: entityTemplates,
-    oracle_enabled: oracleEnabled,
-  } = query.data;
+  // OC-71: real `/oracle/events` (`xindeler-zuul/server/src/oracle.rs`) returns
+  // `{dm_events, entity_templates}` -- one flat list, no staged/loaded split, and no
+  // `oracle_enabled` field at all. There is no engine-side way to read ORACLE's current on/off
+  // state back, so the status box below can no longer claim to know it -- see the buttons' own
+  // comment.
+  const { dm_events: dmEvents, entity_templates: entityTemplates } = query.data;
 
   return (
     <ScrollView
@@ -164,21 +167,37 @@ export function OracleEventsScreen() {
           className="text-steel-light dark:text-night-steel-light"
           style={{ fontFamily: fonts.semibold }}
         >
-          {oracleEnabled ? 'ORACLE: Activo' : 'ORACLE: Desactivado'}
+          Interruptor de ORACLE
         </Text>
-        <View className="mt-2">
-          <Button
-            label={oracleEnabled ? 'Desactivar' : 'Activar'}
-            onPress={oracleEnabled ? handleDisable : () => setConfirmEnable(true)}
-            loading={disableAction.pending || enableAction.pending}
-            disabled={disableAction.pending || enableAction.pending}
-          />
+        {/* OC-71: real Zuul has no way to read the kill switch's current state back — its own
+            `enabled` endpoint returns `204 No Content` on success, never a body — so this can no
+            longer show a trusted "Activo"/"Desactivado" label or a single state-dependent button.
+            Both actions stay available; the operator reads the actual effect (staging/firing
+            working or failing) as the real signal, same as the audit trail already does. */}
+        <Text
+          className="mt-1 text-xs text-steel-muted dark:text-night-steel-muted"
+          style={{ fontFamily: fonts.regular }}
+        >
+          Zuul no expone el estado actual — si no estás seguro, revisá la auditoría.
+        </Text>
+        <View className="mt-2 flex-row gap-2">
+          <View className="flex-1">
+            <Button
+              label="Activar"
+              onPress={() => setConfirmEnable(true)}
+              loading={enableAction.pending}
+              disabled={disableAction.pending || enableAction.pending}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              label="Desactivar"
+              onPress={handleDisable}
+              loading={disableAction.pending}
+              disabled={disableAction.pending || enableAction.pending}
+            />
+          </View>
         </View>
-        {!oracleEnabled && (
-          <Text className="mt-2 text-xs text-danger dark:text-night-danger">
-            ORACLE está deshabilitado — el staging y el disparo van a fallar hasta reactivarlo.
-          </Text>
-        )}
         {disableAction.error && <ActionError error={disableAction.error} />}
         {enableAction.error && <ActionError error={enableAction.error} />}
       </View>
@@ -222,28 +241,12 @@ export function OracleEventsScreen() {
         </View>
       )}
       <Section
-        title="Cargados"
-        items={loaded}
-        emptyText="Sin eventos cargados."
+        title="Eventos"
+        items={dmEvents}
+        emptyText="Sin eventos."
         onItemPress={(id) => router.push({ pathname: '/oracle-trigger', params: { id } })}
       />
-      <Section title="En etapa" items={staged} emptyText="Nada en etapa." />
-      {staged.length > 0 && (
-        <View className="mt-2 px-6">
-          <Text
-            className="text-xs text-steel-muted dark:text-night-steel-muted"
-            style={{ fontFamily: fonts.regular }}
-          >
-            Si un evento queda acá mucho tiempo, puede seguir en curso o haber fallado el parseo —
-            hoy Zuul no distingue entre ambos casos.
-          </Text>
-        </View>
-      )}
-      <Section
-        title="Templates disponibles"
-        items={entityTemplates.map((template) => template.name)}
-        emptyText="Sin templates."
-      />
+      <Section title="Templates disponibles" items={entityTemplates} emptyText="Sin templates." />
       <View className="h-8" />
       <ConfirmByTypingSheet
         visible={confirmEnable}
