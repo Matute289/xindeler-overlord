@@ -1,16 +1,17 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { gatewayErrorMessage, isLikelyVpnDown } from '@/features/connectivity/gatewayErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
+import { AuthBackdrop } from '@/ui/AuthBackdrop';
 import { Button } from '@/ui/Button';
 import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
-import { Screen } from '@/ui/Screen';
 import { TextField } from '@/ui/TextField';
 
 export default function TotpScreen() {
@@ -48,87 +49,96 @@ export default function TotpScreen() {
   }
 
   return (
-    <Screen>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-      >
-        <View className="flex-1 items-center justify-center gap-6 px-8">
-          <Text
-            className="text-2xl text-steel-light dark:text-night-steel-light"
-            style={{ fontFamily: fonts.bold }}
-          >
-            Código de verificación
-          </Text>
-          <View className="w-full gap-4">
-            <TextField
-              label="Código de Verificación Overlord"
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              autoCapitalize="none"
-              maxLength={6}
-              autoComplete="one-time-code"
-              textContentType="oneTimeCode"
-            />
-            <Pressable
-              onPress={() => setUseAuthTotp((current) => !current)}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: useAuthTotp }}
-              className={`self-start rounded-full border px-3 py-1 ${
-                useAuthTotp
-                  ? 'border-accent-cyan dark:border-night-accent-cyan'
-                  : 'border-steel-dark dark:border-night-steel-dark'
-              }`}
-            >
-              <Text
-                className={
-                  useAuthTotp
-                    ? 'text-accent-cyan dark:text-night-accent-cyan'
-                    : 'text-steel-muted dark:text-night-steel-muted'
-                }
-                style={{ fontFamily: fonts.regular }}
-              >
-                Código Verificación Xindeler
-              </Text>
-            </Pressable>
-            {useAuthTotp && (
+    <View className="flex-1">
+      <AuthBackdrop />
+      <SafeAreaView edges={['bottom', 'left', 'right']} className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1"
+        >
+          <View className="flex-1 items-center justify-center gap-6 px-8">
+            {/* Unconditionally the light-on-dark token — same reasoning as login.tsx's own
+                title: this screen's backdrop is AuthBackdrop's fixed-dark art year-round. */}
+            <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
+              Código de verificación
+            </Text>
+            <View className="w-full gap-6">
               <TextField
-                label="Código de tu cuenta Xindeler"
-                value={authCode}
-                onChangeText={setAuthCode}
+                label="Código de Verificación Overlord"
+                value={code}
+                onChangeText={setCode}
                 keyboardType="number-pad"
                 autoCapitalize="none"
                 maxLength={6}
                 autoComplete="one-time-code"
                 textContentType="oneTimeCode"
+                forceNight
               />
+              <View className="gap-4">
+                <Pressable
+                  onPress={() => setUseAuthTotp((current) => !current)}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: useAuthTotp }}
+                  accessibilityLabel="Código Verificación Xindeler"
+                  className="w-full flex-row items-center justify-between"
+                >
+                  <Text
+                    className={useAuthTotp ? 'text-night-steel-light' : 'text-night-steel-muted'}
+                    style={{ fontFamily: fonts.regular }}
+                  >
+                    Código Verificación Xindeler
+                  </Text>
+                  <View
+                    className={`h-7 w-12 justify-center rounded-full px-0.5 ${
+                      useAuthTotp ? 'bg-night-accent-cyan' : 'bg-night-steel-dark'
+                    }`}
+                  >
+                    <View
+                      className={`h-6 w-6 rounded-full bg-night-bg-surface ${useAuthTotp ? 'ml-5' : 'ml-0'}`}
+                    />
+                  </View>
+                </Pressable>
+                {useAuthTotp && (
+                  <TextField
+                    label="Código de tu cuenta Xindeler"
+                    value={authCode}
+                    onChangeText={setAuthCode}
+                    keyboardType="number-pad"
+                    autoCapitalize="none"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                    forceNight
+                  />
+                )}
+              </View>
+            </View>
+            {error && (
+              <>
+                <Text className="text-center text-sm text-night-danger">
+                  {gatewayErrorMessage(environment.id, error)}
+                </Text>
+                {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
+              </>
             )}
-          </View>
-          {error && (
-            <>
-              <Text className="text-center text-sm text-danger dark:text-night-danger">
-                {gatewayErrorMessage(environment.id, error)}
+            <Button
+              label="Confirmar"
+              onPress={handleSubmit}
+              loading={loading}
+              disabled={code.length !== 6 || !authCodeComplete}
+              forceNight
+            />
+            <Pressable onPress={() => router.back()}>
+              <Text
+                className="text-sm text-night-steel-muted"
+                style={{ fontFamily: fonts.regular }}
+              >
+                Volver
               </Text>
-              {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
-            </>
-          )}
-          <Button
-            label="Confirmar"
-            onPress={handleSubmit}
-            loading={loading}
-            disabled={code.length !== 6 || !authCodeComplete}
-          />
-          <Pressable onPress={() => router.back()}>
-            <Text
-              className="text-sm text-steel-muted dark:text-night-steel-muted"
-              style={{ fontFamily: fonts.regular }}
-            >
-              Volver
-            </Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </Screen>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
