@@ -322,13 +322,18 @@ export const DEFAULT_DM_EVENT = {
 export const OracleChatTokenSchema = z.object({ text: z.string() });
 export type OracleChatToken = z.infer<typeof OracleChatTokenSchema>;
 
+// ZG-67: matches the real `GET /oracle/budget`, confirmed directly by the xindeler-zuul session
+// that shipped it (PR #98) -- no `tier_breakdown` (there is only one tier, Bedrock; a client-
+// invented `local` tier never existed server-side at all, see `OracleChatScreen.tsx`'s own
+// comment), separate input/output token counts (not one combined figure), and `monthly_cap_usd`/
+// `bedrock_configured` -- the latter is what actually distinguishes "no AWS account configured
+// yet" (the real state in every environment until ZG-29 unblocks) from a genuine zero-usage month.
 export const OracleBudgetResponseSchema = z.object({
-  month_to_date_tokens: z.number(),
+  month_to_date_input_tokens: z.number(),
+  month_to_date_output_tokens: z.number(),
   month_to_date_cost_usd: z.number(),
-  tier_breakdown: z.object({
-    local: z.object({ tokens: z.number(), cost_usd: z.number() }),
-    bedrock: z.object({ tokens: z.number(), cost_usd: z.number() }),
-  }),
+  monthly_cap_usd: z.number().nullable(),
+  bedrock_configured: z.boolean(),
 });
 export type OracleBudgetResponse = z.infer<typeof OracleBudgetResponseSchema>;
 

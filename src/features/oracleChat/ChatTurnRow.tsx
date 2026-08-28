@@ -43,11 +43,9 @@ export const ChatTurnRow = memo(function ChatTurnRow({
         className="text-accent-cyan dark:text-night-accent-cyan"
         style={{ fontFamily: fonts.semibold }}
       >
-        {turn.role === 'operator'
-          ? 'Operador'
-          : turn.tier === 'bedrock'
-            ? 'ORACLE (Bedrock)'
-            : 'ORACLE'}
+        {/* ZG-67: no more `tier` -- Bedrock is the only tier that ever existed server-side, so
+            there is nothing left to distinguish an assistant turn by. */}
+        {turn.role === 'operator' ? 'Operador' : 'ORACLE'}
       </Text>
       {turn.contextSnippets && turn.contextSnippets.length > 0 && (
         <View className="mt-1 rounded-lg border border-steel-dark p-2 dark:border-night-steel-dark">

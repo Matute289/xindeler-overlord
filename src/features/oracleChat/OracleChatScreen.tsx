@@ -4,7 +4,6 @@ import type { ListRenderItem, NativeScrollEvent, NativeSyntheticEvent } from 're
 import { FlatList, Text, View } from 'react-native';
 
 import type { DmEvent } from '@/api/schemas';
-import { useEnvironment } from '@/config/EnvironmentContext';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
@@ -27,7 +26,6 @@ export function OracleChatScreen() {
   const { threads, activeThreadId, setActiveThreadId, createThread, send, retryTurn, sending } =
     useOracleChatThreads();
   const budgetQuery = useOracleBudgetQuery();
-  const { environment } = useEnvironment();
   const [draftText, setDraftText] = useState('');
   const [followTail, setFollowTail] = useState(true);
   const flatListRef = useRef<FlatList<ChatTurn>>(null);
@@ -105,17 +103,11 @@ export function OracleChatScreen() {
     const text = draftText;
     // Gated on exactly the conditions `send` itself early-returns on, so the composer is never
     // cleared for a message that was never turned into a turn. (Unreachable through the Enviar
-    // button, which is disabled under both — but silent data loss shouldn't depend on that.)
+    // button, which is disabled under the same condition — but silent data loss shouldn't depend
+    // on that.)
     if (text.trim().length === 0 || sending) return;
     setDraftText('');
-    await send(activeThread.id, text, 'local');
-  }
-
-  async function handleThinkHarder() {
-    const text = draftText;
-    if (text.trim().length === 0 || sending) return;
-    setDraftText('');
-    await send(activeThread.id, text, 'bedrock');
+    await send(activeThread.id, text);
   }
 
   // Stable across streamed tokens (see `useOracleChatThreads`'s refs) so `ChatTurnRow`'s `memo()`
@@ -147,14 +139,19 @@ export function OracleChatScreen() {
         </Text>
         <FollowTailToggle followTail={followTail} onToggle={toggleFollowTail} />
       </View>
-      {environment.id !== 'mock' && (
+      {/* ZG-67: shipped as a real route now, no longer environment-gated -- the thing that
+          actually determines whether a send will work is `bedrock_configured` (no AWS account
+          exists yet anywhere as of this writing, ZG-29 blocked), not which environment this app
+          is pointed at. Reading straight off the budget query rather than a static per-
+          environment assumption keeps this honest once an account does exist somewhere. */}
+      {budgetQuery.data && !budgetQuery.data.bedrock_configured && (
         <View className="px-6 pt-1">
           <Text
-            className="text-xs text-steel-muted dark:text-night-steel-muted"
+            className="text-xs text-warning dark:text-night-warning"
             style={{ fontFamily: fonts.regular }}
           >
-            El chat todavía no tiene implementación en Zuul real — solo responde contra el entorno
-            Mock (falta Bedrock del lado de Zuul).
+            ORACLE (Bedrock) todavía no está configurado del lado de Zuul — los mensajes van a
+            fallar hasta que se configure una cuenta de AWS.
           </Text>
         </View>
       )}
@@ -209,26 +206,21 @@ export function OracleChatScreen() {
           loading={sending}
           disabled={draftText.trim().length === 0 || sending}
         />
-        <Pressable
-          onPress={handleThinkHarder}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: draftText.trim().length === 0 || sending }}
-          disabled={draftText.trim().length === 0 || sending}
-          className="items-center"
-        >
+        {/* ZG-67: no more separate "Pensar mejor" action -- Bedrock is the only tier, so every
+            send already uses it; a second button offering the same request under a different
+            label would be pure UI noise. The budget figure that used to live on that button's
+            label is shown here instead, unconditionally, since it's relevant to every send now,
+            not just an opt-in "expensive" path. */}
+        {budgetQuery.data && budgetQuery.data.bedrock_configured && (
           <Text
-            className={
-              draftText.trim().length === 0 || sending
-                ? 'text-steel-muted dark:text-night-steel-muted'
-                : 'text-accent-cyan dark:text-night-accent-cyan'
-            }
-            style={{ fontFamily: fonts.semibold }}
+            className="text-center text-xs text-steel-muted dark:text-night-steel-muted"
+            style={{ fontFamily: fonts.regular }}
           >
-            {budgetQuery.data
-              ? `Pensar mejor ($${budgetQuery.data.month_to_date_cost_usd.toFixed(2)} este mes)`
-              : 'Pensar mejor'}
+            {budgetQuery.data.monthly_cap_usd !== null
+              ? `$${budgetQuery.data.month_to_date_cost_usd.toFixed(2)} de $${budgetQuery.data.monthly_cap_usd.toFixed(2)} este mes`
+              : `$${budgetQuery.data.month_to_date_cost_usd.toFixed(2)} gastados este mes`}
           </Text>
-        </Pressable>
+        )}
       </View>
     </View>
   );
