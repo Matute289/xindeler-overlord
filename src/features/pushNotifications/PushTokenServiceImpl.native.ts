@@ -31,12 +31,19 @@ async function ensureAndroidChannel() {
 export const pushTokenService: PushTokenService = {
   async getStatus(): Promise<PushStatus> {
     const stored = await SecureStore.getItemAsync(TOKEN_KEY);
-    if (stored) return { state: 'registered', token: stored };
+    if (stored) {
+      return {
+        state: 'registered',
+        registration: { platform: Platform.OS as 'ios' | 'android', token: stored },
+      };
+    }
     const { status } = await Notifications.getPermissionsAsync();
     if (status === 'denied') return { state: 'denied' };
     return { state: 'not_requested' };
   },
 
+  // `deps` unused here -- `getVapidPublicKey` only matters to the web implementation, see
+  // `PushTokenService`'s own doc comment in `PushTokenService.types.ts`.
   async acquireToken(): Promise<PushRegistration> {
     await ensureAndroidChannel();
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -53,8 +60,9 @@ export const pushTokenService: PushTokenService = {
     return { token, platform: Platform.OS as 'ios' | 'android' };
   },
 
-  async persistToken(token: string): Promise<void> {
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
+  async persistToken(registration: PushRegistration): Promise<void> {
+    if (registration.platform === 'web') return;
+    await SecureStore.setItemAsync(TOKEN_KEY, registration.token);
   },
 
   async clearStoredToken(): Promise<void> {

@@ -15,6 +15,7 @@ const mockRoutes = require('./src/routes/mock');
 const serverRoutes = require('./src/routes/server');
 const broadcastRoutes = require('./src/routes/broadcast');
 const pushRoutes = require('./src/routes/push');
+const pushWebRoutes = require('./src/routes/pushWeb');
 const playersDirectoryRoutes = require('./src/routes/playersDirectory').router;
 const playerDetailRoutes = require('./src/routes/playerDetail');
 const playerFlagRoutes = require('./src/routes/playerFlag');
@@ -89,6 +90,10 @@ app.use('/api/v1/stream/status', requireAuth, streamRoutes);
 app.use('/api/v1/server', requireAuth, requireCsrf, serverRoutes);
 // OC-68: matches xindeler-zuul's real route (`server/src/web.rs`), not `/api/v1/broadcast`.
 app.use('/api/v1/server/broadcast', requireAuth, requireCsrf, requireStepUp, broadcastRoutes);
+// ZG-35: mounted before `/api/v1/push` even though Express would fall through correctly either
+// way (that router only matches `/register`/`/unregister`, never `/web/*`) -- more specific
+// prefix first reads clearer regardless.
+app.use('/api/v1/push/web', requireAuth, requireCsrf, pushWebRoutes);
 app.use('/api/v1/push', requireAuth, requireCsrf, pushRoutes);
 app.use('/api/v1/oracle/events', requireAuth, oracleEventsRoutes);
 app.use('/api/v1/oracle/presets', requireAuth, oraclePresetsRoutes);

@@ -179,13 +179,44 @@ export function createWriteApi(http: HttpClient) {
       });
     },
 
+    // ZG-35: matches the real `POST /push/web/register`'s `RegisterRequest` exactly
+    // (`endpoint`/`p256dh`/`auth`) -- `endpoint`/`p256dh`/`auth` all come straight off the
+    // browser's own `PushSubscription.toJSON()`, not derived or renamed client-side. Upsert by
+    // `endpoint`, same as calling it again with a refreshed key — real Zuul's own route handles
+    // that, nothing special needed here.
+    registerWebPush(endpoint: string, p256dh: string, auth: string): Promise<void> {
+      return http.request('/api/v1/push/web/register', {
+        method: 'POST',
+        body: { endpoint, p256dh, auth },
+      });
+    },
+
+    unregisterWebPush(endpoint: string): Promise<void> {
+      return http.request('/api/v1/push/web/unregister', {
+        method: 'POST',
+        body: { endpoint },
+      });
+    },
+
     // OC-72/ZG-66: `event_id`/`dm_event`, not `id`/`dm_event` -- and no response schema, since
     // real Zuul's success is `204 No Content` (see the removed `StageOracleEventResponseSchema`'s
     // own comment in `schemas.ts`).
-    stageOracleEvent(eventId: string, dmEvent: DmEvent, idempotencyKey?: string): Promise<void> {
+    // OC-74/ZG-70: `highImpactOverride` -- a genuine, exposed parameter here (unlike
+    // `fireOracleEvent`'s own `high_impact_override`, still hardcoded `false` below since what
+    // "high impact" means for a real fire remains undesigned on the engine side). Stage's own
+    // condition is concrete and confirmed: real Zuul rejects a `spawn_count` above
+    // `SPAWN_COUNT_OPERATIONAL_CAP` with `412 high_impact_override_required` unless this is
+    // `true`, and even then only lets it through if this session also has an active step-up
+    // window (`403` otherwise).
+    stageOracleEvent(
+      eventId: string,
+      dmEvent: DmEvent,
+      highImpactOverride: boolean,
+      idempotencyKey?: string,
+    ): Promise<void> {
       return http.request('/api/v1/oracle/stage', {
         method: 'POST',
-        body: { event_id: eventId, dm_event: dmEvent },
+        body: { event_id: eventId, dm_event: dmEvent, high_impact_override: highImpactOverride },
         idempotencyKey,
       });
     },

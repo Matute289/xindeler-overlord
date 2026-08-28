@@ -113,5 +113,14 @@ export function createReadApi(http: HttpClient) {
         PlayerDetailResponseSchema,
       );
     },
+
+    // ZG-35: plain-text body (the raw base64url VAPID public key), not JSON — see
+    // `httpClient.ts`'s own `requestText` doc comment. No retry wrapper (`requestWithRetry` is
+    // JSON-only): a 503 here (`not_configured`) isn't retryable-network-flakiness, it's Web Push
+    // genuinely not set up yet, same as every other "not configured" state this app already
+    // surfaces as-is rather than retrying into.
+    getVapidPublicKey() {
+      return http.requestText('/api/v1/push/web/vapid-public-key');
+    },
   };
 }

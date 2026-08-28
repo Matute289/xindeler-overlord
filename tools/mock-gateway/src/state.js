@@ -23,6 +23,9 @@ const state = {
   streamClients: new Set(), // Set<express.Response> currently open on /api/v1/stream
   auditLog: [], // { id, operator_uuid, operator_username, action, payload, outcome, created_at }
   pushTokens: [], // { operator, expoPushToken, platform, createdAt }
+  // ZG-35: { operator, endpoint, p256dh, auth, createdAt } — mirrors `pushTokens` above, one row
+  // per (operator, endpoint), matching real Zuul's `web_push_subscriptions` table.
+  webPushSubscriptions: [],
   oracleEnabled: true,
   oracleEvents: new Map(), // id -> { dm_event, status: 'staging' | 'loaded', stagedAt }
   lastBroadcastAt: 0,

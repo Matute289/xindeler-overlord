@@ -36,10 +36,20 @@ export function usePushRegistration() {
     setLoading(true);
     setError(null);
     try {
-      const { token, platform } = await pushTokenService.acquireToken();
-      await api.write.registerPushToken(token, platform);
-      await pushTokenService.persistToken(token);
-      setStatus({ state: 'registered', token });
+      const registration = await pushTokenService.acquireToken({
+        getVapidPublicKey: () => api.read.getVapidPublicKey(),
+      });
+      if (registration.platform === 'web') {
+        await api.write.registerWebPush(
+          registration.endpoint,
+          registration.p256dh,
+          registration.auth,
+        );
+      } else {
+        await api.write.registerPushToken(registration.token, registration.platform);
+      }
+      await pushTokenService.persistToken(registration);
+      setStatus({ state: 'registered', registration });
     } catch (err) {
       const refreshedStatus = await pushTokenService.getStatus();
       setStatus(refreshedStatus);
@@ -54,7 +64,11 @@ export function usePushRegistration() {
     setLoading(true);
     setError(null);
     try {
-      await api.write.unregisterPushToken(status.token);
+      if (status.registration.platform === 'web') {
+        await api.write.unregisterWebPush(status.registration.endpoint);
+      } else {
+        await api.write.unregisterPushToken(status.registration.token);
+      }
       await pushTokenService.clearStoredToken();
       setStatus({ state: 'not_requested' });
     } catch (err) {

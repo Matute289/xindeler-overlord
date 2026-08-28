@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ListRenderItem, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { FlatList, Text, View } from 'react-native';
 
-import type { DmEvent } from '@/api/schemas';
+import type { DmEvent, OracleBudgetAlertLevel } from '@/api/schemas';
 import { Button } from '@/ui/Button';
 import { ChipPicker } from '@/ui/ChipPicker';
+import { ConfirmByTypingSheet } from '@/ui/ConfirmByTypingSheet';
 import { FollowTailToggle } from '@/ui/FollowTailToggle';
 import { Pressable } from '@/ui/Pressable';
 import { TextField } from '@/ui/TextField';
@@ -21,6 +22,21 @@ const SCROLL_BOTTOM_THRESHOLD_PX = 50;
 // height. Any offset past the content clamps to the end, so an intentionally unreachable value is
 // the safe bootstrap; every scroll after it uses the measured height.
 const TAIL_PROBE_OFFSET_PX = 1_000_000;
+
+// ZG-32: `critical`/`exceeded` share the danger token rather than escalating further -- there is
+// no "more than danger" tone in this app's palette, and `exceeded` is already unambiguous from
+// its own copy plus the override flow it triggers on the next send.
+function budgetAlertClassName(level: OracleBudgetAlertLevel): string {
+  switch (level) {
+    case 'warning':
+      return 'text-warning dark:text-night-warning';
+    case 'critical':
+    case 'exceeded':
+      return 'text-danger dark:text-night-danger';
+    case 'ok':
+      return 'text-steel-muted dark:text-night-steel-muted';
+  }
+}
 
 export function OracleChatScreen() {
   const { threads, activeThreadId, setActiveThreadId, createThread, send, retryTurn, sending } =
@@ -119,13 +135,34 @@ export function OracleChatScreen() {
     [retryTurn, activeThread.id],
   );
 
+  // ZG-32: overriding a budget cap gets the same explicit, typed confirmation
+  // `OracleComposerScreen.tsx`'s own high-impact-override gate requires before spending past a
+  // configured limit — `overrideRetryTurnId` just remembers WHICH turn this sheet is for (a
+  // single sheet at screen level, same convention every other confirm gate in this app uses,
+  // rather than one embedded per row).
+  const [overrideRetryTurnId, setOverrideRetryTurnId] = useState<string | null>(null);
+  const handleOverrideRetry = useCallback((turnId: string) => {
+    setOverrideRetryTurnId(turnId);
+  }, []);
+  function handleConfirmOverrideRetry() {
+    if (overrideRetryTurnId) void retryTurn(activeThread.id, overrideRetryTurnId, true);
+    setOverrideRetryTurnId(null);
+  }
+
   const handleApply = useCallback((draft: DmEvent) => {
     router.push({ pathname: '/oracle-composer', params: { draft: JSON.stringify(draft) } });
   }, []);
 
   const renderItem = useCallback<ListRenderItem<ChatTurn>>(
-    ({ item }) => <ChatTurnRow turn={item} onRetry={handleRetry} onApply={handleApply} />,
-    [handleRetry, handleApply],
+    ({ item }) => (
+      <ChatTurnRow
+        turn={item}
+        onRetry={handleRetry}
+        onOverrideRetry={handleOverrideRetry}
+        onApply={handleApply}
+      />
+    ),
+    [handleRetry, handleOverrideRetry, handleApply],
   );
 
   return (
@@ -210,10 +247,12 @@ export function OracleChatScreen() {
             send already uses it; a second button offering the same request under a different
             label would be pure UI noise. The budget figure that used to live on that button's
             label is shown here instead, unconditionally, since it's relevant to every send now,
-            not just an opt-in "expensive" path. */}
+            not just an opt-in "expensive" path. ZG-32: color follows the real, server-computed
+            `alert_level` (not re-derived client-side from the raw numbers) -- `warning`/
+            `critical`/`exceeded` all read as an escalating signal, not just a flat figure. */}
         {budgetQuery.data && budgetQuery.data.bedrock_configured && (
           <Text
-            className="text-center text-xs text-steel-muted dark:text-night-steel-muted"
+            className={`text-center text-xs ${budgetAlertClassName(budgetQuery.data.alert_level)}`}
             style={{ fontFamily: fonts.regular }}
           >
             {budgetQuery.data.monthly_cap_usd !== null
@@ -222,6 +261,13 @@ export function OracleChatScreen() {
           </Text>
         )}
       </View>
+      <ConfirmByTypingSheet
+        visible={overrideRetryTurnId !== null}
+        word="OVERRIDE"
+        description="Esto va a gastar por encima del presupuesto mensual configurado — confirmá para reintentar igual (va a pedir un step-up)."
+        onConfirm={handleConfirmOverrideRetry}
+        onCancel={() => setOverrideRetryTurnId(null)}
+      />
     </View>
   );
 }

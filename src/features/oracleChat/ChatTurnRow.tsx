@@ -2,6 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { memo, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { isApiError } from '@/api';
 import type { ChatMessage, DmEvent } from '@/api/schemas';
 import { ActionError } from '@/features/connectivity/ActionError';
 import { describeChatMessage } from '@/features/chat/describeChatMessage';
@@ -13,6 +14,7 @@ import type { ChatTurn } from './types';
 export const ChatTurnRow = memo(function ChatTurnRow({
   turn,
   onRetry,
+  onOverrideRetry,
   onApply,
 }: {
   turn: ChatTurn;
@@ -20,6 +22,12 @@ export const ChatTurnRow = memo(function ChatTurnRow({
   // `() => retryTurn(threadId, turn.id)` arrow is rebuilt on every `renderItem` call, which made
   // this component's `memo()` a no-op. The screen hands down one stable callback instead.
   onRetry: (turnId: string) => void;
+  // ZG-32: a plain retry after `budget_exceeded` would fail identically every time — the budget
+  // is still exceeded, nothing about a bare retry changes that. Offered instead of the plain
+  // retry button for exactly this one failure reason; the screen owns the confirm-by-typing gate
+  // before this actually fires (spending past a configured cap deserves the same explicit
+  // confirmation `OracleComposerScreen.tsx`'s own high-impact-override gate requires).
+  onOverrideRetry: (turnId: string) => void;
   onApply: (draft: DmEvent) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -27,6 +35,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
   // arrived is a truncated fragment. Rendering it identically to a completed reply (and letting
   // it be copied out of the app) contradicts the hook's own failure classification.
   const failed = turn.status === 'failed';
+  const budgetExceeded = isApiError(turn.error) && turn.error.code === 'budget_exceeded';
 
   async function handleCopy() {
     await Clipboard.setStringAsync(turn.text);
@@ -88,7 +97,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
             </Text>
           )}
           <Pressable
-            onPress={() => onRetry(turn.id)}
+            onPress={() => (budgetExceeded ? onOverrideRetry(turn.id) : onRetry(turn.id))}
             accessibilityRole="button"
             className="mt-1 items-center"
           >
@@ -96,7 +105,7 @@ export const ChatTurnRow = memo(function ChatTurnRow({
               className="text-accent-cyan dark:text-night-accent-cyan"
               style={{ fontFamily: fonts.semibold }}
             >
-              Reintentar
+              {budgetExceeded ? 'Reintentar anulando el presupuesto' : 'Reintentar'}
             </Text>
           </Pressable>
         </View>
