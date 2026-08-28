@@ -162,26 +162,57 @@ const logLineTemplates = [
 // its id.
 const entityTemplates = ['tpl_wolf_pack', 'tpl_bandit_camp', 'tpl_storm_elemental'];
 
-// OC-71: `title`/`summary`, not `name` -- matches the real `OraclePreset` shape read directly from
-// `xindeler-zuul/server/src/presets.rs`.
+// OC-72: `dm_event` is the real `DmEvent` shape (`dimension_config`/`atmosphere`/
+// `spawning_rules`/`narrative`), matching `xindeler-zuul/server/src/presets.rs` after ZG-66 --
+// `title`/`summary`, not `name`, matches that same source's outer `PresetEvent` wrapper.
 const oraclePresets = [
   {
     id: 'preset_wolf_ambush',
     title: 'Emboscada de lobos',
     summary: 'Genera una manada de lobos cerca del objetivo.',
-    dm_event: { kind: 'spawn', template_id: 'tpl_wolf_pack', intensity: 6, radius: 20 },
+    dm_event: {
+      dimension_config: { seed_modifier: 0, biome_profile: 'default' },
+      atmosphere: { time_lock: null, weather_effect: 'Clear', transition_secs: 5 },
+      spawning_rules: {
+        entity_templates: ['tpl_wolf_pack'],
+        spawn_count: 6,
+        spawn_radius: 20,
+        ai_behavior_override: 'aggro',
+      },
+      narrative: { world_rumor: 'Se escuchan aullidos cerca del camino.', on_enter_message: null },
+    },
   },
   {
     id: 'preset_magic_storm',
     title: 'Tormenta mágica',
-    summary: 'Guarda un evento de clima mágico (todavía no aplicado por el motor).',
-    dm_event: { kind: 'weather', intensity: 8, radius: 50 },
+    summary: 'Cambia el clima a una tormenta con transición lenta.',
+    dm_event: {
+      dimension_config: { seed_modifier: 0, biome_profile: 'default' },
+      atmosphere: { time_lock: null, weather_effect: 'Storm', transition_secs: 30 },
+      spawning_rules: {
+        entity_templates: [],
+        spawn_count: 0,
+        spawn_radius: 50,
+        ai_behavior_override: 'passive',
+      },
+      narrative: { world_rumor: null, on_enter_message: null },
+    },
   },
   {
     id: 'preset_bandit_raid',
     title: 'Asalto de bandidos',
     summary: 'Genera un campamento de bandidos cerca del objetivo.',
-    dm_event: { kind: 'spawn', template_id: 'tpl_bandit_camp', intensity: 5, radius: 30 },
+    dm_event: {
+      dimension_config: { seed_modifier: 0, biome_profile: 'default' },
+      atmosphere: { time_lock: null, weather_effect: 'Cloudy', transition_secs: 5 },
+      spawning_rules: {
+        entity_templates: ['tpl_bandit_camp'],
+        spawn_count: 5,
+        spawn_radius: 30,
+        ai_behavior_override: 'aggro',
+      },
+      narrative: { world_rumor: null, on_enter_message: 'Escuchás voces entre los árboles.' },
+    },
   },
 ];
 
@@ -189,8 +220,28 @@ const oracleCannedReply =
   'Puedo generar un evento de emboscada de lobos cerca del jugador. ¿Confirmás?';
 
 const oracleDraftPool = [
-  { kind: 'spawn', template_id: 'tpl_wolf_pack', intensity: 6, radius: 20 },
-  { kind: 'weather', intensity: 8, radius: 50 },
+  {
+    dimension_config: { seed_modifier: 0, biome_profile: 'default' },
+    atmosphere: { time_lock: null, weather_effect: 'Clear', transition_secs: 5 },
+    spawning_rules: {
+      entity_templates: ['tpl_wolf_pack'],
+      spawn_count: 6,
+      spawn_radius: 20,
+      ai_behavior_override: 'aggro',
+    },
+    narrative: { world_rumor: 'Se escuchan aullidos cerca del camino.', on_enter_message: null },
+  },
+  {
+    dimension_config: { seed_modifier: 0, biome_profile: 'default' },
+    atmosphere: { time_lock: null, weather_effect: 'Storm', transition_secs: 30 },
+    spawning_rules: {
+      entity_templates: [],
+      spawn_count: 0,
+      spawn_radius: 50,
+      ai_behavior_override: 'passive',
+    },
+    narrative: { world_rumor: null, on_enter_message: null },
+  },
 ];
 
 module.exports = {

@@ -252,26 +252,88 @@ export const OracleEventsResponseSchema = z.object({
 });
 export type OracleEventsResponse = z.infer<typeof OracleEventsResponseSchema>;
 
+// OC-72: matches the real `DmEvent` (`xindeler-zuul/server/src/presets.rs`, the exact struct
+// ZG-66 wired `POST /oracle/stage` to accept as JSON, replacing the old opaque `ron_body: string`
+// field) — confirmed directly against that source, not guessed. Bears no resemblance to the
+// previous speculative shape (`kind`/`template_id`/`intensity`/`radius`): there is no `kind` at
+// all — `spawning_rules` (what spawns) and `atmosphere` (weather/time) are not mutually exclusive
+// alternatives, an event can do both at once. Every field carries `#[serde(default)]` on the Rust
+// side, so an entirely empty `{}` is a valid `DmEvent` — every field here is optional to match,
+// with `DEFAULT_DM_EVENT` below spelling out what the server fills in for anything omitted.
+// `spawn_count`/`spawn_radius`/`transition_secs`/`ai_behavior_override`'s known-values bounds
+// (ZG-68 — `presets.rs`'s own `bounds` module) are NOT enforced server-side yet, only documented
+// there for its own tests, but the composer form still uses them as sane UI limits.
+export const WeatherEffectSchema = z.enum(['Clear', 'Cloudy', 'Rain', 'Storm']);
+export type WeatherEffect = z.infer<typeof WeatherEffectSchema>;
+
+export const AI_BEHAVIORS = ['passive', 'stalk', 'aggro', 'flee'] as const;
+export const SPAWN_COUNT_BOUNDS = { min: 0, max: 200 } as const;
+export const SPAWN_RADIUS_BOUNDS = { min: 0, max: 400 } as const;
+export const TRANSITION_SECS_BOUNDS = { min: 0, max: 3600 } as const;
+export const MAX_DM_EVENT_STRING_LEN = 4096;
+export const MAX_ENTITY_TEMPLATES = 64;
+
 export const DmEventSchema = z.object({
-  kind: z.enum(['spawn', 'weather']),
-  template_id: z.string().optional(),
-  intensity: z.number(),
-  radius: z.number(),
-  dimension_config: z.object({ biome_profile: z.string().optional() }).optional(),
-  atmosphere: z.object({ weather_effect: z.string().optional() }).optional(),
+  dimension_config: z
+    .object({
+      seed_modifier: z.number().optional(),
+      biome_profile: z.string().optional(),
+    })
+    .optional(),
+  atmosphere: z
+    .object({
+      time_lock: z.number().nullable().optional(),
+      weather_effect: WeatherEffectSchema.optional(),
+      transition_secs: z.number().optional(),
+    })
+    .optional(),
+  spawning_rules: z
+    .object({
+      entity_templates: z.array(z.string()).optional(),
+      spawn_count: z.number().optional(),
+      spawn_radius: z.number().optional(),
+      ai_behavior_override: z.string().optional(),
+    })
+    .optional(),
+  narrative: z
+    .object({
+      world_rumor: z.string().nullable().optional(),
+      on_enter_message: z.string().nullable().optional(),
+    })
+    .optional(),
 });
 export type DmEvent = z.infer<typeof DmEventSchema>;
+
+// What the server fills in for any field the composer leaves out — used to seed the form with the
+// same defaults `#[serde(default)]` would produce, so an untouched form and a submitted-empty
+// `{}` describe the same event.
+export const DEFAULT_DM_EVENT = {
+  dimension_config: { seed_modifier: 0, biome_profile: 'default' },
+  atmosphere: { time_lock: null, weather_effect: 'Clear' as const, transition_secs: 5 },
+  spawning_rules: {
+    entity_templates: [] as string[],
+    spawn_count: 0,
+    spawn_radius: 50,
+    ai_behavior_override: 'passive',
+  },
+  narrative: { world_rumor: null, on_enter_message: null },
+};
 
 export const OracleChatTokenSchema = z.object({ text: z.string() });
 export type OracleChatToken = z.infer<typeof OracleChatTokenSchema>;
 
+// ZG-67: matches the real `GET /oracle/budget`, confirmed directly by the xindeler-zuul session
+// that shipped it (PR #98) -- no `tier_breakdown` (there is only one tier, Bedrock; a client-
+// invented `local` tier never existed server-side at all, see `OracleChatScreen.tsx`'s own
+// comment), separate input/output token counts (not one combined figure), and `monthly_cap_usd`/
+// `bedrock_configured` -- the latter is what actually distinguishes "no AWS account configured
+// yet" (the real state in every environment until ZG-29 unblocks) from a genuine zero-usage month.
 export const OracleBudgetResponseSchema = z.object({
-  month_to_date_tokens: z.number(),
+  month_to_date_input_tokens: z.number(),
+  month_to_date_output_tokens: z.number(),
   month_to_date_cost_usd: z.number(),
-  tier_breakdown: z.object({
-    local: z.object({ tokens: z.number(), cost_usd: z.number() }),
-    bedrock: z.object({ tokens: z.number(), cost_usd: z.number() }),
-  }),
+  monthly_cap_usd: z.number().nullable(),
+  bedrock_configured: z.boolean(),
 });
 export type OracleBudgetResponse = z.infer<typeof OracleBudgetResponseSchema>;
 
@@ -336,17 +398,13 @@ export type OracleTriggerResponse = z.infer<typeof OracleTriggerResponseSchema>;
 // `writeApi.ts`'s `setOracleEnabled` and `OracleEventsScreen.tsx`'s own comment on why the
 // operator-facing label can't claim to know it.
 
-export const DmEventDiffEntrySchema = z.object({
-  field: z.string(),
-  from: z.unknown(),
-  to: z.unknown(),
-});
-export const StageOracleEventResponseSchema = z.object({
-  loaded: z.boolean(),
-  sanitized: DmEventSchema,
-  diff: z.array(DmEventDiffEntrySchema),
-});
-export type StageOracleEventResponse = z.infer<typeof StageOracleEventResponseSchema>;
+// OC-72: no `StageOracleEventResponseSchema` — confirmed by directly reading `oracle.rs`'s
+// `stage` handler (ZG-66), real Zuul's success response is `204 No Content`, never
+// `{loaded, sanitized, diff}`. There is no server-side sanitization/clamping step and nothing to
+// diff — that whole concept was speculative. A failure to load (the engine's filesystem watcher
+// never confirming the file, previously modeled as `loaded: false`) is now the `staging_not_
+// confirmed` error code (`504`, see `OracleComposerScreen.tsx`'s error handling) instead of a
+// distinct success-shaped result.
 
 export const TotpStatusSchema = z.enum(['none', 'pending', 'confirmed']);
 export const OperatorSchema = z.object({

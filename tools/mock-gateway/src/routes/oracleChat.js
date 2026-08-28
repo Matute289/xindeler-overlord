@@ -6,10 +6,14 @@ const { oracleCannedReply, oracleDraftPool, nextContextSnippets } = require('../
 const router = express.Router();
 let draftIndex = 0;
 
+// ZG-67: `tier` must be `'bedrock'` -- the real gateway has no local tier and never did
+// (`400 unsupported_tier` for anything else). `invalid_message`/`invalid_thread_id` (also real
+// codes) aren't simulated here -- this mock has never validated those fields, and adding that
+// now would be scope beyond what ZG-67 actually changed.
 router.post('/', (req, res) => {
   const { tier } = req.body || {};
-  if (tier !== 'local' && tier !== 'bedrock') {
-    return sendError(res, 400, 'invalid_tier', "tier debe ser 'local' o 'bedrock'");
+  if (tier !== 'bedrock') {
+    return sendError(res, 400, 'unsupported_tier', "tier debe ser 'bedrock'");
   }
 
   res.writeHead(200, {

@@ -55,7 +55,7 @@ export type StreamOracleChatDeps = {
 // invisible to both.
 export async function* streamOracleChat(
   baseUrl: string,
-  body: { message: string; thread_id: string; tier: 'local' | 'bedrock' },
+  body: { message: string; thread_id: string },
   signal: AbortSignal,
   deps: StreamOracleChatDeps,
 ): AsyncGenerator<OracleChatStreamEvent> {
@@ -92,7 +92,14 @@ export async function* streamOracleChat(
           ...(authHeader ?? {}),
         },
         credentials: 'include',
-        body: JSON.stringify(body),
+        // ZG-67: `tier: 'bedrock'` is the ONLY valid value on the real gateway (`400
+        // unsupported_tier` for anything else, confirmed by the session that shipped it) --
+        // there is no local tier and never was one (CLAUDE.md's own Q6: Bedrock-exclusive, not
+        // even as a first pass). Hardcoded here rather than exposed as a caller-supplied field,
+        // same reasoning `writeApi.ts`'s `fireOracleEvent` hardcodes `dry_run: false` instead of
+        // taking a `boolean` parameter — there is exactly one real value, so making it a
+        // parameter is a footgun with no upside.
+        body: JSON.stringify({ ...body, tier: 'bedrock' }),
         signal: controller.signal,
       });
     } catch {

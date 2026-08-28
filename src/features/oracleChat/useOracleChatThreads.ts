@@ -88,12 +88,7 @@ export function useOracleChatThreads() {
   }
 
   const runAssistantTurn = useCallback(
-    async (
-      threadId: string,
-      operatorText: string,
-      assistantTurnId: string,
-      tier: 'local' | 'bedrock',
-    ) => {
+    async (threadId: string, operatorText: string, assistantTurnId: string) => {
       // Defensive: a previous controller that is somehow still live is superseded rather than
       // left dangling on a request nobody is reading any more.
       abortRef.current?.abort();
@@ -105,7 +100,7 @@ export function useOracleChatThreads() {
       try {
         for await (const event of streamOracleChat(
           environment.baseUrl,
-          { message: operatorText, thread_id: threadId, tier },
+          { message: operatorText, thread_id: threadId },
           controller.signal,
           {
             getAuthHeader: () => sessionStorage.getAuthHeader(),
@@ -164,7 +159,7 @@ export function useOracleChatThreads() {
   );
 
   const send = useCallback(
-    async (threadId: string, text: string, tier: 'local' | 'bedrock') => {
+    async (threadId: string, text: string) => {
       const trimmed = text.trim();
       if (trimmed.length === 0 || sendingRef.current) return;
 
@@ -175,7 +170,6 @@ export function useOracleChatThreads() {
         status: 'complete',
         draft: null,
         error: null,
-        tier: null,
         contextSnippets: null,
       };
       const assistantTurn: ChatTurn = {
@@ -185,7 +179,6 @@ export function useOracleChatThreads() {
         status: 'streaming',
         draft: null,
         error: null,
-        tier,
         contextSnippets: null,
       };
       setThreads((prev) =>
@@ -196,7 +189,7 @@ export function useOracleChatThreads() {
         ),
       );
 
-      await runAssistantTurn(threadId, trimmed, assistantTurn.id, tier);
+      await runAssistantTurn(threadId, trimmed, assistantTurn.id);
     },
     [runAssistantTurn],
   );
@@ -208,9 +201,7 @@ export function useOracleChatThreads() {
       const index = thread?.turns.findIndex((t) => t.id === assistantTurnId) ?? -1;
       if (!thread || index <= 0) return;
       const operatorTurn = thread.turns[index - 1];
-      const assistantTurn = thread.turns[index];
       if (operatorTurn.role !== 'operator') return;
-      const tier = assistantTurn.tier ?? 'local';
 
       updateTurn(threadId, assistantTurnId, (turn) => ({
         ...turn,
@@ -220,7 +211,7 @@ export function useOracleChatThreads() {
         error: null,
         contextSnippets: null,
       }));
-      await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId, tier);
+      await runAssistantTurn(threadId, operatorTurn.text, assistantTurnId);
     },
     [runAssistantTurn],
   );

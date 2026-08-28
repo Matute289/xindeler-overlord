@@ -43,11 +43,9 @@ export const ChatTurnRow = memo(function ChatTurnRow({
         className="text-accent-cyan dark:text-night-accent-cyan"
         style={{ fontFamily: fonts.semibold }}
       >
-        {turn.role === 'operator'
-          ? 'Operador'
-          : turn.tier === 'bedrock'
-            ? 'ORACLE (Bedrock)'
-            : 'ORACLE'}
+        {/* ZG-67: no more `tier` -- Bedrock is the only tier that ever existed server-side, so
+            there is nothing left to distinguish an assistant turn by. */}
+        {turn.role === 'operator' ? 'Operador' : 'ORACLE'}
       </Text>
       {turn.contextSnippets && turn.contextSnippets.length > 0 && (
         <View className="mt-1 rounded-lg border border-steel-dark p-2 dark:border-night-steel-dark">
@@ -112,25 +110,31 @@ export const ChatTurnRow = memo(function ChatTurnRow({
           >
             Propuesta recibida (borrador)
           </Text>
-          <Text
-            className="mt-1 text-steel-light dark:text-night-steel-light"
-            style={{ fontFamily: fonts.regular }}
-          >
-            {`kind: ${turn.draft.kind}`}
-          </Text>
-          {turn.draft.template_id && (
-            <Text
-              className="text-steel-light dark:text-night-steel-light"
-              style={{ fontFamily: fonts.regular }}
-            >
-              {`template_id: ${turn.draft.template_id}`}
-            </Text>
-          )}
+          {/* OC-72: real `DmEvent` has no `kind` — `spawning_rules`/`atmosphere` both always
+              apply, they're not mutually exclusive alternatives. Summarizes the fields an
+              operator would actually want a glance at before tapping Aplicar. */}
+          {turn.draft.spawning_rules?.entity_templates &&
+            turn.draft.spawning_rules.entity_templates.length > 0 && (
+              <Text
+                className="mt-1 text-steel-light dark:text-night-steel-light"
+                style={{ fontFamily: fonts.regular }}
+              >
+                {`templates: ${turn.draft.spawning_rules.entity_templates.join(', ')}`}
+              </Text>
+            )}
           <Text
             className="text-steel-light dark:text-night-steel-light"
             style={{ fontFamily: fonts.regular }}
           >
-            {`intensity: ${turn.draft.intensity}  radio: ${turn.draft.radius}`}
+            {`cantidad: ${turn.draft.spawning_rules?.spawn_count ?? 0}  radio: ${
+              turn.draft.spawning_rules?.spawn_radius ?? 0
+            }`}
+          </Text>
+          <Text
+            className="text-steel-light dark:text-night-steel-light"
+            style={{ fontFamily: fonts.regular }}
+          >
+            {`clima: ${turn.draft.atmosphere?.weather_effect ?? 'Clear'}`}
           </Text>
           <Pressable
             onPress={() => onApply(turn.draft as DmEvent)}
