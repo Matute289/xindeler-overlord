@@ -10,7 +10,7 @@ import {
 } from 'react';
 
 import { ApiError, createApiClient, isApiError } from '@/api';
-import type { LoginAuthenticated, LoginEnrollmentRequired } from '@/api';
+import type { LoginResult } from '@/api';
 import { useEnvironment } from '@/config/EnvironmentContext';
 
 import { sessionStorage } from './sessionStorage';
@@ -22,44 +22,35 @@ type AuthContextValue = {
   operator: string | null;
   operatorUuid: string | null;
   isSuperuser: boolean;
-  // Whether beginLogin()/checkLoginStatus() has stashed credentials awaiting completeLogin() (or
-  // confirmEnrollment()) — the TOTP/enroll screens' own guard against being reached with nothing
-  // pending (deep link, back/forward on web), replacing the old challengeId route-param check.
-  // Deliberately a boolean, not the raw username/password themselves — nothing outside this
-  // provider ever reads those directly.
+  // Whether beginLogin() has stashed credentials awaiting completeLogin() — the TOTP screen's
+  // own guard against being reached with nothing pending (deep link, back/forward on web),
+  // replacing the old challengeId route-param check. Deliberately a boolean, not the raw
+  // username/password themselves — nothing outside this provider ever reads those directly.
   hasPendingLogin: boolean;
-  // OC-77 / ZG-73 (proposed): set by checkLoginStatus() when the gateway reports the pending
-  // operator has no confirmed TOTP enrollment yet — the QR/secret the new /enroll screen renders.
-  // `null` whenever there's nothing to enroll (the common case: an already-confirmed operator).
-  pendingEnrollment: LoginEnrollmentRequired | null;
   // Synchronous, no network — stores username/password in-memory only (never sessionStorage,
   // never a route param) for completeLogin() to use once the operator enters their TOTP code.
   // A password must never transit through anything URL-shaped (OC-55 design doc).
   beginLogin: (username: string, password: string) => void;
-  // OC-77 / ZG-73 (proposed): the real first step of login now that a bare "stash and navigate
-  // to /totp" can no longer be correct for an operator who hasn't enrolled TOTP yet. Makes the
+  // OC-77 round 2 / ZG-73 (final contract, 2026-08-29): the real first step of login — makes the
   // one real `/login` call with an empty `totp_code` (the gateway's own sentinel for "I don't
-  // have a code yet") and returns which screen the caller should navigate to next:
-  // - 'enrollment': the gateway reported `enrollment_required` — credentials + the QR/secret are
-  //   now stashed (`pendingEnrollment`), caller should push `/enroll`.
-  // - 'totp': every other outcome (already-confirmed operator awaiting a real code, OR a
+  // have a code yet") and returns which outcome the caller should show:
+  // - 'enrollment_pending': the gateway reported `enrollment_required` — there is no secret/QR
+  //   to show here (unlike round 1 of this feature, reverted for a security flaw — see OC-77's
+  //   backlog history). Nothing is stashed; the caller shows an inline message ("check your
+  //   email for an admin's invite link") and stays on the login screen. TOTP enrollment now only
+  //   happens via that emailed link's own standalone `/enroll?token=...` page.
+  // - 'totp': every other outcome (an already-confirmed operator awaiting a real code, OR a
   //   genuinely wrong password/username) — indistinguishable from each other by design (the
-  //   gateway's `rejected()` is one generic response for both), so this falls through to the
-  //   existing `/totp` screen exactly as before this feature existed; a wrong password surfaces
-  //   there as a wrong-code error on submit, same as it always has.
+  //   gateway's `rejected()` is one generic response for both) — falls through to the existing
+  //   `/totp` screen exactly as before this feature existed.
   // Throws only for a real connectivity failure (network/timeout) — the caller should show that
   // as an error on the login screen itself, not navigate anywhere.
-  checkLoginStatus: (username: string, password: string) => Promise<'enrollment' | 'totp'>;
+  checkLoginStatus: (username: string, password: string) => Promise<'enrollment_pending' | 'totp'>;
   // Fires the one real request the real gateway actually expects (username + password + TOTP
   // together). On failure, does NOT clear the pending credentials — a wrong code should only
   // need retyping the code, not the whole form again. `authTotpCode` (ZG-61): the operator's
   // own xindeler-auth-account 2FA code, if they have that enabled — unrelated to `totpCode`.
   completeLogin: (totpCode: string, authTotpCode?: string) => Promise<void>;
-  // OC-77 / ZG-73 (proposed): confirms the pending TOTP enrollment `checkLoginStatus` surfaced.
-  // Does NOT authenticate the operator — matches the real gateway's `enroll_confirm`, which mints
-  // no session — so on success this clears all pending state and the caller returns to `/login`
-  // for a normal login with the now-confirmed code (the exact 3-step flow Matías asked for).
-  confirmEnrollment: (totpCode: string, authTotpCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   // Clearing the session here only resets auth *state* (status/operator/sessionStorage) —
   // it does not cancel any in-flight requests still carrying the now-invalid token/cookie.
@@ -78,7 +69,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [operatorUuid, setOperatorUuid] = useState<string | null>(null);
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [hasPendingLogin, setHasPendingLogin] = useState(false);
-  const [pendingEnrollment, setPendingEnrollment] = useState<LoginEnrollmentRequired | null>(null);
   const pendingCredentials = useRef<{ username: string; password: string } | null>(null);
 
   const api = useMemo(() => createApiClient(environment.baseUrl), [environment.baseUrl]);
@@ -147,46 +137,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // chose, rather than the request going out silently misdirected.
     pendingCredentials.current = null;
     setHasPendingLogin(false);
-    setPendingEnrollment(null);
   }, [environment.baseUrl]);
 
   const beginLogin = useCallback((username: string, password: string) => {
     pendingCredentials.current = { username, password };
     setHasPendingLogin(true);
-    setPendingEnrollment(null);
   }, []);
 
   // Shared tail of every path that ends in a real, authenticated session (completeLogin's normal
   // case, and checkLoginStatus's defensive "somehow already authenticated" branch below).
-  const finishLogin = useCallback(async (result: LoginAuthenticated) => {
-    await sessionStorage.save({
-      operatorUuid: result.operator_uuid,
-      operatorUsername: result.operator_username,
-      isSuperuser: result.is_superuser,
-      csrfToken: result.csrf_token,
-      sessionToken: result.session_token,
-    });
-    pendingCredentials.current = null;
-    setHasPendingLogin(false);
-    setPendingEnrollment(null);
-    setOperator(result.operator_username);
-    setOperatorUuid(result.operator_uuid);
-    setIsSuperuser(result.is_superuser);
-    setStatus('authenticated');
-  }, []);
+  const finishLogin = useCallback(
+    async (result: Extract<LoginResult, { status: 'authenticated' }>) => {
+      await sessionStorage.save({
+        operatorUuid: result.operator_uuid,
+        operatorUsername: result.operator_username,
+        isSuperuser: result.is_superuser,
+        csrfToken: result.csrf_token,
+        sessionToken: result.session_token,
+      });
+      pendingCredentials.current = null;
+      setHasPendingLogin(false);
+      setOperator(result.operator_username);
+      setOperatorUuid(result.operator_uuid);
+      setIsSuperuser(result.is_superuser);
+      setStatus('authenticated');
+    },
+    [],
+  );
 
   const checkLoginStatus = useCallback(
-    async (username: string, password: string): Promise<'enrollment' | 'totp'> => {
+    async (username: string, password: string): Promise<'enrollment_pending' | 'totp'> => {
       try {
         const result = await api.auth.login(username, password, '');
         if (result.status === 'enrollment_required') {
-          pendingCredentials.current = { username, password };
-          setPendingEnrollment(result);
-          setHasPendingLogin(true);
-          return 'enrollment';
+          // Nothing to stash — round 2 of this feature never hands back a secret/QR here (that
+          // was round 1's security flaw). The operator's next step lives entirely outside this
+          // app (an emailed invite link), not in any state this provider needs to carry.
+          return 'enrollment_pending';
         }
         // Unreachable in practice — the real gateway's TOTP verification never accepts an empty
-        // code — but handled rather than assumed, same as this file's other defensive branches.
+        // code for a confirmed operator — but handled rather than assumed, same as this file's
+        // other defensive branches.
         await finishLogin(result);
         return 'totp';
       } catch (err) {
@@ -199,7 +190,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // exactly as this app behaved before checkLoginStatus existed.
         pendingCredentials.current = { username, password };
         setHasPendingLogin(true);
-        setPendingEnrollment(null);
         return 'totp';
       }
     },
@@ -233,25 +223,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [api, finishLogin],
   );
 
-  const confirmEnrollment = useCallback(
-    async (totpCode: string, authTotpCode?: string) => {
-      const pending = pendingCredentials.current;
-      if (!pending) {
-        throw new Error('confirmEnrollment called with no pending credentials');
-      }
-      await api.auth.enrollConfirm(pending.username, pending.password, totpCode, authTotpCode);
-      // Matías's own spec (step 3): confirming enrollment does NOT log the operator in — it
-      // returns them to a normal login with usuario/contraseña, now completed with the
-      // just-confirmed TOTP code. Clearing everything here (rather than keeping the credentials
-      // around as a shortcut) also gets the raw password out of memory as soon as it's no longer
-      // needed.
-      pendingCredentials.current = null;
-      setHasPendingLogin(false);
-      setPendingEnrollment(null);
-    },
-    [api],
-  );
-
   const logout = useCallback(async () => {
     try {
       await api.auth.logout();
@@ -261,7 +232,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     pendingCredentials.current = null;
     setHasPendingLogin(false);
-    setPendingEnrollment(null);
     await sessionStorage.clear();
     setOperator(null);
     setOperatorUuid(null);
@@ -293,11 +263,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       operatorUuid,
       isSuperuser,
       hasPendingLogin,
-      pendingEnrollment,
       beginLogin,
       checkLoginStatus,
       completeLogin,
-      confirmEnrollment,
       logout,
       handleAuthError,
     }),
@@ -307,11 +275,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       operatorUuid,
       isSuperuser,
       hasPendingLogin,
-      pendingEnrollment,
       beginLogin,
       checkLoginStatus,
       completeLogin,
-      confirmEnrollment,
       logout,
       handleAuthError,
     ],

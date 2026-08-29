@@ -25,19 +25,17 @@ export const LoginAuthenticatedSchema = z.object({
 });
 export type LoginAuthenticated = z.infer<typeof LoginAuthenticatedSchema>;
 
-// OC-77 / ZG-73 (proposed to xindeler-zuul, NOT YET SHIPPED as of 2026-08-28 — see that repo's
-// backlog for the exact contract this was proposed against): a first-time login for an operator
-// with no confirmed TOTP enrollment returns this instead of `LoginAuthenticatedSchema` — carries
-// everything the new `/enroll` screen needs to render a QR and let the operator confirm it.
-// EXPECTED SHAPE, NOT CONFIRMED — field names mirror xindeler-zuul's own `totp::Enrollment`
-// struct (secret_base32/otpauth_url/qr_png_base64), the value that struct's `begin_enrollment`
-// already returns internally for the existing SSH-only `enroll-operator` CLI flow; this proposal
-// only exposes it over `/login` for the first time.
+// OC-77 round 2 / ZG-73 (final contract, confirmed 2026-08-29 by the xindeler-zuul session,
+// PR #111 there — reviewed by two independent security passes, not yet merged but stated as
+// final). `totp_code: ''` for an operator with no confirmed TOTP enrollment now returns ONLY
+// this — no secret/QR fields, ever, regardless of whether the password was correct. This is
+// deliberate: round 1 of this feature (reverted the same day it shipped) put the secret directly
+// in this response, which reintroduced the exact stolen-but-unused-password account-takeover
+// attack ZG-38 (2026-08-11) had already rejected. The only way to actually reach a QR/secret now
+// is `POST /enroll/begin` with a token from an emailed invite link (see EnrollBeginResponseSchema
+// below) — there is no path from THIS response to that one.
 export const LoginEnrollmentRequiredSchema = z.object({
   status: z.literal('enrollment_required'),
-  secret_base32: z.string(),
-  otpauth_url: z.string(),
-  qr_png_base64: z.string(),
 });
 export type LoginEnrollmentRequired = z.infer<typeof LoginEnrollmentRequiredSchema>;
 
@@ -46,6 +44,35 @@ export const LoginResultSchema = z.discriminatedUnion('status', [
   LoginEnrollmentRequiredSchema,
 ]);
 export type LoginResult = z.infer<typeof LoginResultSchema>;
+
+// OC-77 round 2 / ZG-73 (final contract): `POST /enroll/begin` is unauthenticated (no session,
+// no CSRF) — its only input is the token from an emailed invite link
+// (`https://zuul.xindeler.com/enroll?token=...`), and it's the ONLY route that ever returns a
+// TOTP secret/QR now. `qr_png_base64` has no `data:` prefix — the client adds that.
+export const EnrollBeginResponseSchema = z.object({
+  status: z.literal('enrollment_ready'),
+  secret_base32: z.string(),
+  otpauth_url: z.string(),
+  qr_png_base64: z.string(),
+});
+export type EnrollBeginResponse = z.infer<typeof EnrollBeginResponseSchema>;
+
+// OC-77 round 2 / ZG-73 (final contract): `POST /admin/operators` no longer returns a bare `204`
+// — it now reports whether the invite email actually went out, since the invite is the operator's
+// only path to enrolling TOTP at all.
+export const AddOperatorResponseSchema = z.object({
+  added: z.literal(true),
+  invite_email_sent: z.boolean(),
+});
+export type AddOperatorResponse = z.infer<typeof AddOperatorResponseSchema>;
+
+// OC-77 round 2 / ZG-73 (final contract): `POST /admin/operators/{uuid}/resend-enrollment-invite`
+// — for a `totp_status` of `none`/`pending` whose 24h invite link expired, or who closed the
+// email before scanning.
+export const ResendEnrollmentInviteResponseSchema = z.object({
+  invite_email_sent: z.boolean(),
+});
+export type ResendEnrollmentInviteResponse = z.infer<typeof ResendEnrollmentInviteResponseSchema>;
 
 // Mirrors xindeler-zuul's real `GET /status` response (`server/src/status.rs`'s
 // `StatusResponse`/`EngineInfo`/`RestartStatus`, confirmed against that repo's source, ZG-63,

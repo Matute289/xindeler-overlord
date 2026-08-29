@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
-import type { Operator } from '@/api/schemas';
+import type { AddOperatorResponse, Operator, ResendEnrollmentInviteResponse } from '@/api/schemas';
 import { useApi } from '@/api/ApiContext';
 import { useAuth } from '@/auth/AuthContext';
 import { ActionError } from '@/features/connectivity/ActionError';
@@ -30,8 +30,13 @@ export function OperatorsScreen() {
   const [confirmingAdd, setConfirmingAdd] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<Operator | null>(null);
   const [addSuccessMessage, setAddSuccessMessage] = useState<string | null>(null);
+  // OC-77 round 2 / ZG-73: which row's resend is currently in flight — drives that one row's own
+  // `resendPending` prop, not a screen-wide disable, since resending one operator's invite has
+  // nothing to do with any other row.
+  const [resendingUuid, setResendingUuid] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
-  const addAction = useDestructiveAction<void>((idempotencyKey) =>
+  const addAction = useDestructiveAction<AddOperatorResponse>((idempotencyKey) =>
     api.write.addOperator(uuid.trim(), displayName.trim() || undefined, idempotencyKey),
   );
   // `useDestructiveAction`'s `call` is created fresh every render and closes over `removeTarget`
@@ -45,6 +50,20 @@ export function OperatorsScreen() {
       return Promise.reject(new Error('removeOperator: no removeTarget set'));
     }
     return api.write.removeOperator(removeTarget.uuid, idempotencyKey);
+  });
+  // OC-77 round 2 / ZG-73: a `ref`, not `resendingUuid` state, because `handleRequestResend` sets
+  // the target and calls `resendAction.run()` in the SAME synchronous handler — a state update
+  // wouldn't be visible to this closure until the next render, but a ref write is immediate. No
+  // confirm sheet sits between "pick a target" and "run" here (unlike remove's ConfirmByTypingSheet,
+  // which buys a render in between), so this needs the same ref pattern AuthContext's own
+  // `pendingCredentials` uses for the same reason.
+  const resendTargetUuidRef = useRef<string | null>(null);
+  const resendAction = useDestructiveAction<ResendEnrollmentInviteResponse>((idempotencyKey) => {
+    const targetUuid = resendTargetUuidRef.current;
+    if (targetUuid === null) {
+      return Promise.reject(new Error('resendEnrollmentInvite: no target uuid set'));
+    }
+    return api.write.resendEnrollmentInvite(targetUuid, idempotencyKey);
   });
 
   async function handleRefresh() {
@@ -62,7 +81,14 @@ export function OperatorsScreen() {
     const addedUuid = uuid.trim();
     const result = await addAction.run();
     if (result !== null) {
-      setAddSuccessMessage(`Listo — se agregó ${addedUuid} a la lista de operadores.`);
+      // OC-77 round 2 / ZG-73: `invite_email_sent: false` means the operator WAS added (their
+      // TOTP row exists) but the invite email itself failed to send (an SMTP hiccup) — that's not
+      // full success, since the operator still has no way to enroll until someone resends it.
+      setAddSuccessMessage(
+        result.invite_email_sent
+          ? `Listo — se agregó ${addedUuid} y se envió la invitación por email.`
+          : `Se agregó ${addedUuid}, pero el email de invitación no se pudo enviar — usá "Reenviar invitación" en la lista.`,
+      );
       setTimeout(() => setAddSuccessMessage(null), SUCCESS_MESSAGE_MS);
       setUuid('');
       setDisplayName('');
@@ -76,6 +102,23 @@ export function OperatorsScreen() {
     if (!target) return;
     const result = await removeAction.run();
     if (result !== null) {
+      await query.refetch();
+    }
+  }
+
+  async function handleRequestResend(operator: Operator) {
+    setResendMessage(null);
+    resendTargetUuidRef.current = operator.uuid;
+    setResendingUuid(operator.uuid);
+    const result = await resendAction.run();
+    setResendingUuid(null);
+    if (result !== null) {
+      setResendMessage(
+        result.invite_email_sent
+          ? `Invitación reenviada a ${operator.display_name}.`
+          : `${operator.display_name}: el email no se pudo enviar — revisá la configuración de mail en Zuul.`,
+      );
+      setTimeout(() => setResendMessage(null), SUCCESS_MESSAGE_MS);
       await query.refetch();
     }
   }
@@ -127,6 +170,12 @@ export function OperatorsScreen() {
           </Text>
         )}
         {removeAction.error && <ActionError error={removeAction.error} />}
+        {resendAction.error && <ActionError error={resendAction.error} />}
+        {resendMessage && (
+          <Text className="text-sm text-accent-cyan dark:text-night-accent-cyan">
+            {resendMessage}
+          </Text>
+        )}
       </View>
       <FlatList
         data={operators}
@@ -135,7 +184,9 @@ export function OperatorsScreen() {
           <OperatorRow
             operator={item}
             isSelf={item.uuid === operatorUuid}
+            resendPending={resendingUuid === item.uuid && resendAction.pending}
             onRequestRemove={setRemoveTarget}
+            onRequestResend={handleRequestResend}
           />
         )}
         refreshControl={
@@ -161,7 +212,7 @@ export function OperatorsScreen() {
         word="ADD"
         description={`Esto agrega el operador con uuid "${uuid.trim()}"${
           displayName.trim() ? ` (${displayName.trim()})` : ''
-        } a la lista de operadores permitidos. Todavía va a necesitar que corras enroll-operator por SSH para su TOTP.`}
+        } a la lista de operadores permitidos. Zuul le va a mandar un email con el link para activar su verificación en dos pasos (requiere que su cuenta de Xindeler tenga el email verificado).`}
         onConfirm={handleConfirmAdd}
         onCancel={() => {
           setConfirmingAdd(false);

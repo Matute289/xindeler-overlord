@@ -14,12 +14,23 @@ const TOTP_STATUS_LABELS: Record<Operator['totp_status'], string> = {
 export const OperatorRow = memo(function OperatorRow({
   operator,
   isSelf,
+  resendPending,
   onRequestRemove,
+  onRequestResend,
 }: {
   operator: Operator;
   isSelf: boolean;
+  // OC-77 round 2 / ZG-73: true while THIS row's own resend request is in flight — a per-row
+  // flag (not a single screen-wide `pending` boolean) so resending one operator's invite doesn't
+  // also disable every other row's button.
+  resendPending: boolean;
   onRequestRemove: (operator: Operator) => void;
+  onRequestResend: (operator: Operator) => void;
 }) {
+  // OC-77 round 2 / ZG-73: an operator can only ever need a resend before their enrollment is
+  // confirmed — once `totp_status` is `confirmed`, the invite link has already done its job.
+  const canResendInvite = operator.totp_status !== 'confirmed';
+
   return (
     <View className="flex-row items-center justify-between border-b border-steel-dark px-6 py-3 dark:border-night-steel-dark">
       <View className="flex-1">
@@ -48,20 +59,37 @@ export const OperatorRow = memo(function OperatorRow({
           {TOTP_STATUS_LABELS[operator.totp_status]}
         </Text>
       </View>
-      {!isSelf && (
-        <Pressable
-          onPress={() => onRequestRemove(operator)}
-          accessibilityRole="button"
-          className="rounded-full bg-steel-dark px-3 py-1.5 dark:bg-night-steel-dark"
-        >
-          <Text
-            className="text-sm text-danger dark:text-night-danger"
-            style={{ fontFamily: fonts.semibold }}
+      <View className="flex-row items-center gap-2">
+        {canResendInvite && (
+          <Pressable
+            onPress={() => onRequestResend(operator)}
+            accessibilityRole="button"
+            disabled={resendPending}
+            className={`rounded-full bg-steel-dark px-3 py-1.5 dark:bg-night-steel-dark ${resendPending ? 'opacity-50' : ''}`}
           >
-            Quitar
-          </Text>
-        </Pressable>
-      )}
+            <Text
+              className="text-sm text-steel-light dark:text-night-steel-light"
+              style={{ fontFamily: fonts.semibold }}
+            >
+              Reenviar invitación
+            </Text>
+          </Pressable>
+        )}
+        {!isSelf && (
+          <Pressable
+            onPress={() => onRequestRemove(operator)}
+            accessibilityRole="button"
+            className="rounded-full bg-steel-dark px-3 py-1.5 dark:bg-night-steel-dark"
+          >
+            <Text
+              className="text-sm text-danger dark:text-night-danger"
+              style={{ fontFamily: fonts.semibold }}
+            >
+              Quitar
+            </Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 });

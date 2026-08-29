@@ -1,5 +1,5 @@
 import type { createHttpClient } from './httpClient';
-import { LoginResultSchema } from './schemas';
+import { EnrollBeginResponseSchema, LoginResultSchema } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
@@ -18,10 +18,11 @@ export function createAuthApi(http: HttpClient) {
     // gateway's `Option<String>` field — sending `auth_totp_code: undefined` would still
     // serialize as present-with-null in some JSON.stringify paths, so this builds the body
     // conditionally rather than always including the key.
-    // OC-77 / ZG-73 (proposed): `totpCode` may now be sent as `''` — the sentinel a first-time
-    // operator's client sends before it knows whether they have a confirmed TOTP enrollment.
-    // The response discriminates on `status` (see LoginResultSchema) rather than the caller
-    // needing to guess in advance which shape is coming back.
+    // `totpCode` may be sent as `''` — the sentinel a client sends before it knows whether the
+    // operator has a confirmed TOTP enrollment. OC-77 round 2 / ZG-73 (final): unlike round 1,
+    // the response NEVER carries a secret — an unenrolled operator just gets
+    // `{status: 'enrollment_required'}`, full stop. The only path to a QR/secret is
+    // `enrollBegin()` below, via an emailed invite link, never this call.
     login(username: string, password: string, totpCode: string, authTotpCode?: string) {
       return http.request(
         '/api/v1/login',
@@ -42,13 +43,32 @@ export function createAuthApi(http: HttpClient) {
       return http.request('/api/v1/logout', { method: 'POST' });
     },
 
-    // OC-77 / ZG-73 (proposed, EXPECTED SHAPE NOT CONFIRMED): completes a pending TOTP
-    // enrollment. Mirrors xindeler-zuul's real, already-shipped `POST /api/v1/enroll/confirm`
-    // (ZG-38) — that route exists today but is only ever called from the SSH-only
-    // `enroll-operator` CLI flow; this is its first real client caller. Re-authenticates with
-    // username+password (no session cookie exists yet at this point in the flow) exactly like
-    // `login` does. `204` on success, no body — confirming enrollment does NOT mint a session;
-    // the operator logs in normally afterward with their now-confirmed code.
+    // Session-scoped step-up (OC-54) — establishes a 5-minute window on the CURRENT session
+    // during which destructive routes (gateway-api-contract.md §4/§5) allow writes with no extra
+    // header. Bare `/api/v1/step-up`, deliberately NOT nested under `/api/v1/auth/` like this
+    // file's other methods — the real xindeler-zuul route (`web.rs`) is bare `/step-up`,
+    // confirmed directly against its source. `204` on success, no body.
+    stepUp(totpCode: string): Promise<void> {
+      return http.request('/api/v1/step-up', { method: 'POST', body: { totp_code: totpCode } });
+    },
+
+    // OC-77 round 2 / ZG-73 (final contract, 2026-08-29): unauthenticated — no session, no CSRF
+    // — the operator hasn't logged in yet at this point. `token` comes from the query string of
+    // the emailed invite link (`https://zuul.xindeler.com/enroll?token=...`), read by the
+    // `/enroll` screen itself, not from any login-flow state. This is the ONLY route that ever
+    // returns a TOTP secret/QR now.
+    enrollBegin(token: string) {
+      return http.request(
+        '/api/v1/enroll/begin',
+        { method: 'POST', body: { token } },
+        EnrollBeginResponseSchema,
+      );
+    },
+
+    // Unchanged from the real gateway's ZG-38 design — re-authenticates with username+password
+    // (no session exists yet) and completes a *pending* enrollment (the one `enrollBegin` just
+    // showed the QR for). `204` on success, no body, mints no session — the operator logs in
+    // normally afterward.
     enrollConfirm(
       username: string,
       password: string,
@@ -64,15 +84,6 @@ export function createAuthApi(http: HttpClient) {
           ...(authTotpCode ? { auth_totp_code: authTotpCode } : {}),
         },
       });
-    },
-
-    // Session-scoped step-up (OC-54) — establishes a 5-minute window on the CURRENT session
-    // during which destructive routes (gateway-api-contract.md §4/§5) allow writes with no extra
-    // header. Bare `/api/v1/step-up`, deliberately NOT nested under `/api/v1/auth/` like this
-    // file's other methods — the real xindeler-zuul route (`web.rs`) is bare `/step-up`,
-    // confirmed directly against its source. `204` on success, no body.
-    stepUp(totpCode: string): Promise<void> {
-      return http.request('/api/v1/step-up', { method: 'POST', body: { totp_code: totpCode } });
     },
   };
 }

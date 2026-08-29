@@ -9,15 +9,11 @@ const router = express.Router();
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
-// OC-77 / ZG-73 (proposed, EXPECTED SHAPE NOT CONFIRMED against a real backend): this mock's
-// only two credentialed operators. Real Zuul checks `password` against xindeler-auth over the
-// network (`auth::identity_check`) — this mock has no such service, so it keeps the same
-// fixed-password shortcut OC-57 already established for 'matias'.
+// This mock's only two credentialed operators. Real Zuul checks `password` against xindeler-auth
+// over the network (`auth::identity_check`) — this mock has no such service, so it keeps the
+// same fixed-password shortcut OC-57 already established for 'matias'.
 const MOCK_CREDENTIALS = {
   matias: { password: 'mock' },
-  // Seeded as NOT enrolled, matching the real "Maat" operator this feature was built for
-  // (added via POST /admin/operators, no TOTP yet) — the one path this mock needs to exercise
-  // the new enrollment_required branch below without any extra setup.
   maat: { password: 'mock' },
 };
 
@@ -28,23 +24,21 @@ const MOCK_CREDENTIALS = {
 const MOCK_QR_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
-function mockEnrollmentFor(username) {
-  const operator = state.operators.find((op) => op.display_name === username);
-  if (!operator) return null;
+function mockEnrollmentFor(operator) {
   if (!operator._mockTotpSecret) {
     operator._mockTotpSecret = crypto.randomBytes(10).toString('hex').toUpperCase();
   }
   return {
+    status: 'enrollment_ready',
     secret_base32: operator._mockTotpSecret,
-    otpauth_url: `otpauth://totp/Xindeler%20Zuul:${encodeURIComponent(username)}?secret=${operator._mockTotpSecret}&issuer=Xindeler%20Zuul`,
+    otpauth_url: `otpauth://totp/Xindeler%20Zuul:${encodeURIComponent(operator.display_name)}?secret=${operator._mockTotpSecret}&issuer=Xindeler%20Zuul`,
     qr_png_base64: MOCK_QR_PNG_BASE64,
   };
 }
 
-// OC-77 / ZG-73: now looks up the real operator record instead of hardcoding matias's
-// uuid/is_superuser on every login — a latent bug that didn't matter while this mock had only
-// one operator, but would now silently mislabel "maat" (non-superuser) as matias's superuser
-// session, defeating any manual test of permission-gated UI against her account.
+// OC-77 round 2 / ZG-73: now looks up the real operator record instead of hardcoding matias's
+// uuid/is_superuser on every login — a latent bug that didn't matter while this mock had only one
+// operator, but would now silently mislabel "maat" (non-superuser) as matias's superuser session.
 function issueSession(res, username, operator) {
   const token = crypto.randomUUID();
   const csrfToken = crypto.randomUUID();
@@ -67,6 +61,7 @@ function issueSession(res, username, operator) {
     sameSite: 'lax',
   });
   return {
+    status: 'authenticated',
     csrf_token: csrfToken,
     operator_uuid: operator.uuid,
     operator_username: username,
@@ -90,12 +85,12 @@ function issueSession(res, username, operator) {
 // the same discipline OC-52 already established for a different endpoint: never invent a
 // distinction the backend doesn't provide.
 //
-// OC-77 / ZG-73 (proposed, EXPECTED SHAPE NOT CONFIRMED against a real backend): `totp_code: ''`
-// is now a valid sentinel for "I don't have a code yet". Whether that sentinel unlocks the new
-// `enrollment_required` branch depends on the operator's own `totp_status` (state.js's seed) —
-// an already-`confirmed` operator sending `''` still falls into the same generic rejection as
-// any other missing/wrong code, exactly matching this repo's real "one generic rejection for
-// everything" discipline (see this file's own comment above).
+// OC-77 round 2 / ZG-73 (final contract, 2026-08-29): `totp_code: ''` is a valid sentinel for "I
+// don't have a code yet". For an operator with no confirmed enrollment, this now returns ONLY
+// `{status: 'enrollment_required'}` — no secret, ever (round 1 of this feature put the secret
+// directly here, which reintroduced an account-takeover attack ZG-38 had already rejected; see
+// this repo's own backlog.md for the full story). An already-confirmed operator sending `''`
+// still falls into the same generic rejection as any other missing/wrong code.
 router.post('/login', (req, res) => {
   const { username, password, totp_code: totpCode } = req.body || {};
   const credentials = MOCK_CREDENTIALS[username];
@@ -105,21 +100,44 @@ router.post('/login', (req, res) => {
   }
   if (operator.totp_status !== 'confirmed') {
     if (totpCode === '') {
-      operator.totp_status = 'pending';
-      return res.json({ status: 'enrollment_required', ...mockEnrollmentFor(username) });
+      return res.json({ status: 'enrollment_required' });
     }
     return sendError(res, 401, 'invalid_credentials', 'Usuario o contraseña incorrectos');
   }
   if (totpCode !== '000000') {
     return sendError(res, 401, 'invalid_credentials', 'Usuario o contraseña incorrectos');
   }
-  res.json({ status: 'authenticated', ...issueSession(res, username, operator) });
+  res.json(issueSession(res, username, operator));
 });
 
-// OC-77 / ZG-73 (proposed, EXPECTED SHAPE NOT CONFIRMED): mirrors the real, already-shipped
-// `POST /api/v1/enroll/confirm` (ZG-38) — re-authenticates with username+password (no session
-// exists yet) and, on a correct code, marks the enrollment confirmed. `204`, no body, no session
-// minted — matches the real route's own documented behavior exactly.
+router.post('/logout', requireAuth, requireCsrf, (req, res) => {
+  state.sessions.delete(req.token);
+  res.clearCookie('overlord_session');
+  res.status(204).end();
+});
+
+// OC-77 round 2 / ZG-73 (final contract): unauthenticated — no session, no CSRF. `token` comes
+// from the query string of an emailed invite link, minted by `POST /admin/operators` (or its
+// resend route). This is the ONLY route that ever returns a TOTP secret/QR now. Any failure
+// (unknown/expired/already-used token) is a generic rejection — this mock doesn't model
+// expiry, only "does a live, matching invite token exist right now".
+router.post('/enroll/begin', (req, res) => {
+  const { token } = req.body || {};
+  const operator = state.operators.find(
+    (op) => typeof token === 'string' && token.length > 0 && op._inviteToken === token,
+  );
+  if (!operator || operator.totp_status === 'confirmed') {
+    return sendError(res, 401, 'invalid_credentials', 'invalid credentials');
+  }
+  if (operator.totp_status === 'none') {
+    operator.totp_status = 'pending';
+  }
+  res.json(mockEnrollmentFor(operator));
+});
+
+// Unchanged from the real gateway's ZG-38 design — re-authenticates with username+password (no
+// session exists yet) and completes a *pending* enrollment (the one `/enroll/begin` just showed
+// the QR for). `204`, no body, mints no session.
 router.post('/enroll/confirm', (req, res) => {
   const { username, password, totp_code: totpCode } = req.body || {};
   const credentials = MOCK_CREDENTIALS[username];
@@ -132,12 +150,7 @@ router.post('/enroll/confirm', (req, res) => {
   }
   operator.totp_status = 'confirmed';
   delete operator._mockTotpSecret;
-  res.status(204).end();
-});
-
-router.post('/logout', requireAuth, requireCsrf, (req, res) => {
-  state.sessions.delete(req.token);
-  res.clearCookie('overlord_session');
+  delete operator._inviteToken;
   res.status(204).end();
 });
 

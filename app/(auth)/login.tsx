@@ -13,6 +13,13 @@ import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
 import { TextField } from '@/ui/TextField';
 
+// OC-77 round 2 / ZG-73 (final contract, 2026-08-29): shown inline on THIS screen — not a
+// separate route — because there is nothing left to do here. Unlike round 1 of this feature
+// (reverted for a security flaw), the gateway never hands back a secret/QR from `/login` itself;
+// the operator's only path forward is an admin-sent invite email with its own standalone link.
+const ENROLLMENT_PENDING_MESSAGE =
+  'Este operador todavía no completó el registro de verificación en dos pasos. Revisá tu email por el link de invitación de un administrador (o pedile que te lo reenvíe).';
+
 // This app's other screens are data-dense (tables, forms) where a busy illustrated background
 // would fight legibility — this screen and totp.tsx (the only other low-density (auth) screen)
 // share the same dramatic backdrop instead. Deliberately not using the shared `Screen` wrapper
@@ -27,6 +34,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [enrollmentPending, setEnrollmentPending] = useState(false);
 
   // final-review Minor: bounds how long an abandoned login attempt's credentials sit in
   // AuthContext's in-memory ref (e.g. the operator typed a code, tapped "Volver", and never
@@ -36,16 +44,20 @@ export default function LoginScreen() {
     beginLogin('', '');
   }, [beginLogin]);
 
-  // OC-77 / ZG-73 (proposed): checkLoginStatus makes the one real `/login` call (with an empty
-  // TOTP code) needed to tell a first-time operator (no confirmed enrollment yet) apart from
-  // everyone else, and stashes credentials for whichever screen comes next either way — see its
-  // own doc comment in AuthContext for the full outcome table.
+  // OC-77 round 2 / ZG-73 (final contract): checkLoginStatus makes the one real `/login` call
+  // (with an empty TOTP code) needed to tell an operator with no confirmed enrollment apart from
+  // everyone else — see its own doc comment in AuthContext for the full outcome table.
   async function handleSubmit() {
     setError(null);
+    setEnrollmentPending(false);
     setChecking(true);
     try {
-      const next = await checkLoginStatus(username, password);
-      router.push(next === 'enrollment' ? '/enroll' : '/totp');
+      const outcome = await checkLoginStatus(username, password);
+      if (outcome === 'enrollment_pending') {
+        setEnrollmentPending(true);
+      } else {
+        router.push('/totp');
+      }
     } catch (err) {
       setError(isApiError(err) ? err : new Error('No se pudo conectar con Zuul'));
     } finally {
@@ -89,6 +101,11 @@ export default function LoginScreen() {
                 forceNight
               />
             </View>
+            {enrollmentPending && (
+              <Text className="text-center text-sm text-night-steel-light">
+                {ENROLLMENT_PENDING_MESSAGE}
+              </Text>
+            )}
             {error && (
               <>
                 <Text className="text-center text-sm text-night-danger">
