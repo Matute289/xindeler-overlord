@@ -4,7 +4,9 @@ export { ApiError, isApiError } from './errors';
 export type {
   AuditRow,
   ChatMessage,
-  LoginResponse,
+  LoginAuthenticated,
+  LoginEnrollmentRequired,
+  LoginResult,
   LogLine,
   PlayerOnlineView,
   Status,
