@@ -7,7 +7,8 @@ export const ErrorEnvelopeSchema = z.object({
   }),
 });
 
-export const LoginResponseSchema = z.object({
+export const LoginAuthenticatedSchema = z.object({
+  status: z.literal('authenticated'),
   csrf_token: z.string(),
   operator_uuid: z.string(),
   operator_username: z.string(),
@@ -22,7 +23,29 @@ export const LoginResponseSchema = z.object({
   // double-submit anti-CSRF token like `csrf_token`.
   session_token: z.string(),
 });
-export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+export type LoginAuthenticated = z.infer<typeof LoginAuthenticatedSchema>;
+
+// OC-77 / ZG-73 (proposed to xindeler-zuul, NOT YET SHIPPED as of 2026-08-28 — see that repo's
+// backlog for the exact contract this was proposed against): a first-time login for an operator
+// with no confirmed TOTP enrollment returns this instead of `LoginAuthenticatedSchema` — carries
+// everything the new `/enroll` screen needs to render a QR and let the operator confirm it.
+// EXPECTED SHAPE, NOT CONFIRMED — field names mirror xindeler-zuul's own `totp::Enrollment`
+// struct (secret_base32/otpauth_url/qr_png_base64), the value that struct's `begin_enrollment`
+// already returns internally for the existing SSH-only `enroll-operator` CLI flow; this proposal
+// only exposes it over `/login` for the first time.
+export const LoginEnrollmentRequiredSchema = z.object({
+  status: z.literal('enrollment_required'),
+  secret_base32: z.string(),
+  otpauth_url: z.string(),
+  qr_png_base64: z.string(),
+});
+export type LoginEnrollmentRequired = z.infer<typeof LoginEnrollmentRequiredSchema>;
+
+export const LoginResultSchema = z.discriminatedUnion('status', [
+  LoginAuthenticatedSchema,
+  LoginEnrollmentRequiredSchema,
+]);
+export type LoginResult = z.infer<typeof LoginResultSchema>;
 
 // Mirrors xindeler-zuul's real `GET /status` response (`server/src/status.rs`'s
 // `StatusResponse`/`EngineInfo`/`RestartStatus`, confirmed against that repo's source, ZG-63,
