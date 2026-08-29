@@ -7,12 +7,16 @@ import type {
   AdminPlayerView,
   BanPlayerResponse,
   UnbanPlayerResponse,
+  AddOperatorResponse,
+  ResendEnrollmentInviteResponse,
 } from './schemas';
 import {
   OracleTriggerResponseSchema,
   AdminPlayerViewSchema,
   BanPlayerResponseSchema,
   UnbanPlayerResponseSchema,
+  AddOperatorResponseSchema,
+  ResendEnrollmentInviteResponseSchema,
 } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
@@ -283,12 +287,26 @@ export function createWriteApi(http: HttpClient) {
       });
     },
 
-    addOperator(uuid: string, displayName: string | undefined, idempotencyKey?: string) {
-      return http.request<void>('/api/v1/admin/operators', {
-        method: 'POST',
-        body: { uuid, display_name: displayName },
-        idempotencyKey,
-      });
+    // OC-77 round 2 / ZG-73 (final contract, 2026-08-29): no longer a bare `204` — the response
+    // now reports whether the invite email actually went out (`invite_email_sent: false` means
+    // the operator was added and their TOTP row created, but SMTP failed to send — the caller
+    // should surface that and point at `resendEnrollmentInvite` rather than treat it as full
+    // success). New failure modes from the real gateway: `400` if the target's xindeler-auth
+    // account has no verified email (add never happens), `503` if mail isn't configured at all.
+    addOperator(
+      uuid: string,
+      displayName: string | undefined,
+      idempotencyKey?: string,
+    ): Promise<AddOperatorResponse> {
+      return http.request(
+        '/api/v1/admin/operators',
+        {
+          method: 'POST',
+          body: { uuid, display_name: displayName },
+          idempotencyKey,
+        },
+        AddOperatorResponseSchema,
+      );
     },
 
     removeOperator(uuid: string, idempotencyKey?: string) {
@@ -296,6 +314,22 @@ export function createWriteApi(http: HttpClient) {
         method: 'DELETE',
         idempotencyKey,
       });
+    },
+
+    // OC-77 round 2 / ZG-73 (final contract): for an operator whose 24h invite link expired, or
+    // who closed the email before scanning the QR — offered next to any operator whose
+    // `totp_status` is `none`/`pending`. `404` if the uuid isn't an operator, `409` if that
+    // operator already completed TOTP enrollment (nothing left to resend), `503` if mail isn't
+    // configured.
+    resendEnrollmentInvite(
+      uuid: string,
+      idempotencyKey?: string,
+    ): Promise<ResendEnrollmentInviteResponse> {
+      return http.request(
+        `/api/v1/admin/operators/${encodeURIComponent(uuid)}/resend-enrollment-invite`,
+        { method: 'POST', body: {}, idempotencyKey },
+        ResendEnrollmentInviteResponseSchema,
+      );
     },
   };
 }

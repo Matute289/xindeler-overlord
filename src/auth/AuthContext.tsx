@@ -9,7 +9,8 @@ import {
   useState,
 } from 'react';
 
-import { ApiError, createApiClient } from '@/api';
+import { ApiError, createApiClient, isApiError } from '@/api';
+import type { LoginResult } from '@/api';
 import { useEnvironment } from '@/config/EnvironmentContext';
 
 import { sessionStorage } from './sessionStorage';
@@ -30,6 +31,21 @@ type AuthContextValue = {
   // never a route param) for completeLogin() to use once the operator enters their TOTP code.
   // A password must never transit through anything URL-shaped (OC-55 design doc).
   beginLogin: (username: string, password: string) => void;
+  // OC-77 round 2 / ZG-73 (final contract, 2026-08-29): the real first step of login — makes the
+  // one real `/login` call with an empty `totp_code` (the gateway's own sentinel for "I don't
+  // have a code yet") and returns which outcome the caller should show:
+  // - 'enrollment_pending': the gateway reported `enrollment_required` — there is no secret/QR
+  //   to show here (unlike round 1 of this feature, reverted for a security flaw — see OC-77's
+  //   backlog history). Nothing is stashed; the caller shows an inline message ("check your
+  //   email for an admin's invite link") and stays on the login screen. TOTP enrollment now only
+  //   happens via that emailed link's own standalone `/enroll?token=...` page.
+  // - 'totp': every other outcome (an already-confirmed operator awaiting a real code, OR a
+  //   genuinely wrong password/username) — indistinguishable from each other by design (the
+  //   gateway's `rejected()` is one generic response for both) — falls through to the existing
+  //   `/totp` screen exactly as before this feature existed.
+  // Throws only for a real connectivity failure (network/timeout) — the caller should show that
+  // as an error on the login screen itself, not navigate anywhere.
+  checkLoginStatus: (username: string, password: string) => Promise<'enrollment_pending' | 'totp'>;
   // Fires the one real request the real gateway actually expects (username + password + TOTP
   // together). On failure, does NOT clear the pending credentials — a wrong code should only
   // need retyping the code, not the whole form again. `authTotpCode` (ZG-61): the operator's
@@ -128,18 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setHasPendingLogin(true);
   }, []);
 
-  const completeLogin = useCallback(
-    async (totpCode: string, authTotpCode?: string) => {
-      const pending = pendingCredentials.current;
-      if (!pending) {
-        throw new Error('completeLogin called with no pending credentials');
-      }
-      const result = await api.auth.login(
-        pending.username,
-        pending.password,
-        totpCode,
-        authTotpCode,
-      );
+  // Shared tail of every path that ends in a real, authenticated session (completeLogin's normal
+  // case, and checkLoginStatus's defensive "somehow already authenticated" branch below).
+  const finishLogin = useCallback(
+    async (result: Extract<LoginResult, { status: 'authenticated' }>) => {
       await sessionStorage.save({
         operatorUuid: result.operator_uuid,
         operatorUsername: result.operator_username,
@@ -154,7 +162,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSuperuser(result.is_superuser);
       setStatus('authenticated');
     },
-    [api],
+    [],
+  );
+
+  const checkLoginStatus = useCallback(
+    async (username: string, password: string): Promise<'enrollment_pending' | 'totp'> => {
+      try {
+        const result = await api.auth.login(username, password, '');
+        if (result.status === 'enrollment_required') {
+          // Nothing to stash — round 2 of this feature never hands back a secret/QR here (that
+          // was round 1's security flaw). The operator's next step lives entirely outside this
+          // app (an emailed invite link), not in any state this provider needs to carry.
+          return 'enrollment_pending';
+        }
+        // Unreachable in practice — the real gateway's TOTP verification never accepts an empty
+        // code for a confirmed operator — but handled rather than assumed, same as this file's
+        // other defensive branches.
+        await finishLogin(result);
+        return 'totp';
+      } catch (err) {
+        // A real connectivity failure (network/timeout) is not an auth signal — let the caller
+        // show it as an error instead of silently routing to a screen that can't help.
+        if (!isApiError(err)) throw err;
+        // Every other outcome (wrong password, or a correct password on an already-confirmed
+        // operator who just hasn't typed a real code yet) is the gateway's one generic
+        // rejection, indistinguishable by design — fall through to the existing /totp flow
+        // exactly as this app behaved before checkLoginStatus existed.
+        pendingCredentials.current = { username, password };
+        setHasPendingLogin(true);
+        return 'totp';
+      }
+    },
+    [api, finishLogin],
+  );
+
+  const completeLogin = useCallback(
+    async (totpCode: string, authTotpCode?: string) => {
+      const pending = pendingCredentials.current;
+      if (!pending) {
+        throw new Error('completeLogin called with no pending credentials');
+      }
+      const result = await api.auth.login(
+        pending.username,
+        pending.password,
+        totpCode,
+        authTotpCode,
+      );
+      if (result.status !== 'authenticated') {
+        // Reachable only if an operator's TOTP status somehow reverted to unenrolled between
+        // checkLoginStatus and this call — treat as a normal login failure rather than crash on
+        // the missing session fields.
+        throw new ApiError(
+          'unauthorized',
+          'La sesión ya no es válida, iniciá sesión de nuevo',
+          401,
+        );
+      }
+      await finishLogin(result);
+    },
+    [api, finishLogin],
   );
 
   const logout = useCallback(async () => {
@@ -198,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isSuperuser,
       hasPendingLogin,
       beginLogin,
+      checkLoginStatus,
       completeLogin,
       logout,
       handleAuthError,
@@ -209,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isSuperuser,
       hasPendingLogin,
       beginLogin,
+      checkLoginStatus,
       completeLogin,
       logout,
       handleAuthError,
