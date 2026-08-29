@@ -1,5 +1,5 @@
 import type { createHttpClient } from './httpClient';
-import { LoginResponseSchema } from './schemas';
+import { EnrollBeginResponseSchema, LoginResultSchema } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
@@ -18,6 +18,11 @@ export function createAuthApi(http: HttpClient) {
     // gateway's `Option<String>` field — sending `auth_totp_code: undefined` would still
     // serialize as present-with-null in some JSON.stringify paths, so this builds the body
     // conditionally rather than always including the key.
+    // `totpCode` may be sent as `''` — the sentinel a client sends before it knows whether the
+    // operator has a confirmed TOTP enrollment. OC-77 round 2 / ZG-73 (final): unlike round 1,
+    // the response NEVER carries a secret — an unenrolled operator just gets
+    // `{status: 'enrollment_required'}`, full stop. The only path to a QR/secret is
+    // `enrollBegin()` below, via an emailed invite link, never this call.
     login(username: string, password: string, totpCode: string, authTotpCode?: string) {
       return http.request(
         '/api/v1/login',
@@ -30,7 +35,7 @@ export function createAuthApi(http: HttpClient) {
             ...(authTotpCode ? { auth_totp_code: authTotpCode } : {}),
           },
         },
-        LoginResponseSchema,
+        LoginResultSchema,
       );
     },
 
@@ -45,6 +50,40 @@ export function createAuthApi(http: HttpClient) {
     // confirmed directly against its source. `204` on success, no body.
     stepUp(totpCode: string): Promise<void> {
       return http.request('/api/v1/step-up', { method: 'POST', body: { totp_code: totpCode } });
+    },
+
+    // OC-77 round 2 / ZG-73 (final contract, 2026-08-29): unauthenticated — no session, no CSRF
+    // — the operator hasn't logged in yet at this point. `token` comes from the query string of
+    // the emailed invite link (`https://zuul.xindeler.com/enroll?token=...`), read by the
+    // `/enroll` screen itself, not from any login-flow state. This is the ONLY route that ever
+    // returns a TOTP secret/QR now.
+    enrollBegin(token: string) {
+      return http.request(
+        '/api/v1/enroll/begin',
+        { method: 'POST', body: { token } },
+        EnrollBeginResponseSchema,
+      );
+    },
+
+    // Unchanged from the real gateway's ZG-38 design — re-authenticates with username+password
+    // (no session exists yet) and completes a *pending* enrollment (the one `enrollBegin` just
+    // showed the QR for). `204` on success, no body, mints no session — the operator logs in
+    // normally afterward.
+    enrollConfirm(
+      username: string,
+      password: string,
+      totpCode: string,
+      authTotpCode?: string,
+    ): Promise<void> {
+      return http.request('/api/v1/enroll/confirm', {
+        method: 'POST',
+        body: {
+          username,
+          password,
+          totp_code: totpCode,
+          ...(authTotpCode ? { auth_totp_code: authTotpCode } : {}),
+        },
+      });
     },
   };
 }
