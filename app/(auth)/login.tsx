@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { useEnvironment } from '@/config/EnvironmentContext';
+import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
+import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
 import { AuthBackdrop } from '@/ui/AuthBackdrop';
 import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
@@ -17,9 +21,12 @@ import { TextField } from '@/ui/TextField';
 // which would hide `AuthBackdrop`'s art. This screen's own content renders transparent on top of
 // it instead.
 export default function LoginScreen() {
-  const { beginLogin } = useAuth();
+  const { beginLogin, checkLoginStatus } = useAuth();
+  const { environment } = useEnvironment();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   // final-review Minor: bounds how long an abandoned login attempt's credentials sit in
   // AuthContext's in-memory ref (e.g. the operator typed a code, tapped "Volver", and never
@@ -29,9 +36,21 @@ export default function LoginScreen() {
     beginLogin('', '');
   }, [beginLogin]);
 
-  function handleSubmit() {
-    beginLogin(username, password);
-    router.push('/totp');
+  // OC-77 / ZG-73 (proposed): checkLoginStatus makes the one real `/login` call (with an empty
+  // TOTP code) needed to tell a first-time operator (no confirmed enrollment yet) apart from
+  // everyone else, and stashes credentials for whichever screen comes next either way — see its
+  // own doc comment in AuthContext for the full outcome table.
+  async function handleSubmit() {
+    setError(null);
+    setChecking(true);
+    try {
+      const next = await checkLoginStatus(username, password);
+      router.push(next === 'enrollment' ? '/enroll' : '/totp');
+    } catch (err) {
+      setError(isApiError(err) ? err : new Error('No se pudo conectar con Zuul'));
+    } finally {
+      setChecking(false);
+    }
   }
 
   return (
@@ -70,9 +89,18 @@ export default function LoginScreen() {
                 forceNight
               />
             </View>
+            {error && (
+              <>
+                <Text className="text-center text-sm text-night-danger">
+                  {zuulErrorMessage(environment.id, error)}
+                </Text>
+                {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
+              </>
+            )}
             <Button
               label="Ingresar"
               onPress={handleSubmit}
+              loading={checking}
               disabled={username.length === 0 || password.length === 0}
               forceNight
             />
