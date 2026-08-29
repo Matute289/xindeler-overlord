@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
+import { markTotpConsumed } from '@/auth/totpFreshness';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
@@ -57,6 +58,10 @@ export default function EnrollScreen() {
     setConfirming(true);
     try {
       await api.auth.enrollConfirm(username, password, code, useAuthTotp ? authCode : undefined);
+      // OC-82: this confirm just consumed `code`'s TOTP step server-side — the /totp screen's
+      // own retry hint needs to know that, since the operator is about to land there next with
+      // the same code likely still on screen.
+      markTotpConsumed();
       // Matías's own spec: confirming enrollment never logs the operator in — it always returns
       // them to a normal login, now completed with their just-confirmed code.
       router.replace('/login');
