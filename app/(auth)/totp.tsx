@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { wasTotpRecentlyConsumed } from '@/auth/totpFreshness';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
@@ -27,6 +28,10 @@ export default function TotpScreen() {
   const [authCode, setAuthCode] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
+  // OC-82: shown alongside the gateway's generic rejection when this failure follows a TOTP
+  // code the operator just consumed themselves (enrolling, or an earlier login) within its own
+  // 30s step — see totpFreshness.ts for why the gateway can't tell the operator this itself.
+  const [showFreshCodeHint, setShowFreshCodeHint] = useState(false);
 
   if (!hasPendingLogin) {
     return <Redirect href="/login" />;
@@ -36,6 +41,7 @@ export default function TotpScreen() {
 
   async function handleSubmit() {
     setError(null);
+    setShowFreshCodeHint(false);
     setLoading(true);
     try {
       await completeLogin(code, useAuthTotp ? authCode : undefined);
@@ -43,6 +49,7 @@ export default function TotpScreen() {
       // is what Stack.Protected reacts to; the app switches to (tabs) on its own.
     } catch (err) {
       setError(isApiError(err) ? err : new Error('No se pudo conectar con Zuul'));
+      setShowFreshCodeHint(isApiError(err) && wasTotpRecentlyConsumed());
       setLoading(false);
     }
   }
@@ -109,6 +116,13 @@ export default function TotpScreen() {
           <Text className="text-center text-sm text-night-danger">
             {zuulErrorMessage(environment.id, error)}
           </Text>
+          {showFreshCodeHint && (
+            <Text className="text-center text-sm text-night-steel-muted">
+              Este código puede ser el mismo que usaste hace instantes (para confirmar tu registro o
+              para un login anterior) — esperá a que tu app de autenticación genere uno nuevo antes
+              de reintentar.
+            </Text>
+          )}
           {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
         </>
       )}

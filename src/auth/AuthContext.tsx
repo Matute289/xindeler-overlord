@@ -14,6 +14,7 @@ import type { LoginResult } from '@/api';
 import { useEnvironment } from '@/config/EnvironmentContext';
 
 import { sessionStorage } from './sessionStorage';
+import { markTotpConsumed } from './totpFreshness';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -155,6 +156,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         csrfToken: result.csrf_token,
         sessionToken: result.session_token,
       });
+      // OC-82: a successful login consumes a TOTP step just like enroll/confirm does — see
+      // totpFreshness.ts for why this matters to the /totp screen's own retry hint.
+      markTotpConsumed();
       pendingCredentials.current = null;
       setHasPendingLogin(false);
       setOperator(result.operator_username);
