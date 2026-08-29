@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 import { ApiProvider } from '@/api/ApiContext';
 import { QueryProvider } from '@/api/QueryProvider';
@@ -21,11 +22,17 @@ import { StreamProvider } from '@/stream/StreamContext';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
+  // OC-81 / ZG-76: web gets these fonts from `public/fonts.css`'s static `@font-face` rules
+  // instead (auto-linked into the exported index.html, same mechanism `public/expo-reset.css`
+  // already uses) — `expo-font`'s web implementation creates its own runtime `<style>` element
+  // with no CSP nonce support at all, which a strict CSP blocks outright (confirmed against
+  // production, reported live by Matías). Passing no fonts here on web means `useFonts` resolves
+  // `true` immediately with nothing to fetch, rather than attempting (and failing) the same
+  // runtime load the static CSS file now makes unnecessary. iOS/Android are unaffected — CSP
+  // doesn't exist on native, so the real runtime load stays exactly as it was there.
+  const [fontsLoaded, fontError] = useFonts(
+    Platform.OS === 'web' ? {} : { Inter_400Regular, Inter_600SemiBold, Inter_700Bold },
+  );
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
