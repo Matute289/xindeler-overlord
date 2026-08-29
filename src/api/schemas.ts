@@ -267,7 +267,13 @@ export const ChatMessageSchema = z.object({
   content: z.unknown(),
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
-export const ChatResponseSchema = z.array(ChatMessageSchema);
+// OC-80: `null`, not just an array — `console::chat_history` (`xindeler-zuul`) wraps
+// `engine::fetch_chat_history`'s own `Option<Vec<Value>>` in `Json(...)` directly, so a `None`
+// (no `WEB_CHAT_SECRET` configured, or the engine request itself failed) serializes as a literal
+// JSON `null` body, same "null instead of an error" philosophy as `PlayersResponseSchema` above.
+// Missing this made a real `null` response fail Zod validation outright (`invalid_response`),
+// confirmed live in production 2026-08-29.
+export const ChatResponseSchema = z.array(ChatMessageSchema).nullable();
 
 // OC-67: the real gateway's `GET /chronicle` returns a bare array of strings (confirmed against
 // `xindeler-zuul/server/src/console.rs`'s `chronicle` handler and `xindeler-new-horizon`'s
@@ -408,9 +414,23 @@ export const OraclePresetSchema = z.object({
   dm_event: DmEventSchema,
 });
 export type OraclePreset = z.infer<typeof OraclePresetSchema>;
+
+// OC-80: `entity_templates` is an array of OBJECTS (`presets.rs`'s `PresetEntityTemplate {id,
+// title, template}`), not bare id strings — confirmed live in production 2026-08-29
+// (`invalid_response` on the Oracle Composer screen). This field is never actually read by this
+// client today (the composer's own template picker uses `GET /oracle/events`'s bare id-string
+// list instead — a different, unrelated field of the same name), so `template`'s own nested
+// shape (`EntityTemplate`/`EntityTemplateStats` in `presets.rs`) is deliberately left as
+// `z.unknown()` rather than modeled in full, same "don't guess a shape nothing reads" precedent
+// as `ChatMessageSchema`'s `parties`/`content` above.
+export const OraclePresetEntityTemplateSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  template: z.unknown(),
+});
 export const OraclePresetsResponseSchema = z.object({
   events: z.array(OraclePresetSchema),
-  entity_templates: z.array(z.string()),
+  entity_templates: z.array(OraclePresetEntityTemplateSchema),
 });
 export type OraclePresetsResponse = z.infer<typeof OraclePresetsResponseSchema>;
 
