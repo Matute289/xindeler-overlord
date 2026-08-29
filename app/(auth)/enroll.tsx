@@ -86,7 +86,16 @@ export default function EnrollScreen() {
             {beginQuery.isError && (
               <>
                 <Text className="text-center text-sm text-night-danger">
-                  {isApiError(beginQuery.error)
+                  {/* `status === 0` means the request never actually reached Zuul (network
+                      failure/timeout — `httpClient.ts` always uses status 0 for those) — a real
+                      connectivity problem worth surfacing precisely, VPN hint included. Any real
+                      HTTP response, including the `401 invalid credentials` Zuul's own contract
+                      says covers "unknown/expired/already-used token" as one generic rejection,
+                      gets this screen's own fixed copy instead of the raw server text — the Zuul
+                      handoff is explicit: "don't try to distinguish reasons in the UI, just show
+                      this link is invalid or expired." Showing the raw "invalid credentials"
+                      here (the bug this replaced) contradicted that outright. */}
+                  {isApiError(beginQuery.error) && beginQuery.error.status === 0
                     ? zuulErrorMessage(environment.id, beginQuery.error)
                     : 'Este link de invitación no es válido o ya expiró. Pedile a un administrador que te reenvíe la invitación.'}
                 </Text>
