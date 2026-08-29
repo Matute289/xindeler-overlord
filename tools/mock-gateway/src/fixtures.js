@@ -162,6 +162,38 @@ const logLineTemplates = [
 // its id.
 const entityTemplates = ['tpl_wolf_pack', 'tpl_bandit_camp', 'tpl_storm_elemental'];
 
+// OC-80: `GET /oracle/presets`'s own `entity_templates` is a SEPARATE, differently-shaped field
+// from the one above -- `presets.rs`'s `PresetEntityTemplate {id, title, template}` objects, not
+// bare id strings. This mock previously (wrongly) reused `entityTemplates` above for both routes;
+// that mismatch is exactly what broke the real Oracle Composer screen in production
+// (`invalid_response`, 2026-08-29) once the client schema was corrected to match reality.
+const oraclePresetEntityTemplates = [
+  {
+    id: 'tpl_wolf_pack',
+    title: 'Lobo de manada',
+    template: {
+      entity_template_id: 'tpl_wolf_pack',
+      body: 'wolf',
+      stats: { name: null },
+      faction: 'wild',
+      loot: null,
+      ai_behavior_override: 'stalk',
+    },
+  },
+  {
+    id: 'tpl_bandit_camp',
+    title: 'Bandido de campamento',
+    template: {
+      entity_template_id: 'tpl_bandit_camp',
+      body: 'human',
+      stats: { name: null },
+      faction: 'enemy',
+      loot: 'common_bandit_loot',
+      ai_behavior_override: 'aggro',
+    },
+  },
+];
+
 // OC-72: `dm_event` is the real `DmEvent` shape (`dimension_config`/`atmosphere`/
 // `spawning_rules`/`narrative`), matching `xindeler-zuul/server/src/presets.rs` after ZG-66 --
 // `title`/`summary`, not `name`, matches that same source's outer `PresetEvent` wrapper.
@@ -249,6 +281,7 @@ module.exports = {
   chatMessages,
   logLineTemplates,
   entityTemplates,
+  oraclePresetEntityTemplates,
   oraclePresets,
   oracleCannedReply,
   oracleDraftPool,
