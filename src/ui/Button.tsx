@@ -10,10 +10,10 @@ type ButtonProps = {
   disabled?: boolean;
   // Same rationale as TextField's own `forceNight` — pins this button to the night palette
   // unconditionally instead of following the device's own OS light/dark setting, for callers
-  // rendering over AuthBackdrop's fixed-dark art (e.g. login.tsx, totp.tsx) where the light-mode
-  // `bg-accent-cyan` (a deeper teal) and dark-mode `night-accent-cyan` (a brighter cyan) would
-  // otherwise render two different button colors on the exact same screen depending on the
-  // device's system appearance.
+  // rendering inside `AuthSplitScreen` (e.g. login.tsx, totp.tsx — art on 'phone', a solid dark
+  // panel on 'wide', never a theme-following surface) where the light-mode `bg-accent-cyan` (a
+  // deeper teal) and dark-mode `night-accent-cyan` (a brighter cyan) would otherwise render two
+  // different button colors on the exact same screen depending on the device's system appearance.
   forceNight?: boolean;
 };
 

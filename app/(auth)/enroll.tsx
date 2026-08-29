@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image, Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
 import { useApi } from '@/api/ApiContext';
@@ -10,7 +9,7 @@ import { markTotpConsumed } from '@/auth/totpFreshness';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
-import { AuthBackdrop } from '@/ui/AuthBackdrop';
+import { AuthSplitScreen } from '@/ui/AuthSplitScreen';
 import { Button } from '@/ui/Button';
 import { Empty } from '@/ui/Empty';
 import { Pressable } from '@/ui/Pressable';
@@ -72,162 +71,151 @@ export default function EnrollScreen() {
   }
 
   return (
-    <View className="flex-1">
-      <AuthBackdrop />
-      <SafeAreaView edges={['bottom', 'left', 'right']} className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1"
-        >
-          <View className="flex-1 items-center justify-center gap-6 px-8">
-            <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
-              Activar verificación en dos pasos
+    <AuthSplitScreen>
+      <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
+        Activar verificación en dos pasos
+      </Text>
+
+      {beginQuery.isPending && (
+        <Text className="text-center text-sm text-night-steel-muted">Cargando…</Text>
+      )}
+
+      {beginQuery.isError && (
+        <>
+          <Text className="text-center text-sm text-night-danger">
+            {/* `status === 0` means the request never actually reached Zuul (network
+                failure/timeout — `httpClient.ts` always uses status 0 for those) — a real
+                connectivity problem worth surfacing precisely, VPN hint included. Any real
+                HTTP response, including the `401 invalid credentials` Zuul's own contract
+                says covers "unknown/expired/already-used token" as one generic rejection,
+                gets this screen's own fixed copy instead of the raw server text — the Zuul
+                handoff is explicit: "don't try to distinguish reasons in the UI, just show
+                this link is invalid or expired." Showing the raw "invalid credentials"
+                here (the bug this replaced) contradicted that outright. */}
+            {isApiError(beginQuery.error) && beginQuery.error.status === 0
+              ? zuulErrorMessage(environment.id, beginQuery.error)
+              : 'Este link de invitación no es válido o ya expiró. Pedile a un administrador que te reenvíe la invitación.'}
+          </Text>
+          {isApiError(beginQuery.error) && isLikelyVpnDown(environment.id, beginQuery.error) && (
+            <VpnSettingsButton />
+          )}
+        </>
+      )}
+
+      {beginQuery.data && (
+        <>
+          <Text className="text-center text-sm text-night-steel-muted">
+            Escaneá este código con tu app de autenticación (Google Authenticator, Authy, etc.),
+            después completá tu usuario, contraseña, y el código que te muestre.
+          </Text>
+          <Image
+            source={{ uri: `data:image/png;base64,${beginQuery.data.qr_png_base64}` }}
+            style={{ width: 200, height: 200, borderRadius: 8 }}
+            resizeMode="contain"
+          />
+          <View className="w-full gap-1">
+            <Text className="text-center text-xs text-night-steel-muted">
+              O ingresalo manualmente:
             </Text>
-
-            {beginQuery.isPending && (
-              <Text className="text-center text-sm text-night-steel-muted">Cargando…</Text>
-            )}
-
-            {beginQuery.isError && (
-              <>
-                <Text className="text-center text-sm text-night-danger">
-                  {/* `status === 0` means the request never actually reached Zuul (network
-                      failure/timeout — `httpClient.ts` always uses status 0 for those) — a real
-                      connectivity problem worth surfacing precisely, VPN hint included. Any real
-                      HTTP response, including the `401 invalid credentials` Zuul's own contract
-                      says covers "unknown/expired/already-used token" as one generic rejection,
-                      gets this screen's own fixed copy instead of the raw server text — the Zuul
-                      handoff is explicit: "don't try to distinguish reasons in the UI, just show
-                      this link is invalid or expired." Showing the raw "invalid credentials"
-                      here (the bug this replaced) contradicted that outright. */}
-                  {isApiError(beginQuery.error) && beginQuery.error.status === 0
-                    ? zuulErrorMessage(environment.id, beginQuery.error)
-                    : 'Este link de invitación no es válido o ya expiró. Pedile a un administrador que te reenvíe la invitación.'}
+            <Text
+              selectable
+              className="text-center text-sm text-night-steel-light"
+              style={{ fontFamily: fonts.regular }}
+            >
+              {beginQuery.data.secret_base32}
+            </Text>
+          </View>
+          <View className="w-full gap-4">
+            <TextField
+              label="Usuario"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              forceNight
+            />
+            <TextField
+              label="Contraseña"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="current-password"
+              textContentType="password"
+              forceNight
+            />
+            <TextField
+              label="Código de Verificación Overlord"
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+              autoCapitalize="none"
+              maxLength={6}
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              forceNight
+            />
+            <View className="gap-4">
+              <Pressable
+                onPress={() => setUseAuthTotp((current) => !current)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: useAuthTotp }}
+                accessibilityLabel="Código Verificación Xindeler"
+                className="w-full flex-row items-center justify-between"
+              >
+                <Text
+                  className={useAuthTotp ? 'text-night-steel-light' : 'text-night-steel-muted'}
+                  style={{ fontFamily: fonts.regular }}
+                >
+                  Código Verificación Xindeler
                 </Text>
-                {isApiError(beginQuery.error) &&
-                  isLikelyVpnDown(environment.id, beginQuery.error) && <VpnSettingsButton />}
-              </>
-            )}
-
-            {beginQuery.data && (
-              <>
-                <Text className="text-center text-sm text-night-steel-muted">
-                  Escaneá este código con tu app de autenticación (Google Authenticator, Authy,
-                  etc.), después completá tu usuario, contraseña, y el código que te muestre.
-                </Text>
-                <Image
-                  source={{ uri: `data:image/png;base64,${beginQuery.data.qr_png_base64}` }}
-                  style={{ width: 200, height: 200, borderRadius: 8 }}
-                  resizeMode="contain"
-                />
-                <View className="w-full gap-1">
-                  <Text className="text-center text-xs text-night-steel-muted">
-                    O ingresalo manualmente:
-                  </Text>
-                  <Text
-                    selectable
-                    className="text-center text-sm text-night-steel-light"
-                    style={{ fontFamily: fonts.regular }}
-                  >
-                    {beginQuery.data.secret_base32}
-                  </Text>
+                <View
+                  className={`h-7 w-12 justify-center rounded-full px-0.5 ${
+                    useAuthTotp ? 'bg-night-accent-cyan' : 'bg-night-steel-dark'
+                  }`}
+                >
+                  <View
+                    className={`h-6 w-6 rounded-full bg-night-bg-surface ${useAuthTotp ? 'ml-5' : 'ml-0'}`}
+                  />
                 </View>
-                <View className="w-full gap-4">
-                  <TextField
-                    label="Usuario"
-                    value={username}
-                    onChangeText={setUsername}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="username"
-                    forceNight
-                  />
-                  <TextField
-                    label="Contraseña"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                    autoComplete="current-password"
-                    textContentType="password"
-                    forceNight
-                  />
-                  <TextField
-                    label="Código de Verificación Overlord"
-                    value={code}
-                    onChangeText={setCode}
-                    keyboardType="number-pad"
-                    autoCapitalize="none"
-                    maxLength={6}
-                    autoComplete="one-time-code"
-                    textContentType="oneTimeCode"
-                    forceNight
-                  />
-                  <View className="gap-4">
-                    <Pressable
-                      onPress={() => setUseAuthTotp((current) => !current)}
-                      accessibilityRole="switch"
-                      accessibilityState={{ checked: useAuthTotp }}
-                      accessibilityLabel="Código Verificación Xindeler"
-                      className="w-full flex-row items-center justify-between"
-                    >
-                      <Text
-                        className={
-                          useAuthTotp ? 'text-night-steel-light' : 'text-night-steel-muted'
-                        }
-                        style={{ fontFamily: fonts.regular }}
-                      >
-                        Código Verificación Xindeler
-                      </Text>
-                      <View
-                        className={`h-7 w-12 justify-center rounded-full px-0.5 ${
-                          useAuthTotp ? 'bg-night-accent-cyan' : 'bg-night-steel-dark'
-                        }`}
-                      >
-                        <View
-                          className={`h-6 w-6 rounded-full bg-night-bg-surface ${useAuthTotp ? 'ml-5' : 'ml-0'}`}
-                        />
-                      </View>
-                    </Pressable>
-                    {useAuthTotp && (
-                      <TextField
-                        label="Código de tu cuenta Xindeler"
-                        value={authCode}
-                        onChangeText={setAuthCode}
-                        keyboardType="number-pad"
-                        autoCapitalize="none"
-                        maxLength={6}
-                        autoComplete="one-time-code"
-                        textContentType="oneTimeCode"
-                        forceNight
-                      />
-                    )}
-                  </View>
-                </View>
-                {confirmError && (
-                  <>
-                    <Text className="text-center text-sm text-night-danger">
-                      {zuulErrorMessage(environment.id, confirmError)}
-                    </Text>
-                    {isLikelyVpnDown(environment.id, confirmError) && <VpnSettingsButton />}
-                  </>
-                )}
-                <Button
-                  label="Confirmar"
-                  onPress={handleConfirm}
-                  loading={confirming}
-                  disabled={
-                    username.length === 0 ||
-                    password.length === 0 ||
-                    code.length !== 6 ||
-                    !authCodeComplete
-                  }
+              </Pressable>
+              {useAuthTotp && (
+                <TextField
+                  label="Código de tu cuenta Xindeler"
+                  value={authCode}
+                  onChangeText={setAuthCode}
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  textContentType="oneTimeCode"
                   forceNight
                 />
-              </>
-            )}
+              )}
+            </View>
           </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+          {confirmError && (
+            <>
+              <Text className="text-center text-sm text-night-danger">
+                {zuulErrorMessage(environment.id, confirmError)}
+              </Text>
+              {isLikelyVpnDown(environment.id, confirmError) && <VpnSettingsButton />}
+            </>
+          )}
+          <Button
+            label="Confirmar"
+            onPress={handleConfirm}
+            loading={confirming}
+            disabled={
+              username.length === 0 ||
+              password.length === 0 ||
+              code.length !== 6 ||
+              !authCodeComplete
+            }
+            forceNight
+          />
+        </>
+      )}
+    </AuthSplitScreen>
   );
 }
