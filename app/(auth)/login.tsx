@@ -1,14 +1,13 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
-import { AuthBackdrop } from '@/ui/AuthBackdrop';
+import { AuthSplitScreen } from '@/ui/AuthSplitScreen';
 import { Button } from '@/ui/Button';
 import { fonts } from '@/ui/theme';
 import { TextField } from '@/ui/TextField';
@@ -22,11 +21,11 @@ const ENROLLMENT_PENDING_MESSAGE =
 
 // This app's other screens are data-dense (tables, forms) where a busy illustrated background
 // would fight legibility — this screen and totp.tsx (the only other low-density (auth) screen)
-// share the same dramatic backdrop instead. Deliberately not using the shared `Screen` wrapper
-// (its own doc comment already anticipated this: "Revisit if Screen is ever used outside that
-// nav shell — e.g. a future full-bleed login screen"): `Screen` paints an opaque flat surface,
-// which would hide `AuthBackdrop`'s art. This screen's own content renders transparent on top of
-// it instead.
+// share the same dramatic art instead, via `AuthSplitScreen`. Deliberately not using the shared
+// `Screen` wrapper (its own doc comment already anticipated this: "Revisit if Screen is ever used
+// outside that nav shell — e.g. a future full-bleed login screen"): `Screen` paints an opaque flat
+// surface everywhere, which would hide the art entirely on 'phone' — `AuthSplitScreen` is this
+// screen's own equivalent, art-aware on 'phone' and two-panel on 'wide' (OC-83).
 export default function LoginScreen() {
   const { beginLogin, checkLoginStatus } = useAuth();
   const { environment } = useEnvironment();
@@ -66,64 +65,54 @@ export default function LoginScreen() {
   }
 
   return (
-    <View className="flex-1">
-      <AuthBackdrop />
-      <SafeAreaView edges={['bottom', 'left', 'right']} className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1"
-        >
-          <View className="flex-1 items-center justify-center gap-6 px-8">
-            {/* Unconditionally the light-on-dark token, not the usual `text-steel-light
-                dark:text-night-steel-light` split — this screen's backdrop is the dark art
-                image year-round, in both system light and dark mode, so the text needs the
-                same fixed light color either way. */}
-            <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
-              Overlord
-            </Text>
-            <View className="w-full gap-4">
-              <TextField
-                label="Usuario"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="username"
-                forceNight
-              />
-              <TextField
-                label="Contraseña"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="current-password"
-                textContentType="password"
-                forceNight
-              />
-            </View>
-            {enrollmentPending && (
-              <Text className="text-center text-sm text-night-steel-light">
-                {ENROLLMENT_PENDING_MESSAGE}
-              </Text>
-            )}
-            {error && (
-              <>
-                <Text className="text-center text-sm text-night-danger">
-                  {zuulErrorMessage(environment.id, error)}
-                </Text>
-                {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
-              </>
-            )}
-            <Button
-              label="Ingresar"
-              onPress={handleSubmit}
-              loading={checking}
-              disabled={username.length === 0 || password.length === 0}
-              forceNight
-            />
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+    <AuthSplitScreen>
+      {/* Unconditionally the light-on-dark token, not the usual `text-steel-light
+          dark:text-night-steel-light` split — `AuthSplitScreen` keeps this screen on a fixed
+          dark surface (art on 'phone', a solid dark panel on 'wide') in both system light and
+          dark mode, so the text needs the same fixed light color either way. */}
+      <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
+        Overlord
+      </Text>
+      <View className="w-full gap-4">
+        <TextField
+          label="Usuario"
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="username"
+          forceNight
+        />
+        <TextField
+          label="Contraseña"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoComplete="current-password"
+          textContentType="password"
+          forceNight
+        />
+      </View>
+      {enrollmentPending && (
+        <Text className="text-center text-sm text-night-steel-light">
+          {ENROLLMENT_PENDING_MESSAGE}
+        </Text>
+      )}
+      {error && (
+        <>
+          <Text className="text-center text-sm text-night-danger">
+            {zuulErrorMessage(environment.id, error)}
+          </Text>
+          {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
+        </>
+      )}
+      <Button
+        label="Ingresar"
+        onPress={handleSubmit}
+        loading={checking}
+        disabled={username.length === 0 || password.length === 0}
+        forceNight
+      />
+    </AuthSplitScreen>
   );
 }
