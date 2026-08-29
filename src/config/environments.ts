@@ -31,4 +31,16 @@ export const ENVIRONMENTS: Record<EnvironmentId, Environment> = {
   },
 };
 
-export const DEFAULT_ENVIRONMENT_ID: EnvironmentId = 'mock';
+// OC-78: was unconditionally 'mock' — a leftover from before this app had a real production
+// gateway to point at (`public` didn't exist yet). Now that it does, always defaulting a brand-
+// new/cleared storage context to 'mock' is a real footgun in a production build: an operator
+// opening this app for the first time ever on some device (e.g. a first-time-enrollment invite
+// link opened in a fresh browser/email-client webview, which has its own separate storage from
+// any browser the operator normally uses) would silently land on a local mock endpoint that
+// doesn't exist from their machine, not on the real gateway they need — exactly the confusion
+// this screen's own copy warns against ("Elegí con cuidado — nunca asumas que estás en el
+// mock"). `__DEV__` (Metro/Expo's standard build-time global — true for a dev/dev-client build,
+// false for a release/production export, including the one `deploy-web.yml` ships) keeps a fresh
+// local dev checkout defaulting to the mock as before, without reintroducing that same footgun
+// for a real production build.
+export const DEFAULT_ENVIRONMENT_ID: EnvironmentId = __DEV__ ? 'mock' : 'public';

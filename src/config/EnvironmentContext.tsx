@@ -25,8 +25,16 @@ export function EnvironmentProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((stored) => {
-        if (stored === 'mock' || stored === 'wireguard') {
-          setEnvironmentId(stored);
+        // OC-78: was `stored === 'mock' || stored === 'wireguard'` — a hardcoded two-value
+        // allowlist that silently excluded 'public', added later and never added here. Every
+        // fresh page load (a new tab, a link opened from an email client, any full reload rather
+        // than in-SPA navigation) re-ran this effect and discarded an explicitly-chosen "Público"
+        // selection back to DEFAULT_ENVIRONMENT_ID — reported live 2026-08-29 by Matías, both
+        // when opening the enroll-invite email link (landed on Mock instead of Público) and after
+        // a fresh app launch. Checking key membership instead of an enumerated list means a
+        // future environment addition can't reintroduce this same class of bug.
+        if (stored !== null && stored in ENVIRONMENTS) {
+          setEnvironmentId(stored as EnvironmentId);
         }
       })
       .finally(() => setReady(true));
