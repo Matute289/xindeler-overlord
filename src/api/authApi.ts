@@ -1,5 +1,5 @@
 import type { createHttpClient } from './httpClient';
-import { LoginResultSchema } from './schemas';
+import { LoginResponseSchema } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
 
@@ -18,10 +18,6 @@ export function createAuthApi(http: HttpClient) {
     // gateway's `Option<String>` field — sending `auth_totp_code: undefined` would still
     // serialize as present-with-null in some JSON.stringify paths, so this builds the body
     // conditionally rather than always including the key.
-    // OC-77 / ZG-73 (proposed): `totpCode` may now be sent as `''` — the sentinel a first-time
-    // operator's client sends before it knows whether they have a confirmed TOTP enrollment.
-    // The response discriminates on `status` (see LoginResultSchema) rather than the caller
-    // needing to guess in advance which shape is coming back.
     login(username: string, password: string, totpCode: string, authTotpCode?: string) {
       return http.request(
         '/api/v1/login',
@@ -34,36 +30,12 @@ export function createAuthApi(http: HttpClient) {
             ...(authTotpCode ? { auth_totp_code: authTotpCode } : {}),
           },
         },
-        LoginResultSchema,
+        LoginResponseSchema,
       );
     },
 
     logout(): Promise<void> {
       return http.request('/api/v1/logout', { method: 'POST' });
-    },
-
-    // OC-77 / ZG-73 (proposed, EXPECTED SHAPE NOT CONFIRMED): completes a pending TOTP
-    // enrollment. Mirrors xindeler-zuul's real, already-shipped `POST /api/v1/enroll/confirm`
-    // (ZG-38) — that route exists today but is only ever called from the SSH-only
-    // `enroll-operator` CLI flow; this is its first real client caller. Re-authenticates with
-    // username+password (no session cookie exists yet at this point in the flow) exactly like
-    // `login` does. `204` on success, no body — confirming enrollment does NOT mint a session;
-    // the operator logs in normally afterward with their now-confirmed code.
-    enrollConfirm(
-      username: string,
-      password: string,
-      totpCode: string,
-      authTotpCode?: string,
-    ): Promise<void> {
-      return http.request('/api/v1/enroll/confirm', {
-        method: 'POST',
-        body: {
-          username,
-          password,
-          totp_code: totpCode,
-          ...(authTotpCode ? { auth_totp_code: authTotpCode } : {}),
-        },
-      });
     },
 
     // Session-scoped step-up (OC-54) — establishes a 5-minute window on the CURRENT session

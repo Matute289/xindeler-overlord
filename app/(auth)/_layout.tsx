@@ -5,11 +5,10 @@ import { EnvironmentBadge } from '@/features/environment/EnvironmentBadge';
 
 export default function AuthLayout() {
   const pathname = usePathname();
-  // login, totp, and enroll (OC-77 / ZG-73) all render AuthBackdrop's art full-bleed (each screen
-  // renders it itself, not this layout) — environment stays on the app's usual flat surface, per
-  // login.tsx's own comment on why a busy backdrop only earns its place on these low-density
-  // screens.
-  const showBackground = pathname === '/login' || pathname === '/totp' || pathname === '/enroll';
+  // login and totp both render AuthBackdrop's art full-bleed (each screen renders it itself, not
+  // this layout) — environment stays on the app's usual flat surface, per login.tsx's own
+  // comment on why a busy backdrop only earns its place on these low-density screens.
+  const showBackground = pathname === '/login' || pathname === '/totp';
 
   return (
     <View className="flex-1">

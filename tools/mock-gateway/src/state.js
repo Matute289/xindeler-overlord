@@ -3,10 +3,6 @@
 // `true` rather than `false`. Moved here from routes/auth.js (OC-57) so state.js's own
 // `operators` seed below can reference it without a circular require.
 const MOCK_OPERATOR_UUID = '11111111-1111-4111-8111-111111111111';
-// OC-77 / ZG-73 (proposed): a second seeded operator with NO TOTP enrollment yet — mirrors the
-// real "Maat" operator this feature was built for (added via POST /admin/operators, no TOTP),
-// the one path needed to exercise the new /login `enrollment_required` branch locally.
-const MOCK_OPERATOR_2_UUID = '22222222-2222-4222-8222-222222222222';
 
 const state = {
   scenario: 'normal',
@@ -43,13 +39,6 @@ const state = {
       display_name: 'matias',
       is_superuser: true,
       totp_status: 'confirmed',
-      added_at: Math.floor(Date.now() / 1000),
-    },
-    {
-      uuid: MOCK_OPERATOR_2_UUID,
-      display_name: 'maat',
-      is_superuser: false,
-      totp_status: 'none',
       added_at: Math.floor(Date.now() / 1000),
     },
   ],
