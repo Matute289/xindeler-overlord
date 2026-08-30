@@ -40,17 +40,25 @@ jobs:
       - name: Load the deploy SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+          # OC-86 (ZG-72): a dedicated key, not `VPS_SSH_KEY` -- that one's forced command on the
+          # VPS side is restricted to `rrsync -wo /opt/xindeler-zuul/web/`, Zuul's own static-file
+          # directory from when this app's Web build was served from `zuul.xindeler.com` (OC-38).
+          # Now that it's served from its own origin (`overlord.xindeler.com`, ZG-72) at a
+          # completely different path, a single SSH key's forced command can't cover both --
+          # `OVERLORD_WEB_SSH_KEY` is a separate keypair whose forced command on the VPS is
+          # restricted to `/srv/xindeler/overlord/public/` instead. Same host/user as before
+          # (`VPS_SSH_HOST`/`VPS_SSH_USER`, unchanged) -- same server, same `mgrinberg` user,
+          # confirmed by the Zuul session that provisioned the vhost, only the key differs.
+          ssh-private-key: ${{ secrets.OVERLORD_WEB_SSH_KEY }}
 
       - name: Sync to the VPS
-        # No path after the trailing colon: the deploy key on the VPS side is installed with a
-        # forced `rrsync -wo /opt/xindeler-zuul/web/` command (restricted-rsync-over-ssh), which
+        # No path after the trailing colon: same reasoning as the old `VPS_SSH_KEY` setup this
+        # replaces -- the deploy key on the VPS side is installed with a forced
+        # `rrsync -wo /srv/xindeler/overlord/public/` command (restricted-rsync-over-ssh), which
         # already chdirs into that exact directory and treats any destination path from the
-        # client as *relative* to it. Passing the absolute path again here (as an earlier draft
-        # of this workflow did) makes rrsync append it a second time --
-        # "/opt/xindeler-zuul/web/opt/xindeler-zuul/web" -- which doesn't exist, and the transfer
-        # fails outright. Confirmed against the real deploy key and a real rsync 3.2.7 on the VPS,
-        # not assumed from the rrsync docs alone.
+        # client as *relative* to it. Passing the absolute path again here makes rrsync append it
+        # a second time -- confirmed as a real failure mode against the old target (OC-38), not
+        # assumed from the rrsync docs alone.
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.VPS_SSH_HOST }}" >> ~/.ssh/known_hosts
