@@ -32,10 +32,13 @@ const STREAM_SCHEMAS: { [E in StreamEventName]: ZodType<StreamEventMap[E]> } = {
 // A minimal fetch-shaped type — not the full DOM `RequestInit` — covering
 // exactly the fields this client passes, so both `expo/fetch` and Node's
 // global `fetch` satisfy it without a type-compatibility fight.
+// No `credentials` field (OC-85 / ZG-72) — see httpClient.ts's own comment on the same removal;
+// same reasoning applies here (Bearer-only auth now, and a cross-origin `credentials:'include'`
+// against Zuul's CORS response — no `Access-Control-Allow-Credentials` — gets the whole response
+// blocked by the browser, not just the cookie dropped).
 type FetchInit = {
   method: 'GET';
   headers: Record<string, string>;
-  credentials: 'include';
   signal: AbortSignal;
 };
 export type FetchLike = (url: string, init: FetchInit) => Promise<Response>;
@@ -146,7 +149,6 @@ export function createStreamClient(url: string, deps: StreamClientDeps): StreamC
       response = await deps.fetchImpl(url, {
         method: 'GET',
         headers: { Accept: 'text/event-stream', ...(authHeader ?? {}) },
-        credentials: 'include',
         signal: controller.signal,
       });
     } catch {

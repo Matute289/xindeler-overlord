@@ -3,6 +3,16 @@
 **Date:** 2026-08-11 · **Status:** approved (Matías delegated; design follows the gateway contract
 directly, no open forks), implementing.
 
+> **Superseded for web by OC-85 (ZG-72), 2026-08-30**: this doc's premise — web always runs
+> same-origin with the gateway, authenticates via an `HttpOnly` cookie, and never needs
+> `sessionToken` — no longer holds. The Web build now runs on its own origin
+> (`overlord.xindeler.com`) and calls Zuul (`zuul.xindeler.com`) cross-origin; Zuul's CORS response
+> for that origin carries no `Access-Control-Allow-Credentials`, so the cookie was never going to
+> reach it anyway. Web now stores and sends `sessionToken` as a Bearer header exactly like native
+> — see `SecureSessionStorage.web.ts`'s own comment and `docs/backlog.md`'s OC-85 row for the real
+> current behavior and the accepted trade-off. Left in place below as the historical record of why
+> the interface was shaped the way it was, not as a description of what web does today.
+
 ## Goal
 
 One interface, two backends, from day one — not a retrofit — per `CLAUDE.md`'s repo layout note

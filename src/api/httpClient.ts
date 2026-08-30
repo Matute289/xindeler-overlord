@@ -61,7 +61,13 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         response = await fetch(`${baseUrl}${path}`, {
           method,
           headers,
-          credentials: 'include',
+          // OC-85 (ZG-72): no `credentials: 'include'` — both platforms authenticate purely via
+          // the `Authorization: Bearer` header now (see httpClientDeps.getAuthHeader above), and
+          // the Web build's calls to Zuul are cross-origin from its own domain
+          // (overlord.xindeler.com), where Zuul's CORS response carries no
+          // `Access-Control-Allow-Credentials` — a cross-origin fetch with `credentials:'include'`
+          // against a response missing that header gets its entire response blocked by the
+          // browser, not just the cookie silently dropped.
           signal: controller.signal,
           body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
         });
@@ -192,7 +198,7 @@ export function createHttpClient(baseUrl: string, deps: HttpClientDeps) {
         response = await fetch(`${baseUrl}${path}`, {
           method: 'GET',
           headers: { ...(authHeader ?? {}) },
-          credentials: 'include',
+          // OC-85 (ZG-72): see the comment on `request()`'s own fetch call above — same reasoning.
           signal: controller.signal,
         });
       } catch (err) {
