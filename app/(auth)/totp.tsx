@@ -1,14 +1,14 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text, View } from 'react-native';
 
 import { isApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { wasTotpRecentlyConsumed } from '@/auth/totpFreshness';
 import { useEnvironment } from '@/config/EnvironmentContext';
 import { zuulErrorMessage, isLikelyVpnDown } from '@/features/connectivity/zuulErrorMessage';
 import { VpnSettingsButton } from '@/features/connectivity/VpnSettingsButton';
-import { AuthBackdrop } from '@/ui/AuthBackdrop';
+import { AuthSplitScreen } from '@/ui/AuthSplitScreen';
 import { Button } from '@/ui/Button';
 import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
@@ -28,6 +28,10 @@ export default function TotpScreen() {
   const [authCode, setAuthCode] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
+  // OC-82: shown alongside the gateway's generic rejection when this failure follows a TOTP
+  // code the operator just consumed themselves (enrolling, or an earlier login) within its own
+  // 30s step — see totpFreshness.ts for why the gateway can't tell the operator this itself.
+  const [showFreshCodeHint, setShowFreshCodeHint] = useState(false);
 
   if (!hasPendingLogin) {
     return <Redirect href="/login" />;
@@ -37,6 +41,7 @@ export default function TotpScreen() {
 
   async function handleSubmit() {
     setError(null);
+    setShowFreshCodeHint(false);
     setLoading(true);
     try {
       await completeLogin(code, useAuthTotp ? authCode : undefined);
@@ -44,101 +49,95 @@ export default function TotpScreen() {
       // is what Stack.Protected reacts to; the app switches to (tabs) on its own.
     } catch (err) {
       setError(isApiError(err) ? err : new Error('No se pudo conectar con Zuul'));
+      setShowFreshCodeHint(isApiError(err) && wasTotpRecentlyConsumed());
       setLoading(false);
     }
   }
 
   return (
-    <View className="flex-1">
-      <AuthBackdrop />
-      <SafeAreaView edges={['bottom', 'left', 'right']} className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1"
-        >
-          <View className="flex-1 items-center justify-center gap-6 px-8">
-            {/* Unconditionally the light-on-dark token — same reasoning as login.tsx's own
-                title: this screen's backdrop is AuthBackdrop's fixed-dark art year-round. */}
-            <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
-              Código de verificación
+    <AuthSplitScreen>
+      {/* Unconditionally the light-on-dark token — same reasoning as login.tsx's own title. */}
+      <Text className="text-2xl text-night-steel-light" style={{ fontFamily: fonts.bold }}>
+        Código de verificación
+      </Text>
+      <View className="w-full gap-6">
+        <TextField
+          label="Código de Verificación Overlord"
+          value={code}
+          onChangeText={setCode}
+          keyboardType="number-pad"
+          autoCapitalize="none"
+          maxLength={6}
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          forceNight
+        />
+        <View className="gap-4">
+          <Pressable
+            onPress={() => setUseAuthTotp((current) => !current)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: useAuthTotp }}
+            accessibilityLabel="Código Verificación Xindeler"
+            className="w-full flex-row items-center justify-between"
+          >
+            <Text
+              className={useAuthTotp ? 'text-night-steel-light' : 'text-night-steel-muted'}
+              style={{ fontFamily: fonts.regular }}
+            >
+              Código Verificación Xindeler
             </Text>
-            <View className="w-full gap-6">
-              <TextField
-                label="Código de Verificación Overlord"
-                value={code}
-                onChangeText={setCode}
-                keyboardType="number-pad"
-                autoCapitalize="none"
-                maxLength={6}
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                forceNight
+            <View
+              className={`h-7 w-12 justify-center rounded-full px-0.5 ${
+                useAuthTotp ? 'bg-night-accent-cyan' : 'bg-night-steel-dark'
+              }`}
+            >
+              <View
+                className={`h-6 w-6 rounded-full bg-night-bg-surface ${useAuthTotp ? 'ml-5' : 'ml-0'}`}
               />
-              <View className="gap-4">
-                <Pressable
-                  onPress={() => setUseAuthTotp((current) => !current)}
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: useAuthTotp }}
-                  accessibilityLabel="Código Verificación Xindeler"
-                  className="w-full flex-row items-center justify-between"
-                >
-                  <Text
-                    className={useAuthTotp ? 'text-night-steel-light' : 'text-night-steel-muted'}
-                    style={{ fontFamily: fonts.regular }}
-                  >
-                    Código Verificación Xindeler
-                  </Text>
-                  <View
-                    className={`h-7 w-12 justify-center rounded-full px-0.5 ${
-                      useAuthTotp ? 'bg-night-accent-cyan' : 'bg-night-steel-dark'
-                    }`}
-                  >
-                    <View
-                      className={`h-6 w-6 rounded-full bg-night-bg-surface ${useAuthTotp ? 'ml-5' : 'ml-0'}`}
-                    />
-                  </View>
-                </Pressable>
-                {useAuthTotp && (
-                  <TextField
-                    label="Código de tu cuenta Xindeler"
-                    value={authCode}
-                    onChangeText={setAuthCode}
-                    keyboardType="number-pad"
-                    autoCapitalize="none"
-                    maxLength={6}
-                    autoComplete="one-time-code"
-                    textContentType="oneTimeCode"
-                    forceNight
-                  />
-                )}
-              </View>
             </View>
-            {error && (
-              <>
-                <Text className="text-center text-sm text-night-danger">
-                  {zuulErrorMessage(environment.id, error)}
-                </Text>
-                {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
-              </>
-            )}
-            <Button
-              label="Confirmar"
-              onPress={handleSubmit}
-              loading={loading}
-              disabled={code.length !== 6 || !authCodeComplete}
+          </Pressable>
+          {useAuthTotp && (
+            <TextField
+              label="Código de tu cuenta Xindeler"
+              value={authCode}
+              onChangeText={setAuthCode}
+              keyboardType="number-pad"
+              autoCapitalize="none"
+              maxLength={6}
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
               forceNight
             />
-            <Pressable onPress={() => router.back()}>
-              <Text
-                className="text-sm text-night-steel-muted"
-                style={{ fontFamily: fonts.regular }}
-              >
-                Volver
-              </Text>
-            </Pressable>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+          )}
+        </View>
+      </View>
+      {error && (
+        <>
+          <Text className="text-center text-sm text-night-danger">
+            {zuulErrorMessage(environment.id, error)}
+          </Text>
+          {showFreshCodeHint && (
+            <Text className="text-center text-sm text-night-steel-muted">
+              Este código puede ser el mismo que usaste hace instantes (para confirmar tu registro o
+              para un login anterior) — esperá a que tu app de autenticación genere uno nuevo antes
+              de reintentar.
+            </Text>
+          )}
+          {isLikelyVpnDown(environment.id, error) && <VpnSettingsButton />}
+        </>
+      )}
+      <Button
+        label="Confirmar"
+        onPress={handleSubmit}
+        loading={loading}
+        disabled={code.length !== 6 || !authCodeComplete}
+        forceNight
+      />
+      <Pressable onPress={() => router.back()}>
+        <Text className="text-sm text-night-steel-muted" style={{ fontFamily: fonts.regular }}>
+          Volver
+        </Text>
+      </Pressable>
+    </AuthSplitScreen>
   );
 }
