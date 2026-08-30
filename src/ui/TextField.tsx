@@ -46,9 +46,12 @@ export function TextField({
             ? forceNight
               ? 'border-night-accent-cyan'
               : 'border-accent-cyan dark:border-night-accent-cyan'
-            : forceNight
-              ? 'border-night-steel-dark'
-              : 'border-steel-dark dark:border-night-steel-dark'
+            : // `hover:` only matters on web (no-op on iOS/Android) and only in the unfocused
+              // branch — once focused, the border above already gives stronger feedback than a
+              // hover tint would, so there's nothing to layer on top of it here.
+              forceNight
+              ? 'border-night-steel-dark hover:border-night-steel-muted'
+              : 'border-steel-dark hover:border-steel-muted dark:border-night-steel-dark dark:hover:border-night-steel-muted'
         }`}
         onFocus={(e) => {
           setIsFocused(true);
