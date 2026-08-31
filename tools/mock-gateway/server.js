@@ -17,6 +17,7 @@ const broadcastRoutes = require('./src/routes/broadcast');
 const pushRoutes = require('./src/routes/push');
 const pushWebRoutes = require('./src/routes/pushWeb');
 const playersDirectoryRoutes = require('./src/routes/playersDirectory').router;
+const playerMessageRoutes = require('./src/routes/playerMessage');
 const playerDetailRoutes = require('./src/routes/playerDetail');
 const playerFlagRoutes = require('./src/routes/playerFlag');
 const playerKickRoutes = require('./src/routes/playerKick');
@@ -54,6 +55,11 @@ app.use('/api/v1/status', requireAuth, statusRoutes);
 // first (an Express app.use prefix match tries routers in registration order, and playersRoutes/
 // playerDetailRoutes have no way to know a still-unregistered, more-specific router exists).
 app.use('/api/v1/players/directory', requireAuth, playersDirectoryRoutes);
+// ZG-73/OC-88: same "more specific prefix first" reasoning as /players/directory above --
+// mounted before the generic /players router so a POST here can never get shadowed by a
+// still-unregistered, more-specific router (it also wouldn't collide today, since playersRoutes
+// only defines GET /, but this keeps the ordering convention consistent instead of relying on it).
+app.use('/api/v1/players/message', requireAuth, requireCsrf, requireStepUp, playerMessageRoutes);
 app.use('/api/v1/players', requireAuth, playersRoutes);
 app.use('/api/v1/players/2fa/unlock', requireAuth, requireCsrf, requireStepUp, playerUnlockRoutes);
 app.use(

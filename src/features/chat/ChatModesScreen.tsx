@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { BigScreenPlaceholderScreen } from '@/features/chat/BigScreenPlaceholderScreen';
 import { ChatScreen } from '@/features/chat/ChatScreen';
-import { DirectMessagesPlaceholderScreen } from '@/features/chat/DirectMessagesPlaceholderScreen';
+import { DirectMessagesScreen } from '@/features/chat/DirectMessagesScreen';
 import { Pressable } from '@/ui/Pressable';
 import { fonts } from '@/ui/theme';
 
@@ -51,7 +51,7 @@ export function ChatModesScreen() {
       </View>
       {mode === 'general' && <ChatScreen />}
       {mode === 'big_screen' && <BigScreenPlaceholderScreen />}
-      {mode === 'direct' && <DirectMessagesPlaceholderScreen />}
+      {mode === 'direct' && <DirectMessagesScreen />}
     </View>
   );
 }
