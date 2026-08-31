@@ -9,6 +9,7 @@ import type {
   UnbanPlayerResponse,
   AddOperatorResponse,
   ResendEnrollmentInviteResponse,
+  DirectMessageResponse,
 } from './schemas';
 import {
   OracleTriggerResponseSchema,
@@ -17,6 +18,7 @@ import {
   UnbanPlayerResponseSchema,
   AddOperatorResponseSchema,
   ResendEnrollmentInviteResponseSchema,
+  DirectMessageResponseSchema,
 } from './schemas';
 
 type HttpClient = ReturnType<typeof createHttpClient>;
@@ -167,6 +169,21 @@ export function createWriteApi(http: HttpClient) {
         body: { msg: message },
         idempotencyKey,
       });
+    },
+
+    // OC-88/ZG-73: `targetReferences` are the same `reference`/`segment` strings the directory
+    // and kick/ban/flag routes already use -- never a raw uuid (xindeler-zuul PR #131's own
+    // security-review fix, see DirectMessageResponseSchema's comment in schemas.ts).
+    sendDirectMessage(targetReferences: string[], message: string, idempotencyKey?: string) {
+      return http.request<DirectMessageResponse>(
+        '/api/v1/players/message',
+        {
+          method: 'POST',
+          body: { target_references: targetReferences, msg: message },
+          idempotencyKey,
+        },
+        DirectMessageResponseSchema,
+      );
     },
 
     registerPushToken(expoPushToken: string, platform: 'ios' | 'android'): Promise<void> {

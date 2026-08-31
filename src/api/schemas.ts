@@ -225,6 +225,15 @@ export const PlayerDetailResponseSchema = z.object({
 });
 export type PlayerDetailResponse = z.infer<typeof PlayerDetailResponseSchema>;
 
+// OC-88/ZG-73 (xindeler-zuul PR #131, contract final 2026-08-31): each entry echoes back exactly
+// the `reference`/`segment` string the client sent in `target_references` -- never a raw uuid,
+// same anti-enumeration discipline the directory/kick/ban/flag routes already follow.
+export const DirectMessageResponseSchema = z.object({
+  delivered_to: z.array(z.string()),
+  not_found: z.array(z.string()),
+});
+export type DirectMessageResponse = z.infer<typeof DirectMessageResponseSchema>;
+
 export const BanPlayerResponseSchema = z.object({
   account: AdminPlayerViewSchema.nullable(),
   connection: z.record(z.string(), z.unknown()).nullable(),
