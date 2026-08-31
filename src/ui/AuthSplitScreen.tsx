@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { ImageBackground, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import {
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useBreakpoint } from './useBreakpoint';
@@ -31,23 +38,36 @@ type AuthSplitScreenProps = {
 // own AuthBackdrop + SafeAreaView + KeyboardAvoidingView boilerplate, so the three screens can't
 // drift out of sync on how they respond to `useBreakpoint()`.
 //
-// 'phone' (including landscape phones, per useBreakpoint's own width>height rule): unchanged from
-// before this component existed — full-bleed art behind a centered column.
+// Single full-bleed panel (phone, AND a 'wide' tablet held in portrait — see `isSplit` below):
+// unchanged from before this component existed — full-bleed art behind a centered column.
 //
-// 'wide': a real two-panel layout instead of the same narrow column stretched into empty space —
-// the art keeps its own half, the form gets a solid surface of its own. The surface stays the
-// same forced-night color the form fields already assumed they'd be drawn over (every TextField/
-// Button in these three screens passes `forceNight` for exactly this reason) — deliberately NOT
-// switched to follow the system light/dark theme, so no caller needed to change how it colors its
-// own content for this to work.
+// Two-panel split (a genuinely landscape-shaped 'wide' — a real desktop browser window, or a
+// phone/tablet actually rotated to landscape): the art keeps its own half, the form gets a solid
+// surface of its own. The surface stays the same forced-night color the form fields already
+// assumed they'd be drawn over (every TextField/Button in these three screens passes `forceNight`
+// for exactly this reason) — deliberately NOT switched to follow the system light/dark theme, so
+// no caller needed to change how it colors its own content for this to work.
 export function AuthSplitScreen({ children }: AuthSplitScreenProps) {
   const breakpoint = useBreakpoint();
+  const { width, height } = useWindowDimensions();
+  // OC-87: `useBreakpoint()`'s 'wide' also fires for a tablet held in PORTRAIT — its width alone
+  // crosses 768pt independent of height, same rule that correctly puts a landscape *phone* into
+  // 'wide' too (see useBreakpoint.ts's own comment). A portrait tablet is comfortably narrower
+  // than a real desktop window and taller than it is wide, so splitting it into two skinny
+  // side-by-side panels crops the horizontal art into an unusable extreme close-up — reported by
+  // Matías on a real iPad, 2026-08-30, after OC-83 shipped without ever being checked against a
+  // tablet specifically. `width > height` is the same real-landscape signal `useBreakpoint` itself
+  // already uses for the phone case, applied here to gate the SPLIT specifically rather than the
+  // breakpoint as a whole (SidebarLayout/Screen's own 'wide' treatment elsewhere is unaffected and
+  // correct for portrait tablets already — this component's split is the only thing that needed
+  // this extra check).
+  const isSplit = breakpoint === 'wide' && width > height;
 
-  if (breakpoint === 'phone') {
+  if (!isSplit) {
     return (
       <View className="flex-1">
         <ImageBackground
-          source={BACKGROUND_VERTICAL}
+          source={breakpoint === 'wide' ? BACKGROUND_HORIZONTAL : BACKGROUND_VERTICAL}
           resizeMode="cover"
           style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
           imageStyle={IMAGE_STYLE}
@@ -59,7 +79,23 @@ export function AuthSplitScreen({ children }: AuthSplitScreenProps) {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             className="flex-1"
           >
-            <View className="flex-1 items-center justify-center gap-6 px-8">{children}</View>
+            <View className="flex-1 items-center justify-center gap-6 px-8">
+              {/* OC-87: pre-existing gap, not something OC-83 introduced — every `TextField`/
+                  `Button` these three screens render is `w-full` relative to its own parent, and
+                  every ancestor up to this point was ALSO `w-full`, so on a portrait tablet
+                  (breakpoint 'wide' but not split, see above) the fields stretched to the full
+                  screen width minus padding — ~968pt on a real iPad, reported alongside the split
+                  issue. `Screen.tsx` already caps content at 960px for every OTHER 'wide' screen
+                  in this app; these auth screens never had an equivalent because they never used
+                  `Screen` at all (the art). Capped only on 'wide' — an actual phone is already
+                  narrow enough that this constraint would never bind, so it's a no-op there. */}
+              <View
+                className="w-full items-center gap-6"
+                style={breakpoint === 'wide' ? { maxWidth: WIDE_FORM_MAX_WIDTH } : undefined}
+              >
+                {children}
+              </View>
+            </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
       </View>
